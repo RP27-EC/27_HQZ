@@ -1,0 +1,4 @@
+# Tool / editor state directories (not part of the firmware project)
+.embeddedskills/
+.vscode/
+.idea/
