@@ -12,6 +12,9 @@
 #include "board_protocol.h"
 #include "rc_sensor.h"
 #include "board_comm_config.h"
+#include "chassis_config.h"
+#include "chassis_input.h"
+#include "chassis_control.h"
 
 uint8_t open_ui = 0;
 
@@ -36,6 +39,11 @@ void StartCtrlTask(void const *argument)
             board.tx_pkt->gimbal_target_pkt.yaw_imu_tar = 0.0f;
             board.tx_pkt->gimbal_target_pkt.pitch_imu_tar = 0.0f;
         }
+
+#if CHASSIS_BRINGUP_ENABLE
+        Chassis_Input_Update();
+        Chassis_Control_Update(&chassis_input_cmd);
+#endif
 #else
         infantry.work(&infantry);
 

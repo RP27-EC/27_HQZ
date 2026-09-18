@@ -602,6 +602,16 @@
               <FilePath>..\Application\ModuleLayer\chassis.c</FilePath>
             </File>
             <File>
+              <FileName>chassis_control.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ModuleLayer\chassis_control.c</FilePath>
+            </File>
+            <File>
+              <FileName>chassis_input.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ModuleLayer\chassis_input.c</FilePath>
+            </File>
+            <File>
               <FileName>gimbal.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\ModuleLayer\gimbal.c</FilePath>
@@ -849,6 +859,11 @@
               <FileName>config_chassis.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Application\ConfigLayer\config_chassis.h</FilePath>
+            </File>
+            <File>
+              <FileName>chassis_config.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Application\ConfigLayer\chassis_config.h</FilePath>
             </File>
             <File>
               <FileName>rp_device_config.h</FileName>
