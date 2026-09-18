@@ -5,13 +5,14 @@
 
 /* Private variables ---------------------------------------------------------*/
 //
-
+//大疆驱动配置
 drv_can_t rm_motor_driver[] = {
 	[GIMB_P] = {
 		.can_id = DRV_CAN2,
 		.rx_id = ID_GIMB_P, 
 	}
 };
+//海泰电机can的id
 drv_can_t ht_motor_drive={
 		.rx_id = 0x0B,
 		.tx_id =0x09,
@@ -20,7 +21,7 @@ drv_can_t ht_motor_drive={
 
 
 
-
+//云台pitch轴PID参数
 motor_pid_t GIMB_P_mec = {
 	.speed.kp = 0,
 	.speed.ki = 0,

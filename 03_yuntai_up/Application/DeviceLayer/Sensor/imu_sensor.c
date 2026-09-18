@@ -10,24 +10,35 @@
 #include "bmi.h"
 #endif
 /* Private macro -------------------------------------------------------------*/
+#define IMU_GYRO_CALI_CNT          2000U
+#define IMU_DATA_ERR_MAX          100U
+#define IMU_DATA_RECOVER_MAX      100U
+#define IMU_ACCEL_NORM_SQ_MIN     4.0f
+#define IMU_ACCEL_NORM_SQ_MAX     625.0f
+#define IMU_GYRO_MAX_RAD_S        35.0f
+#define IMU_DT_MIN_S              0.0005f
+#define IMU_DT_MAX_S              0.005f
 /* Private function prototypes -----------------------------------------------*/
 void imu_init(imu_sensor_t *self);
 void imu_heart_beat(work_state_t *heart);
 void imu_update(imu_sensor_t *self);
 void imu_set_temperature(imu_sensor_t *self, float temp);
+static uint8_t imu_data_valid(const float *gyro, const float *accel);
 #if IMU_USE_EKF == 1
-static void InitQuaternion(float *init_q4);
+static uint8_t InitQuaternion(float *init_q4);
+static uint8_t imu_ekf_start(void);
 #endif //IMU_USE_EKF
 /* Private typedef -----------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 
-
+//温控PID部分
 pid_ctrl_t imu_temp_pid = {
     .kp = 1000.0f,
     .ki = 0.0f,
     .out_max = 4500,
 };
 
+//零偏数据结构体
 imu_info_t imu_info = 
 {
 	.offset_info.gx_offset = 0.f,
@@ -38,16 +49,16 @@ imu_info_t imu_info =
 
 /* Exported variables --------------------------------------------------------*/
 imu_sensor_t imu_sensor = {
-
 	.info = &imu_info,
-	.driver.tpye = DR_SPI2,
-	.work_state.dev_state = DEV_OFFLINE,
+	.driver.tpye = DR_SPI2,//SPI2
+	.work_state.dev_state = DEV_OFFLINE,//设备状态
 	.id = DEV_ID_IMU,	
-	.work_state.cali_end = 0,	
-	.work_state.offline_max_cnt = 50,	
+	.work_state.cali_end = 0,	//校准结束标志
+	.work_state.offline_max_cnt = 50,//心跳失联阈值
 	.work_state.err_cnt = 0,
     .temp_pid = &imu_temp_pid,
 	
+	//函数指针挂载
 	.init = &imu_init,
 	.update = &imu_update,
     .heart_beat = &imu_heart_beat,
@@ -58,51 +69,101 @@ imu_sensor_t imu_sensor = {
 /* Exported functions --------------------------------------------------------*/
 float imu_read[3];
 uint8_t init_cnt = 200;
+static uint8_t imu_float_valid(float value)
+{
+	return (value == value) ? 1U : 0U;
+}
+
+static uint8_t imu_data_valid(const float *gyro, const float *accel)
+{
+	float accel_norm_sq;
+	uint8_t i;
+
+	for (i = 0U; i < 3U; i++)
+	{
+		if ((imu_float_valid(gyro[i]) == 0U) || (imu_float_valid(accel[i]) == 0U))
+		{
+			return 0U;
+		}
+
+		if ((gyro[i] > IMU_GYRO_MAX_RAD_S) || (gyro[i] < -IMU_GYRO_MAX_RAD_S))
+		{
+			return 0U;
+		}
+	}
+
+	accel_norm_sq = accel[0] * accel[0] + accel[1] * accel[1] + accel[2] * accel[2];
+	if ((accel_norm_sq < IMU_ACCEL_NORM_SQ_MIN) ||
+	    (accel_norm_sq > IMU_ACCEL_NORM_SQ_MAX))
+	{
+		return 0U;
+	}
+
+	return 1U;
+}
+
+#if IMU_USE_EKF == 1
+static uint8_t imu_ekf_start(void)
+{
+	float init_quaternion[4] = {0};
+
+	transform_init(&EKFgim_trans);
+	if (InitQuaternion(init_quaternion) == 0U)
+	{
+		return 0U;
+	}
+
+	IMU_QuaternionEKF_Init(init_quaternion, 10, 0.001f, 8000000, 1);
+	return 1U;
+}
+#endif //IMU_USE_EKF
+
 /**
  * @brief  imu初始化
  */
 void imu_init(struct imu_struct *self)
 {
-	uint32_t tickstart = HAL_GetTick();
-
 	self->work_state.dev_state = DEV_OFFLINE;
+	self->work_state.cali_end = 0;
+	self->work_state.err_cnt = 0;
+	self->work_state.data_err_cnt = 0;
+	self->work_state.data_ok_cnt = 0;
 	self->work_state.init_code = BMI088_init();
 
-	while(self->work_state.init_code)
+	while ((self->work_state.init_code != 0) &&
+	       (self->work_state.err_cnt < init_cnt))
 	{
-		if (++self->work_state.err_cnt == init_cnt)
-		{
-			__set_FAULTMASK(1); 
-			NVIC_SystemReset();
-			break;
-		}
         self->work_state.err_code = IMU_INIT_ERR;
+        self->work_state.err_cnt++;
         self->work_state.init_code = BMI088_init();
-	}	
+	}
 
-	
 	if (self->work_state.init_code == 0)
 	{
-		self->work_state.dev_state = DEV_ONLINE;
-		
-//		self->work_state.err_cnt = 0;
+		self->work_state.err_cnt = 0;
 		self->info->init_flag = 1;
 		
 #if IMU_USE_MAHONY == 1
-		/* Mahony初始化 */
+		/* Mahony初始化（互补滤波） */
 		transform_init(&gim_trans);
 #endif //IMU_USE_MAHONY
 		
 #if IMU_USE_EKF == 1
 		/* EKF初始化 */
-		transform_init(&EKFgim_trans);
-		// float init_quaternion[4] = {0.999019921, -0.0315267481, -0.0310692526};
-		float init_quaternion[4] = {0};
-		InitQuaternion(init_quaternion);
-		IMU_QuaternionEKF_Init(init_quaternion, 10, 0.001, 8000000, 1);
+		if (imu_ekf_start() == 0U)
+		{
+			self->work_state.dev_state = DEV_OFFLINE;
+			self->work_state.err_code = IMU_INIT_ERR;
+			self->work_state.offline_cnt = self->work_state.offline_max_cnt;
+			self->info->init_flag = 0;
+			return;
+		}
 #endif //IMU_USE_EKF
 		
+		self->work_state.dev_state = DEV_ONLINE;
 		self->work_state.err_code = IMU_DATA_CALI;//开启陀螺仪校正使用IMU_DATA_CALI，关闭使用IMU_NONE_ERR
+		self->work_state.offline_cnt = 0;
+		self->work_state.cali_end = 0;
 		imu_sensor.info->offset_info.gx_offset = 0.f;
 		imu_sensor.info->offset_info.gy_offset = 0.f;
 		imu_sensor.info->offset_info.gz_offset = 0.f;
@@ -130,7 +191,9 @@ void imu_heart_beat(work_state_t *heart)
 	}
 	else 
 	{
-		if(heart->dev_state == DEV_OFFLINE)
+		if ((heart->dev_state == DEV_OFFLINE) &&
+		    ((heart->err_code == IMU_NONE_ERR) ||
+		     (heart->err_code == IMU_DATA_CALI)))
         {
             heart->dev_state = DEV_ONLINE;
         }
@@ -172,27 +235,95 @@ static uint32_t imu_tick_now, imu_tick_last;
 #endif
 void imu_update(imu_sensor_t *imu_sen)
 {
-
     imu_info_t *imu_info = imu_sen->info;
-	
 	/* 获取陀螺仪数据 */
 	BMI088_read(gyro, accel, &temp);
-	
 	imu_info->raw_info.acc_x = accel[0];
 	imu_info->raw_info.acc_y = accel[1];
 	imu_info->raw_info.acc_z = accel[2];
 	imu_info->raw_info.gyro_x = gyro[0];
 	imu_info->raw_info.gyro_y = gyro[1];
 	imu_info->raw_info.gyro_z = gyro[2];
-	
+	/* 非法数据必须在滤波和EKF之前拦截 */
+	if (imu_data_valid(gyro, accel) == 0U)
+	{
+		imu_sen->work_state.data_ok_cnt = 0;
+		if (imu_sen->work_state.data_err_cnt < IMU_DATA_ERR_MAX)
+		{
+			imu_sen->work_state.data_err_cnt++;
+		}
+
+		if (imu_sen->work_state.data_err_cnt >= IMU_DATA_ERR_MAX)
+		{
+			imu_sen->work_state.data_err_cnt = IMU_DATA_ERR_MAX;
+			imu_sen->work_state.dev_state = DEV_OFFLINE;
+			imu_sen->work_state.err_code = IMU_DATA_ERR;
+			imu_sen->work_state.cali_end = 0;
+			imu_sen->work_state.offline_cnt = imu_sen->work_state.offline_max_cnt;
+#if IMU_USE_EKF == 1
+			imu_tick_last = 0;
+#endif
+		}
+		return;
+	}
+
+	/* 数据异常后，连续收到有效数据再重建EKF并重新校准 */
+	if (imu_sen->work_state.err_code == IMU_DATA_ERR)
+	{
+		if (imu_sen->work_state.data_ok_cnt < IMU_DATA_RECOVER_MAX)
+		{
+			imu_sen->work_state.data_ok_cnt++;
+		}
+
+		if (imu_sen->work_state.data_ok_cnt >= IMU_DATA_RECOVER_MAX)
+		{
+			imu_sen->work_state.data_ok_cnt = 0;
+			imu_sen->work_state.data_err_cnt = 0;
+			gyrox_ = 0.0f;
+			gyroy_ = 0.0f;
+			gyroz_ = 0.0f;
+			accx_ = 0.0f;
+			accy_ = 0.0f;
+			accz_ = 0.0f;
+#if IMU_USE_EKF == 1
+			if (imu_ekf_start() == 0U)
+			{
+				imu_sen->work_state.data_ok_cnt = 0;
+				return;
+			}
+			imu_tick_last = 0;
+#endif
+
+			imu_info->offset_info.gx_offset = 0.0f;
+			imu_info->offset_info.gy_offset = 0.0f;
+			imu_info->offset_info.gz_offset = 0.0f;
+			imu_cnt = 0;
+			imu_info->init_flag = 1;
+			imu_sen->work_state.dev_state = DEV_ONLINE;
+			imu_sen->work_state.err_code = IMU_DATA_CALI;
+			imu_sen->work_state.cali_end = 0;
+			imu_sen->work_state.offline_cnt = 0;
+		}
+		return;
+	}
+
+	if ((imu_sen->work_state.err_code != IMU_NONE_ERR) &&
+	    (imu_sen->work_state.err_code != IMU_DATA_CALI))
+	{
+		return;
+	}
+
+	imu_sen->work_state.data_err_cnt = 0;
+	imu_sen->work_state.data_ok_cnt = 0;
+	imu_sen->work_state.offline_cnt = 0;
+
 	/* 坐标系变换 */
 	Vector_Transform(gyro[0], gyro[1], gyro[2], accel[0], accel[1], accel[2],\
 	                 &gyrox, &gyroy, &gyroz, &accx, &accy, &accz);
-	
 	/* 陀螺仪校正 */
 	if (imu_sen->work_state.err_code == IMU_DATA_CALI)
 	{
-		if (imu_cnt < 2000)
+		if (imu_cnt < (int16_t)IMU_GYRO_CALI_CNT)
 		{
 			imu_info->offset_info.gx_offset -= gyrox * 0.0005f;
 			imu_info->offset_info.gy_offset -= gyroy * 0.0005f;
@@ -203,7 +334,6 @@ void imu_update(imu_sensor_t *imu_sen)
 		{
 			imu_cnt = 0;
 			imu_sen->work_state.err_code = IMU_NONE_ERR;
-			
 			if (abs(imu_info->offset_info.gx_offset) > 0.005f)
 				imu_info->offset_info.gx_offset = 0;
 			if (abs(imu_info->offset_info.gy_offset) > 0.005f)
@@ -216,18 +346,14 @@ void imu_update(imu_sensor_t *imu_sen)
 	else
 	{
 #if IMU_USE_EKF == 1
-
 			gyroz += imu_info->offset_info.gz_offset;//只对gyroz作修正
 #endif
-
 #if IMU_USE_MAHONY == 1
 			gyrox += imu_info->offset_info.gx_offset;
 			gyroy += imu_info->offset_info.gy_offset;
 			gyroz += imu_info->offset_info.gz_offset;
 #endif
 	}
-	
-	
 	/* 原始数据低通滤波 */
 	gyrox_ = Lowpass(gyrox_, gyrox, 1);
 	gyroy_ = Lowpass(gyroy_, gyroy, 1);
@@ -235,104 +361,96 @@ void imu_update(imu_sensor_t *imu_sen)
 	accx_ = Lowpass(accx_, accx, 0.8);
 	accy_ = Lowpass(accy_, accy, 0.2);
 	accz_ = Lowpass(accz_, accz, 0.2);
-	
 	/* 解算陀螺仪数据 */
 #if IMU_USE_MAHONY == 1
 	BMI_Get_EulerAngle(&imu_info->base_info.pitch, &imu_info->base_info.roll, &imu_info->base_info.yaw,\
 										 &gyrox_, &gyroy_, &gyroz_, \
 										 &accx_, &accy_, &accz_);
 #endif
-
 #if IMU_USE_EKF == 1
-	// 计算采样时间
+	/* 计算采样时间，异常帧不进入EKF积分 */
 		imu_tick_now = micros();
-		if(imu_tick_last == 0) // 第一次特殊处理
+		if (imu_tick_last == 0U) // 第一次特殊处理
 		{
 			imu_tick_last = imu_tick_now - 1000; // 间隔1ms
 		}
 		imu_dt = (imu_tick_now - imu_tick_last) * 0.000001f; // us to s
 		imu_tick_last = imu_tick_now;
-		if(imu_dt > 1)//防止系统定时器发癫计算出很大的值
+		if ((imu_dt > IMU_DT_MIN_S) && (imu_dt < IMU_DT_MAX_S))
 		{
-			imu_dt = 0.001f;
-		}
-    // 核心函数,EKF更新四元数
-    IMU_QuaternionEKF_Update(gyrox, gyroy, gyroz, accx, accy, accz, imu_dt);
+			// 核心函数,EKF更新四元数
+			IMU_QuaternionEKF_Update(gyrox, gyroy, gyroz, accx, accy, accz, imu_dt);
 
-		imu_info->base_info.yaw = QEKF_INS.Yaw;
-    imu_info->base_info.pitch = QEKF_INS.Pitch;
-    imu_info->base_info.roll = QEKF_INS.Roll;
-    imu_info->base_info.yaw_total_angle = QEKF_INS.YawTotalAngle;
+			imu_info->base_info.yaw = QEKF_INS.Yaw;
+			imu_info->base_info.pitch = QEKF_INS.Pitch;
+			imu_info->base_info.roll = QEKF_INS.Roll;
+			imu_info->base_info.yaw_total_angle = QEKF_INS.YawTotalAngle;
+		}
 #endif
 	/* 获取世界坐标系的加速度 */						 
 	pitch = imu_info->base_info.pitch, roll = imu_info->base_info.roll, yaw = imu_info->base_info.yaw;
 	BMI_Get_Acceleration(pitch, roll, yaw,\
 											 accx_, accy_, accz_,\
 											 &imu_info->base_info.accx, &imu_info->base_info.accy, &imu_info->base_info.accz);
-	
 	/* 计算陀螺仪数据 */
 	//pitch
 	imu_info->base_info.rate_pitch = gyroy_ / (double)0.017453;
 	imu_info->base_info.ave_rate_pitch = ave_fil_update(&imu_pitch_dif_speed_ave_filter, imu_info->base_info.rate_pitch, 3);
-	
 	//roll
 	imu_info->base_info.rate_roll = gyrox_ / (double)0.017453;
 	imu_info->base_info.ave_rate_roll = ave_fil_update(&imu_roll_dif_speed_ave_filter, imu_info->base_info.rate_roll, 3);
-	
 	//yaw
 	imu_info->base_info.rate_yaw = gyroz_ / (double)0.017453;
 	imu_info->base_info.ave_rate_yaw = ave_fil_update(&imu_yaw_dif_speed_ave_filter, imu_info->base_info.rate_yaw, 3);
-	
-	imu_sen->work_state.offline_cnt = 0;
-	
-	/* imu读取数据判断  */
-	if ((accel[0] == 0) && (accel[1] == 0) && (accel[2] == 0) \
-		 && (gyro[0] == 0) && (gyro[1] == 0) && (gyro[2]== 0))
-	{
-		if(++imu_sen->work_state.err_cnt >= 100)
-		{
-			imu_sen->work_state.dev_state = DEV_OFFLINE;
-			imu_sen->work_state.err_code = IMU_DATA_ERR;
-			imu_sen->work_state.offline_cnt = imu_sen->work_state.offline_max_cnt;
-			imu_sen->work_state.err_cnt = 100;
-		}
-	}
-
     /* imu获取温度 */
     imu_info->base_info.temperature = temp;
-
 }
 
 #if IMU_USE_EKF == 1
 // 使用加速度计的数据初始化Roll和Pitch
-static void InitQuaternion(float *init_q4)
+static uint8_t InitQuaternion(float *init_q4)
 {
     float acc_sum[3] = {0};
 	float gyro_init[3], acc_init[3];
+	uint8_t valid_cnt = 0U;
 
     // 读取100次加速度计数据,取平均值作为初始值
-    for (uint8_t i = 0; i < 100; ++i)
+    for (uint8_t i = 0U; i < 100U; ++i)
     {
-				BMI088_read(gyro_init, acc_init, &temp);
-        acc_sum[0] += acc_init[0];
-        acc_sum[1] += acc_init[1];
-        acc_sum[2] += acc_init[2];
+		BMI088_read(gyro_init, acc_init, &temp);
+        if (imu_data_valid(gyro_init, acc_init) != 0U)
+        {
+            acc_sum[0] += acc_init[0];
+            acc_sum[1] += acc_init[1];
+            acc_sum[2] += acc_init[2];
+            valid_cnt++;
+        }
         delay_ms(1);
     }
-    for (uint8_t i = 0; i < 3; ++i)
-        acc_init[i] = acc_sum[i]/100;
-		float pitch, roll, temp;
-		arm_sqrt_f32(acc_init[1] * acc_init[1] + acc_init[2] * acc_init[2], &temp);
-		arm_atan2_f32(-acc_init[0], temp, &pitch);
-		arm_atan2_f32(acc_init[1], acc_init[2], &roll);
-		
-		float half_pitch = pitch / 2.0f;
+
+    if (valid_cnt == 0U)
+    {
+        return 0U;
+    }
+
+    for (uint8_t i = 0U; i < 3U; ++i)
+    {
+        acc_init[i] = acc_sum[i] / (float)valid_cnt;
+    }
+
+	float pitch, roll, acc_norm;
+	arm_sqrt_f32(acc_init[1] * acc_init[1] + acc_init[2] * acc_init[2], &acc_norm);
+	arm_atan2_f32(-acc_init[0], acc_norm, &pitch);
+	arm_atan2_f32(acc_init[1], acc_init[2], &roll);
+
+	float half_pitch = pitch / 2.0f;
     float half_roll = roll / 2.0f;
 
     init_q4[0] = arm_cos_f32(half_pitch) * arm_cos_f32(half_roll);
     init_q4[1] = arm_sin_f32(half_pitch) * arm_cos_f32(half_roll);
     init_q4[2] = arm_cos_f32(half_pitch) * arm_sin_f32(half_roll);
     init_q4[3] = arm_sin_f32(half_pitch) * arm_sin_f32(half_roll);
+    return 1U;
 }
 
 #endif //IMU_USE_EKF

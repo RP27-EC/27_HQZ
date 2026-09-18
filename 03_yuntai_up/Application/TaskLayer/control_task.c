@@ -70,7 +70,8 @@ void StartControlTask(void const *argument)
     for (;;)
     {
         if ((imu_sensor.work_state.err_code == IMU_NONE_ERR) ||
-            (imu_sensor.work_state.err_code == IMU_DATA_CALI))
+            (imu_sensor.work_state.err_code == IMU_DATA_CALI) ||
+            (imu_sensor.work_state.err_code == IMU_DATA_ERR))
         {
             imu_sensor.update(&imu_sensor);
         }

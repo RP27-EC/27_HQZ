@@ -46,11 +46,13 @@ typedef struct work_state_struct {
 	
 	uint8_t		err_cnt;
 	int8_t		init_code;
-	
+
 	uint8_t		cali_end;
-	
+
 	uint8_t   offline_cnt;
 	uint8_t   offline_max_cnt;
+	uint8_t   data_err_cnt;
+	uint8_t   data_ok_cnt;
 	
 } work_state_t;
 

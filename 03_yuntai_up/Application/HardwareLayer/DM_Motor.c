@@ -3,7 +3,7 @@
  * @author      2025_YZJ
  * @Version     V1.0
  * @date        8-Febraruary-2025
- * @brief       锟斤拷锟斤拷mit锟斤拷锟狡碉拷锟斤拷锟�
+ * @brief       闁跨喐鏋婚幏鐑芥晸閺傘倖瀚筸it闁跨喐鏋婚幏鐑芥晸閻欙紕顣幏鐑芥晸閺傘倖瀚归柨鐕傛嫹
  */
  
 /* Includes ------------------------------------------------------------------*/
@@ -20,10 +20,10 @@ static void Angle_Sum_Cal(Motor_DM_t *motor);
 static void Motor_ERR_Check(Motor_DM_t *motor, uint8_t err_word);
 static void Group_Motor_Heartbeat(Motor_DM_Group_t *group);
 
-/*..........................................锟斤拷锟斤拷锟�..........................................*/
+/*..........................................闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐕傛嫹..........................................*/
 /**
-  * @brief          锟斤拷锟斤拷锟叫讹拷锟�
-  * @param[in]      Motor_DM_t *motor     锟斤拷锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔峰建鐠佽瀚归柨鐕傛嫹
+  * @param[in]      Motor_DM_t *motor     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻敓锟�
   * @retval         none
   */
 void DM_Single_Motor_Sleep(Motor_DM_t *motor)
@@ -37,23 +37,23 @@ void DM_Single_Motor_Sleep(Motor_DM_t *motor)
 }
 
 /**
-  * @brief          锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷
-  * @param[in]      Motor_DM_t *motor     锟斤拷锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹凤拷
+  * @param[in]      Motor_DM_t *motor     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻敓锟�
   * @retval         none
   */
 void DM_Single_Motor_ZeroPosSensor(Motor_DM_t *motor)
 {
 	if(motor != NULL)
 	{
-		motor->single_sleep(motor);//锟饺对碉拷锟叫讹拷锟�
+		motor->single_sleep(motor);//闁跨喖銈虹€靛湱顣幏鐑芥晸閸欘偉顔愰幏鐑芥晸閿燂拷
 		
 		Motor_Send_Command(motor, Zero_Position_Sensor);
 	}
 }
 
 /**
-  * @brief          锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷转锟斤拷,锟斤拷锟斤拷CAN锟斤拷锟酵诧拷锟斤拷
-  * @param[in]      Motor_DM_t *motor     锟斤拷锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閺傘倖瀚规潪顒勬晸閺傘倖瀚�,闁跨喐鏋婚幏鐑芥晸閺傘倖瀚笴AN闁跨喐鏋婚幏鐑芥晸闁颁絻顕滈幏鐑芥晸閺傘倖瀚�
+  * @param[in]      Motor_DM_t *motor     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻敓锟�
   * @retval         none
   */
 void DM_Single_Motor_Set_Torque(Motor_DM_t *motor)
@@ -77,8 +77,8 @@ void DM_Single_Motor_Set_Torque(Motor_DM_t *motor)
 }
 
 /**
-  * @brief          锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷俣锟�,锟斤拷要锟斤拷锟斤拷锟斤拷锟斤拷kd\target_speed\torque,锟斤拷锟斤拷CAN锟斤拷锟酵诧拷锟斤拷
-  * @param[in]      Motor_DM_t *motor     锟斤拷锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏铚傛禋闁跨噦鎷�,闁跨喐鏋婚幏鐤洣闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗kd\target_speed\torque,闁跨喐鏋婚幏鐑芥晸閺傘倖瀚笴AN闁跨喐鏋婚幏鐑芥晸闁颁絻顕滈幏鐑芥晸閺傘倖瀚�
+  * @param[in]      Motor_DM_t *motor     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻敓锟�
   * @retval         none
   */
 void DM_Single_Motor_Set_Speed(Motor_DM_t *motor)
@@ -101,8 +101,8 @@ void DM_Single_Motor_Set_Speed(Motor_DM_t *motor)
 }
 
 /**
-  * @brief          锟斤拷锟斤拷锟斤拷锟斤拷平嵌锟�,锟斤拷要锟斤拷锟斤拷锟斤拷锟斤拷kp\target_angle\kd\target_speed\torque,锟斤拷锟斤拷CAN锟斤拷锟酵诧拷锟斤拷
-  * @param[in]      Motor_DM_t *motor     锟斤拷锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗楠炲啿绁甸柨鐕傛嫹,闁跨喐鏋婚幏鐤洣闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗kp\target_angle\kd\target_speed\torque,闁跨喐鏋婚幏鐑芥晸閺傘倖瀚笴AN闁跨喐鏋婚幏鐑芥晸闁颁絻顕滈幏鐑芥晸閺傘倖瀚�
+  * @param[in]      Motor_DM_t *motor     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻敓锟�
   * @retval         none
   */
 void DM_Single_Motor_Set_Angle(Motor_DM_t *motor)
@@ -123,9 +123,9 @@ void DM_Single_Motor_Set_Angle(Motor_DM_t *motor)
 }
 
 /**
-  * @brief          锟斤拷锟紺AN锟叫断斤拷锟斤拷锟斤拷锟捷达拷锟斤拷
-  * @param[in]      Motor_DM_t *motor      锟斤拷锟斤拷锟斤拷锟�
-  * @param[in]      uint8_t *rxBuf						CAN锟斤拷锟斤拷锟斤拷锟捷帮拷
+  * @brief          闁跨喐鏋婚幏鐑芥晸缁辩瘓N闁跨喎褰ㄩ弬顓熸灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閹圭柉鎻幏鐑芥晸閺傘倖瀚�
+  * @param[in]      Motor_DM_t *motor      闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻敓锟�
+  * @param[in]      uint8_t *rxBuf						CAN闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻幑宄板簻閹凤拷
   * @retval         none
   */
 static void Motor_ReceiveData(Motor_DM_t *motor, uint8_t *rxBuf)
@@ -145,8 +145,8 @@ static void Motor_ReceiveData(Motor_DM_t *motor, uint8_t *rxBuf)
 }
 
 /**
-  * @brief          锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟�
-  * @param[in]      Motor_HT_t *motor    锟斤拷锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閿燂拷
+  * @param[in]      Motor_HT_t *motor    闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻敓锟�
   * @retval         none
   */
 static void DM_Motor_Hearbeat(Motor_DM_t *motor)
@@ -167,8 +167,8 @@ static void DM_Motor_Hearbeat(Motor_DM_t *motor)
 }
 
 /**
-  * @brief          锟斤拷锟斤拷锟斤拷锟绞硷拷锟�
-  * @param[in]      Motor_DM_t *motor     锟斤拷锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撶紒鐐点€嬮幏鐑芥晸閿燂拷
+  * @param[in]      Motor_DM_t *motor     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻敓锟�
   * @retval         none
   */
 void DM_Single_Motor_Init(Motor_DM_t *motor)
@@ -179,7 +179,7 @@ void DM_Single_Motor_Init(Motor_DM_t *motor)
 	motor->single_set_angle  = DM_Single_Motor_Set_Angle;
 	motor->rx = Motor_ReceiveData;
 	motor->single_heart_beat = DM_Motor_Hearbeat;
-	/*锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟�*/
+	/*闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閿燂拷*/
 	motor->state->motor_state = Motor_Unenable;
 	motor->state->last_motor_state = Motor_Unenable;
 	motor->state->offline_cnt_max = 100;
@@ -187,10 +187,10 @@ void DM_Single_Motor_Init(Motor_DM_t *motor)
 	motor->state->status = DEV_OFFLINE;
 	motor->rx_info->motor_angle_sum = 0;
 }
-/*..........................................锟斤拷锟斤拷锟�..........................................*/
+/*..........................................闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐕傛嫹..........................................*/
 /**
-  * @brief          锟斤拷锟斤拷锟斤拷1~4锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷转锟斤拷
-  * @param[in]      Motor_DM_Group_t *group     锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹凤拷1~4闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风柉娴嗛柨鐔告灮閹凤拷
+  * @param[in]      Motor_DM_Group_t *group     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐕傛嫹
   * @retval         none
   */
 static void Group_Motor_Set_Torque(Motor_DM_Group_t *group)
@@ -210,8 +210,8 @@ static void Group_Motor_Set_Torque(Motor_DM_Group_t *group)
 }
 
 /**
-  * @brief          锟斤拷锟斤拷锟叫讹拷锟�
-  * @param[in]      Motor_DM_Group_t *group     锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔峰建鐠佽瀚归柨鐕傛嫹
+  * @param[in]      Motor_DM_Group_t *group     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐕傛嫹
   * @retval         none
   */
 static void Group_Motor_Sleep(Motor_DM_Group_t *group)
@@ -235,8 +235,8 @@ static void Group_Motor_Sleep(Motor_DM_Group_t *group)
 }
 
 /**
-  * @brief          锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟�
-  * @param[in]      Motor_DM_Group_t *group     锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閿燂拷
+  * @param[in]      Motor_DM_Group_t *group     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐕傛嫹
   * @retval         none
   */
 static void Group_Motor_Heartbeat(Motor_DM_Group_t *group)
@@ -263,8 +263,8 @@ static void Group_Motor_Heartbeat(Motor_DM_Group_t *group)
 }
 
 /**
-  * @brief          锟斤拷锟斤拷锟斤拷始锟斤拷
-  * @param[in]      Motor_DM_Group_t *group     锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹峰嘲顫愰柨鐔告灮閹凤拷
+  * @param[in]      Motor_DM_Group_t *group     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐕傛嫹
   * @retval         none
   */
 void Group_Motor_Init(Motor_DM_Group_t *group)
@@ -304,9 +304,9 @@ void Group_Motor_Init(Motor_DM_Group_t *group)
 	  group->group_sleep = Group_Motor_Sleep;
 }
 
-/*..........................................锟斤拷锟竭猴拷锟斤拷..........................................*/
+/*..........................................闁跨喐鏋婚幏鐑芥晸缁旑厾灏ㄩ幏鐑芥晸閺傘倖瀚�..........................................*/
 /**
-  * @brief          锟斤拷锟较诧拷锟斤拷锟酵碉拷锟斤拷锟斤拷畋拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸鏉堝啳顕滈幏鐑芥晸閺傘倖瀚归柨鐔煎徍绾板瀚归柨鐔告灮閹风兘鏁撻弬銈嗗閻ｅ鐓夐幏鐑芥晸閿燂拷
   * @param          Motor_DM_t *motor
   * @param[in]      Motor_DM_Command_e Command
   * @retval         none
@@ -331,9 +331,9 @@ static void Motor_Send_Command(Motor_DM_t *motor, Motor_MIT_Command_e Command)
 }
 
 /**
-  * @brief          锟斤拷锟捷结构锟斤拷锟斤拷息锟斤拷锟酵憋拷锟斤拷
+  * @brief          闁跨喐鏋婚幏鐑芥晸閹归绮ㄩ弸鍕晸閺傘倖瀚归柨鐔告灮閹烽攱浼呴柨鐔告灮閹风兘鏁撻柊鍨敾閹风兘鏁撻弬銈嗗
   * @param          Motor_DM_t *motor
-  * @param          uint8_t* buf 要锟斤拷锟酵的憋拷锟斤拷锟斤拷息
+  * @param          uint8_t* buf 鐟曚線鏁撻弬銈嗗闁跨喖鍙洪惃鍕敾閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏閿嬩紖
   * @retval         none
   */
 static void Motor_Send_Data(Motor_DM_t *motor, uint8_t* buf)
@@ -344,7 +344,7 @@ static void Motor_Send_Data(Motor_DM_t *motor, uint8_t* buf)
 }
 
 /**
-  * @brief          锟斤拷锟捷凤拷锟酵的憋拷锟斤拷锟斤拷息锟斤拷锟矫憋拷锟侥诧拷锟斤拷锟斤拷
+  * @brief          闁跨喐鏋婚幏鐑芥晸閹瑰嘲鍤栭幏鐑芥晸闁扮數娈戦幉瀣闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归幁顖炴晸閺傘倖瀚归柨鐔虹叓閹插瀚归柨鐔惰寧鐠囇勫闁跨喐鏋婚幏鐑芥晸閺傘倖瀚�
   * @param          Motor_DM_t *motor
   * @retval         none
   */
@@ -354,21 +354,21 @@ static void Motor_SetControlPara(Motor_DM_t *motor)
 	uint16_t p, v, kp, kd, t;
   uint8_t* buf = motor_tx_info->single_tx_buff;
 	
-	/* 锟斤拷锟斤拷锟斤拷锟斤拷牟锟斤拷锟斤拷诙锟斤拷锟侥凤拷围锟斤拷 */
+	/* 闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗閻楃喖鏁撻弬銈嗗闁跨喐鏋婚幏鐤樂闁跨喐鏋婚幏鐑芥晸娓氥儱鍤栭幏宄版纯闁跨喐鏋婚幏锟� */
 	motor_tx_info->target_angle = constrain(motor_tx_info->target_angle, P_MIN, P_MAX);
 	motor_tx_info->target_speed = constrain(motor_tx_info->target_speed, V_MIN, V_MAX);
 	motor_tx_info->Kp = constrain(motor_tx_info->Kp, KP_MIN, KP_MAX);
 	motor_tx_info->Kd = constrain(motor_tx_info->Kd, KD_MIN, KD_MAX);
 	motor_tx_info->torque = constrain(motor_tx_info->torque, T_MIN, T_MAX);
 	
-	/* 锟斤拷锟斤拷协锟介，锟斤拷float锟斤拷锟斤拷锟斤拷锟斤拷转锟斤拷 */
+	/* 闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归崡蹇涙晸娴犲绱濋柨鐔告灮閹风⿴loat闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗鏉烆剟鏁撻弬銈嗗 */
 	p = float_to_uint(motor_tx_info->target_angle,      P_MIN,  P_MAX,  16);            
 	v = float_to_uint(motor_tx_info->target_speed,      V_MIN,  V_MAX,  12);
 	kp = float_to_uint(motor_tx_info->Kp,    KP_MIN, KP_MAX, 12);
 	kd = float_to_uint(motor_tx_info->Kd,    KD_MIN, KD_MAX, 12);
 	t = float_to_uint(motor_tx_info->torque,      T_MIN,  T_MAX,  12);
 	
-	/* 锟斤拷锟捷达拷锟斤拷协锟介，锟斤拷锟斤拷锟斤拷转锟斤拷为CAN锟斤拷锟斤拷锟斤拷锟斤拷锟街讹拷 */
+	/* 闁跨喐鏋婚幏鐑芥晸閹圭柉鎻幏鐑芥晸閺傘倖瀚归崡蹇涙晸娴犲绱濋柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐤祮闁跨喐鏋婚幏铚傝礋CAN闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喕顢滅拋瑙勫 */
 	buf[0] = p>>8;
 	buf[1] = p&0xFF;
 	buf[2] = v>>4;
@@ -382,7 +382,7 @@ static void Motor_SetControlPara(Motor_DM_t *motor)
 }
 
 /**
-  * @brief  锟斤拷float转为uint锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷,锟斤拷通锟斤拷协锟介保锟斤拷一锟斤拷
+  * @brief  闁跨喐鏋婚幏绌巐oat鏉烆兛璐焨int闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗,闁跨喐鏋婚幏鐑解偓姘舵晸閺傘倖瀚归崡蹇涙晸娴犲绻氶柨鐔告灮閹疯渹绔撮柨鐔告灮閹凤拷
   * @param
   * @retval 
   */
@@ -395,7 +395,7 @@ static uint16_t float_to_uint(float x, float x_min, float x_max, uint8_t bits)
 }
 
 /**
-  * @brief  锟斤拷uint转为float锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷
+  * @brief  闁跨喐鏋婚幏绌焛nt鏉烆兛璐焒loat闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗
   * @param
   * @retval 
   */
@@ -407,8 +407,8 @@ static float uint_to_float(uint16_t x_int, float x_min, float x_max, uint8_t bit
 }
 
 /**
-  * @brief          锟斤拷锟斤拷锟斤拷锟斤拷转锟角度猴拷
-  * @param[in]      Motor_DM_t *motor     锟斤拷锟斤拷锟斤拷锟�
+  * @brief          闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗鏉烆剟鏁撶憴鎺戝閻氬瓨瀚�
+  * @param[in]      Motor_DM_t *motor     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻敓锟�
   * @retval         none
   */
 static void Angle_Sum_Cal(Motor_DM_t *motor)
@@ -426,7 +426,7 @@ static void Angle_Sum_Cal(Motor_DM_t *motor)
 		order_correction = 1.f;
 	}
 	
-	if(!motor->rx_info->motor_angle_last && !motor->rx_info->motor_angle_sum)//锟斤拷一锟角讹拷值为0锟揭角度猴拷为锟斤拷时锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷
+	if(!motor->rx_info->motor_angle_last && !motor->rx_info->motor_angle_sum)//闁跨喐鏋婚幏铚傜闁跨喕顫楃拋瑙勫閸婇棿璐�0闁跨喐褰憴鎺戝閻氬瓨瀚规稉娲晸閺傘倖瀚归弮鍫曟晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗
 	{
 		err = 0.f;
 	}
@@ -435,7 +435,7 @@ static void Angle_Sum_Cal(Motor_DM_t *motor)
 		err = motor->rx_info->motor_angle - motor->rx_info->motor_angle_last;
 	}
 	
-	if(abs(err) > (float)PI)//锟斤拷锟斤拷锟�
+	if(abs(err) > (float)PI)//闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐕傛嫹
 	{
 		if(err > 0.f)
 		{
@@ -455,8 +455,8 @@ static void Angle_Sum_Cal(Motor_DM_t *motor)
 }
 
 /**
-  * @brief          锟叫断碉拷锟斤拷锟斤拷锟斤拷锟�
-  * @param[in]      Motor_DM_t *motor     锟斤拷锟斤拷锟斤拷锟�
+  * @brief          闁跨喎褰ㄩ弬顓狀暜閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐕傛嫹
+  * @param[in]      Motor_DM_t *motor     闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻敓锟�
   * @retval         none
   */
 static void Motor_ERR_Check(Motor_DM_t *motor, uint8_t err_word)
@@ -493,7 +493,7 @@ static void Motor_ERR_Check(Motor_DM_t *motor, uint8_t err_word)
 		my_state->motor_state = Unknow_Err;
 		break;
 	};
-	/*锟斤拷取锟斤拷一锟轿诧拷同锟节碉拷前锟侥碉拷锟阶刺�*/
+	/*闁跨喐鏋婚幏宄板絿闁跨喐鏋婚幏铚傜闁跨喕濞囩拠褎瀚归崥宀勬晸閼哄倻顣幏宄板闁跨喍鑼庣喊澶嬪闁跨喖妯侀崚鐚存嫹*/
 //	if(temp_state != my_state->motor_state)
 //	{
 //		if(temp_state != my_state->last_motor_state)
@@ -509,15 +509,15 @@ static void Motor_ERR_Check(Motor_DM_t *motor, uint8_t err_word)
 	}
 }
 
-/*示锟斤拷锟斤拷锟斤拷*/
+/*缁€娲晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗*/
 
-/*-------------锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟�-------------*/
+/*-------------闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閿燂拷-------------*/
 /*
 Motor_DM_Born_Info_t Yaw_Born_Info =
 {
-	.stdId = 0x001,//锟斤拷锟斤拷锟斤拷票锟斤拷锟絀D
+	.stdId = 0x001,//闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹烽銈ㄩ柨鐔告灮閹风兘鏁撶徊鈧珼
 	
-	.hcan = &hfdcan2,//使锟矫碉拷Can锟斤拷锟斤拷
+	.hcan = &hfdcan2,//娴ｅ潡鏁撻惌顐ゎ暜閹风áan闁跨喐鏋婚幏鐑芥晸閺傘倖瀚�
 
 };
 
@@ -541,18 +541,18 @@ Motor_DM_t Yaw_Motor =
 };
 */
 
-/*-------------锟斤拷始锟斤拷-------------*/
+/*-------------闁跨喐鏋婚幏宄邦潗闁跨喐鏋婚幏锟�-------------*/
 /*
 Yaw_Motor.single_init(&Yaw_Motor);
 */
 
-/*-------------锟斤拷锟秸猴拷锟斤拷-------------*/
+/*-------------闁跨喐鏋婚幏鐑芥晸缁夊摜灏ㄩ幏鐑芥晸閺傘倖瀚�-------------*/
 /*
 void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
 	switch (rxId)
 	{
-		case 0x000://锟斤拷锟斤拷ID
+		case 0x000://闁跨喐鏋婚幏鐑芥晸閺傘倖瀚笽D
 		Yaw_Motor.rx(&Yaw_Motor, rxBuf);
 		break;
 		default:
@@ -561,12 +561,12 @@ void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 }
 */
 
-/*-------------锟斤拷锟斤拷执锟斤拷-------------*/
+/*-------------闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归幍褔鏁撻弬銈嗗-------------*/
 /*
   * @file    monitor_task.c
-  * @brief   锟斤拷锟斤拷锟斤拷锟�
-  *          1. 锟斤拷模锟斤拷锟斤拷锟斤拷失锟斤拷锟斤拷锟�
-  *          2. 锟斤拷锟揭ｏ拷锟斤拷锟阶刺拷锟斤拷锟斤拷锟斤拷锟轿�
+  * @brief   闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻敓锟�
+  *          1. 闁跨喐鏋婚幏閿嬆侀柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏宄般亼闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐕傛嫹
+  *          2. 闁跨喐鏋婚幏鐑芥晸閹活叏缍囬幏鐑芥晸閺傘倖瀚归柨鐔兼▉閸掍警鍓ㄩ幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喕濞囬敓锟�
 void StartMonitorTask(void const * argument)//
 {
 	
@@ -579,15 +579,15 @@ void StartMonitorTask(void const * argument)//
 }
 
   * @file    monitor_task.c
-  * @brief   锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷锟�
-  *          1. 锟斤拷锟斤拷锟斤拷锟斤拷涂锟斤拷票锟斤拷锟�
-  *          2. 锟斤拷状态锟斤拷志位锟斤拷锟斤拷锟斤拷应
+  * @brief   闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏鐑芥晸閿燂拷
+  *          1. 闁跨喐鏋婚幏鐑芥晸閺傘倖瀚归柨鐔告灮閹风兘鏁撻弬銈嗗濞戝倿鏁撻弬銈嗗缁併劑鏁撻弬銈嗗闁跨噦鎷�
+  *          2. 闁跨喐鏋婚幏椋庡Ц閹線鏁撻弬銈嗗韫囨ぞ缍呴柨鐔告灮閹风兘鏁撻弬銈嗗闁跨喐鏋婚幏宄扮安
 void StartMonitorTask(void const * argument)//
 {
 	
 	for(;;)
 	{
-		//锟斤拷锟酵匡拷锟狡憋拷锟侥ｏ拷锟斤拷锟狡碉拷锟斤拷锟斤拷扭锟斤拷为0.5N*m
+		//闁跨喐鏋婚幏鐑芥晸闁伴潧灏呴幏鐑芥晸閻欌剝鍞婚幏鐑芥晸娓氥儻缍囬幏鐑芥晸閺傘倖瀚归柨鐔哄珱绾板瀚归柨鐔告灮閹风兘鏁撻弬銈嗗閹殿參鏁撻弬銈嗗娑擄拷0.5N*m
 		Yaw_Motor.tx_info->torque = 0.5f;
 		Yaw_Motor.single_set_torque(&Yaw_Motor);
 		

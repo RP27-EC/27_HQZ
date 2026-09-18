@@ -10,15 +10,15 @@
 #include "motor_def.h"
 #include "drv_can.h"
 
-/*������岽��------------------------------------------------*/
-//���Ҫ��ɾ��RM���
-//1.rm_motor_driver���ӵ��ID��CAN���� 
-//2.dev_rm_motor_list_e��ӵ������
-//3.CAN1_rxDataHandler��CAN2_rxDataHandler�����ӻ�ȡ�����Ϣ�ĺ���
-//4.rm_motor_t rm_motor[]������ӵ���ܽṹ��
-//5.����pid�ṹ���Լ���rm_motor_list_init����mo tor_pid_init��ʼ��pid�ṹ��
-//���Ҫ�����������motor_out�︳ֵ����CAN_Sendͳһ����
-/*���ID�궨��------------------------------------------------*/
+/*锟斤拷锟斤拷锟斤拷宀斤拷锟�------------------------------------------------*/
+//锟斤拷锟揭拷锟缴撅拷锟絉M锟斤拷锟�
+//1.rm_motor_driver锟斤拷锟接碉拷锟絀D锟斤拷CAN锟斤拷锟斤拷 
+//2.dev_rm_motor_list_e锟斤拷拥锟斤拷锟斤拷锟斤拷
+//3.CAN1_rxDataHandler锟斤拷CAN2_rxDataHandler锟斤拷锟斤拷锟接伙拷取锟斤拷锟斤拷锟较拷暮锟斤拷锟�
+//4.rm_motor_t rm_motor[]锟斤拷锟斤拷锟斤拷拥锟斤拷锟杰结构锟斤拷
+//5.锟斤拷锟斤拷pid锟结构锟斤拷锟皆硷拷锟斤拷rm_motor_list_init锟斤拷锟斤拷mo tor_pid_init锟斤拷始锟斤拷pid锟结构锟斤拷
+//锟斤拷锟揭拷锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷motor_out锟斤赋值锟斤拷锟斤拷CAN_Send统一锟斤拷锟斤拷
+/*锟斤拷锟絀D锟疥定锟斤拷------------------------------------------------*/
 #define ID_GIMB_P 0x11
 #define ID_GIMB_Y 0x12
 
