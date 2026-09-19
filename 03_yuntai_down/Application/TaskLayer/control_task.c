@@ -22,7 +22,9 @@ void StartCtrlTask(void const *argument)
     for (;;)
     {
 #if BOARD_COMM_DEBUG
-        if (rc_sensor.work_state == DEV_ONLINE)
+        /* S1 up: arm; middle/down: disarm and keep the board link alive. */
+        if ((rc_sensor.work_state == DEV_ONLINE) &&
+            (rc_sensor.info->s1.value == RC_SW_UP))
         {
             board.tx_pkt->car_pkt.car_state = 1u;
             board.tx_pkt->car_pkt.gimbal_mode = 1u;
