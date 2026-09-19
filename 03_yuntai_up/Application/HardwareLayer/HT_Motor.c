@@ -1,3 +1,4 @@
+#if 0 /* Legacy HT motor driver disabled: current gimbal board uses DM motors only. */
 /**
  * @file        Ht_Motor.c
  * @author      2025_YZJ
@@ -540,3 +541,5 @@ void StartMonitorTask(void const * argument)//
 }
 
 */
+
+#endif

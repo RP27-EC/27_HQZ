@@ -33,7 +33,11 @@ motor_pid_t GIMB_P_mec = {
 	.angle.integral_max = 0,
 	.angle.out_max = 500,
 };
+
+extern CAN_HandleTypeDef hcan1;
+extern CAN_HandleTypeDef hcan2;
 /*HT_start*/
+#if 0 /* Legacy HT motor: not used by the current gimbal board. */
 extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
 
@@ -59,6 +63,7 @@ Motor_HT_t L_Wheel =
 	.single_init = &HT_Single_Motor_Init,
 };
 /*HT_end*/
+#endif
 
 /*DM_start*/
 Motor_DM_Born_Info_t Yaw_Born_Info =
@@ -137,7 +142,8 @@ Motor_DM_Group_t DM_Group =
 /*DM_end*/
 
 /*RM START*/
-Motor_RM_Born_Info_t R_Fric_Born = 
+#if 0 /* Legacy RM motor: not used by the current gimbal board. */
+Motor_RM_Born_Info_t R_Fric_Born =
 {
 	.rxId = 0,
 	
@@ -201,6 +207,8 @@ Motor_RM_Group_t RM_Group =
 };
 
 /*RM END*/
+#endif
+#if 0 /* Legacy KT motor: not used by the current gimbal board. */
 KT_motor_t kt_motor[] = {
 	[0] = {
 		.KT_motor_info = {
@@ -225,21 +233,26 @@ KT_motor_t kt_motor[] = {
 		.init = KT_motor_class_init,
 	},
 };
+#endif
 
 /* Exported functions --------------------------------------------------------*/
+#if 0 /* Legacy RM motor initialization disabled. */
 void rm_motor_list_init()
 {
 	
 	R_Fric.single_init(&R_Fric);
 	RM_Group.group_init(&RM_Group);
 }
+#endif
 
+#if 0 /* Legacy KT motor initialization disabled. */
 void kt_motor_list_init()
 {
 	kt_motor[0].init(&kt_motor[0]);
 	
 	
 }
+#endif
 void dm_motor_list_init()
 {
     DM_Group.group_init(&DM_Group);
@@ -250,15 +263,19 @@ void dm_motor_list_heart_beat()
     DM_Group.group_heartbeat(&DM_Group);
 }
 
+#if 0 /* Legacy HT motor initialization disabled. */
 void ht_motor_list_init()
 {
 	L_Wheel.single_init(&L_Wheel);
 	
 }
+#endif
 
+#if 0 /* Legacy RM motor heartbeat disabled. */
 void rm_motor_list_heart_beat()
 {
 	RM_Group.group_heartbeat(&RM_Group);
 }
+#endif
 
 

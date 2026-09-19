@@ -26,16 +26,16 @@
 #define GIMBAL_RAD_TO_DEG          (180.0f / GIMBAL_PI)
 
 /* Yaw 机械中值 */
-#define GIMBAL_YAW_MIDDLE_DEG      0.0f
+#define GIMBAL_YAW_MIDDLE_DEG      (-22.224138f)
 /* Pitch 机械中值 */
-#define GIMBAL_PITCH_MIDDLE_DEG    0.0f
+#define GIMBAL_PITCH_MIDDLE_DEG    148.573157f
 
 /* Pitch 机械下限 */
 #define GIMBAL_PITCH_MIN_DEG       (-7.5f)
 /* Pitch 机械上限 */
 #define GIMBAL_PITCH_MAX_DEG       30.0f
 /* 最终输出力矩限幅 */
-#define GIMBAL_TORQUE_LIMIT        0.5f
+#define GIMBAL_TORQUE_LIMIT        2.0f
 /* 重力补偿开关：0 关闭，1 开启 */
 #define GIMBAL_GRAVITY_ENABLE      0
 /* 余弦重力补偿幅值*/

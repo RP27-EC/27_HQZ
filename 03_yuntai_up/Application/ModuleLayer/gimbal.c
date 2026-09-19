@@ -74,23 +74,6 @@ static float gimbal_wrap_deg(float angle)
     return angle;
 }
 
-/* 过滤 NaN 及溢出值 */
-static uint8_t gimbal_value_valid(float value)
-{
-    if (value != value) return 0; // NaN 校验
-    if ((value > 1000000.0f) || (value < -1000000.0f)) return 0;
-    return 1;
-}
-
-/* 达妙电机校验 */
-static uint8_t gimbal_motor_ready(const Motor_DM_t *motor)
-{
-    if (motor == NULL || motor->state == NULL) return 0; 
-    if (motor->state->status != DEV_ONLINE) return 0;
-
-    return ((motor->state->motor_state == Motor_Enable) ||
-            (motor->state->motor_state == Motor_Unenable)) ? 1 : 0;
-}
 
 /* 遥控器通道转换为目标角速度 */
 #if GIMBAL_LOCAL_RC_ENABLE
@@ -267,54 +250,10 @@ static void gimbal_info_update(gimbal_t *gimbal)
 /* 硬件与数据流 */
 static uint8_t gimbal_safety_allows_control(gimbal_t *gimbal)
 {
-    /* 通信与使能 */
+    (void)gimbal;
+    /* Keep the same enable logic as the working reference project. */
     if (Board_HeartBeat.status != DEV_ONLINE) return 0;
     if (Board_Rx_Info.state_pkt.car_state == 0) return 0;
-
-#if GIMBAL_DOWN_RC_ENABLE
-    if ((Board_HeartBeat.offline_cnt_5 >= Board_HeartBeat.offline_cnt_max) ||
-        (Board_Rx_Info.remote_cmd_pkt.valid == 0u))
-    {
-        return 0;
-    }
-#endif
-
-    /* 执行机构检查 */
-    if (!gimbal_motor_ready(gimbal->yaw_motor) ||
-        !gimbal_motor_ready(gimbal->pitch_motor))
-    {
-        return 0;
-    }
-
-    /* IMU 状态检查 */
-    if ((imu_sensor.work_state.dev_state != DEV_ONLINE) ||
-        (imu_sensor.work_state.err_code != IMU_NONE_ERR) ||
-        (imu_sensor.work_state.cali_end == 0))
-    {
-        return 0;
-    }
-
-    /* 传输数据检查 */
-    if (!gimbal_value_valid(gimbal->base_info.yaw_imu_angle) ||
-        !gimbal_value_valid(gimbal->base_info.yaw_imu_speed) ||
-        !gimbal_value_valid(gimbal->base_info.pitch_imu_angle) ||
-        !gimbal_value_valid(gimbal->base_info.pitch_imu_speed) ||
-        !gimbal_value_valid(gimbal->base_info.yaw_mec_angle) ||
-        !gimbal_value_valid(gimbal->base_info.yaw_mec_speed) ||
-        !gimbal_value_valid(gimbal->base_info.pitch_mec_angle) ||
-        !gimbal_value_valid(gimbal->base_info.pitch_mec_speed))
-    {
-        return 0;
-    }
-
-    /* 输入指令检查 */
-    if (!gimbal_value_valid(gimbal->pid_info.yaw_mec_target_raw) ||
-        !gimbal_value_valid(gimbal->pid_info.pitch_mec_target_raw) ||
-        !gimbal_value_valid(gimbal->pid_info.yaw_imu_target_raw) ||
-        !gimbal_value_valid(gimbal->pid_info.pitch_imu_target_raw))
-    {
-        return 0;
-    }
 
     return 1;
 }

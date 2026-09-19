@@ -1,3 +1,4 @@
+#if 0 /* CommunityTask is disabled: no business logic. */
 #include "community_task.h"
 
 void StartCommunityTask(void const *argument)
@@ -10,3 +11,4 @@ void StartCommunityTask(void const *argument)
 		osDelay(1);
 	}
 }
+#endif

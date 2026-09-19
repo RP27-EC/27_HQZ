@@ -15,6 +15,7 @@
  
 /* Includes ------------------------------------------------------------------*/
 #include "driver.h"
+#include "board_comm_config.h"
 
 /* Private macro -------------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
@@ -26,6 +27,10 @@
 
 void DRIVER_Init(void)
 {
+#if BOARD_COMM_DEBUG
+    USART5_Init();
+    CAN2_Filter_Init();
+#else
 	USART1_Init();
 	USART5_Init();
 	USART8_Init();
@@ -34,4 +39,5 @@ void DRIVER_Init(void)
 	CAN1_Filter_Init();
 	CAN2_Filter_Init();
 	CAN3_Filter_Init();
+#endif
 }

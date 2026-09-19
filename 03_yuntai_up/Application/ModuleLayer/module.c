@@ -3,7 +3,8 @@
 
 void Module_Init(void)
 {
-    Gimbal.init(&Gimbal);
+    /* Gimbal.init is NULL until Gimbal_Init() sets the function pointers. */
+    Gimbal_Init(&Gimbal);
 }
 
 void Module_Work(void)

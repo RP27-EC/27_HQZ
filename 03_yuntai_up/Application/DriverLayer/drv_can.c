@@ -256,8 +256,10 @@ void HAL_CAN_TxHeadeInit(uint16_t ID)
   */
 void CAN_Filter_Init(void)
 {
-	HAL_CAN_Init(&hcan1);
-	HAL_CAN_Init(&hcan2);
+	/* CAN1/CAN2 are already initialized by MX_CAN1_Init/MX_CAN2_Init. */
+	/* Re-initializing here can return HAL_BUSY after CAN has started. */
+	// HAL_CAN_Init(&hcan1);
+	// HAL_CAN_Init(&hcan2);
 	
 	CAN_FilterTypeDef can_filter_st;
 	can_filter_st.FilterFIFOAssignment = CAN_RX_FIFO0;	//使用FIFO0

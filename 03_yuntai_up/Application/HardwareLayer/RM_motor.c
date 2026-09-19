@@ -1,3 +1,4 @@
+#if 0 /* Legacy RM motor driver disabled: current gimbal board uses DM motors only. */
 /**
   ******************************************************************************
   * @file    RM_motor.c
@@ -536,3 +537,5 @@ static void Raw_Current_to_Torque(Motor_RM_t* motor)
 		motor->rx_info->torque_current = (motor->rx_info->torque_current_raw / 16384.f)*20.f;
 		motor->rx_info->torque = motor->rx_info->torque_current * _3508_TORQUE_CONSTANT;
 }
+
+#endif

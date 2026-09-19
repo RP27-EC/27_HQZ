@@ -48,7 +48,8 @@
 
 /* USER CODE END Variables */
 osThreadId MonitorTaskHandle;
-osThreadId CommunityTaskHandle;
+/* CommunityTask is disabled: it had no business logic. */
+// osThreadId CommunityTaskHandle;
 osThreadId ControlTaskHandle;
 osThreadId LedTaskHandle;
 
@@ -58,7 +59,7 @@ osThreadId LedTaskHandle;
 /* USER CODE END FunctionPrototypes */
 
 void StartMonitorTask(void const * argument);
-void StartCommunityTask(void const * argument);
+// void StartCommunityTask(void const * argument);
 void StartControlTask(void const * argument);
 void StartLedTask(void const * argument);
 
@@ -113,8 +114,11 @@ void MX_FREERTOS_Init(void) {
   MonitorTaskHandle = osThreadCreate(osThread(MonitorTask), NULL);
 
   /* definition and creation of CommunityTask */
+#if 0
+  /* CommunityTask is intentionally disabled. */
   osThreadDef(CommunityTask, StartCommunityTask, osPriorityHigh, 0, 512);
   CommunityTaskHandle = osThreadCreate(osThread(CommunityTask), NULL);
+#endif
 
   /* definition and creation of ControlTask */
   osThreadDef(ControlTask, StartControlTask, osPriorityRealtime, 0, 1024);
@@ -140,7 +144,8 @@ void MX_FREERTOS_Init(void) {
 __weak void StartMonitorTask(void const * argument)
 {
   /* init code for USB_DEVICE */
-  MX_USB_DEVICE_Init();
+  /* USB is initialized once in main.c; keep this weak shell from doing it again. */
+  // MX_USB_DEVICE_Init();
   /* USER CODE BEGIN StartMonitorTask */
   /* Infinite loop */
   for(;;)
@@ -157,6 +162,7 @@ __weak void StartMonitorTask(void const * argument)
 * @retval None
 */
 /* USER CODE END Header_StartCommunityTask */
+#if 0
 __weak void StartCommunityTask(void const * argument)
 {
   /* USER CODE BEGIN StartCommunityTask */
@@ -167,6 +173,7 @@ __weak void StartCommunityTask(void const * argument)
   }
   /* USER CODE END StartCommunityTask */
 }
+#endif
 
 /* USER CODE BEGIN Header_StartControlTask */
 /**

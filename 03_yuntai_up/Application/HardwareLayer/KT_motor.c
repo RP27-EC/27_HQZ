@@ -1,3 +1,4 @@
+#if 0 /* Legacy KT motor driver disabled: current gimbal board uses DM motors only. */
 #include "KT_motor.h"
 
 /* Exported variables --------------------------------------------------------*/
@@ -843,3 +844,5 @@ void write_kt_motor_angle_add_Control_param(KT_motor_t   *motor,
 }
 
 
+
+#endif
