@@ -7,6 +7,8 @@
 
 gimbal_t Gimbal;
 
+gimbal_tune_t gimbal_tune;
+
 //重力补偿现在为一个比较小的数值，还未调试数值
 //重力补偿较小目前pitch可能会下垂，pitch使用速控
 //feedback后续会在遥控器声明，作为速度前馈加入内环目标值，目前还未加入
@@ -106,11 +108,11 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
         (Board_Rx_Info.state_pkt.car_state != 0u))
     {
         yaw_rate = gimbal_clamp(Board_Rx_Info.remote_cmd_pkt.yaw_rate_deg_s,
-                                -GIMBAL_MANUAL_YAW_RATE_DEG_S,
-                                GIMBAL_MANUAL_YAW_RATE_DEG_S);
+                                -gimbal_tune.yaw_manual_rate_max_deg_s,
+                                gimbal_tune.yaw_manual_rate_max_deg_s);
         pitch_rate = gimbal_clamp(Board_Rx_Info.remote_cmd_pkt.pitch_rate_deg_s,
-                                  -GIMBAL_MANUAL_PITCH_RATE_DEG_S,
-                                  GIMBAL_MANUAL_PITCH_RATE_DEG_S);
+                                  -gimbal_tune.pitch_manual_rate_max_deg_s,
+                                  gimbal_tune.pitch_manual_rate_max_deg_s);
     }
 #elif GIMBAL_LOCAL_RC_ENABLE
     if (rc_sensor.work_state == DEV_ONLINE)
@@ -118,23 +120,27 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
         if (Board_Rx_Info.state_pkt.car_state == 1u)
         {
             yaw_rate = gimbal_axis_to_rate(RC_RIGH_CH_LR_VALUE,
-                                           GIMBAL_MANUAL_YAW_RATE_DEG_S);
+                                           gimbal_tune.yaw_manual_rate_max_deg_s);
             pitch_rate = gimbal_axis_to_rate(RC_RIGH_CH_UD_VALUE,
-                                             GIMBAL_MANUAL_PITCH_RATE_DEG_S);
+                                             gimbal_tune.pitch_manual_rate_max_deg_s);
         }
         else if (Board_Rx_Info.state_pkt.car_state == 2u)
         {
             yaw_rate = gimbal_clamp(rc_sensor_info.mouse_x * GIMBAL_MOUSE_YAW_RATE_GAIN,
-                                    -GIMBAL_MANUAL_YAW_RATE_DEG_S,
-                                    GIMBAL_MANUAL_YAW_RATE_DEG_S);
+                                    -gimbal_tune.yaw_manual_rate_max_deg_s,
+                                    gimbal_tune.yaw_manual_rate_max_deg_s);
             pitch_rate = gimbal_clamp(rc_sensor_info.mouse_y * GIMBAL_MOUSE_PITCH_RATE_GAIN,
-                                      -GIMBAL_MANUAL_PITCH_RATE_DEG_S,
-                                      GIMBAL_MANUAL_PITCH_RATE_DEG_S);
+                                      -gimbal_tune.pitch_manual_rate_max_deg_s,
+                                      gimbal_tune.pitch_manual_rate_max_deg_s);
         }
     }
 #else
     (void)gimbal;
 #endif
+
+    /* Apply operator direction conventions after source decoding. */
+    yaw_rate *= gimbal_tune.manual_yaw_sign;
+    pitch_rate *= gimbal_tune.manual_pitch_sign;
 
     gimbal->feedforward.yaw_rate_cmd_deg_s = yaw_rate;
     gimbal->feedforward.pitch_rate_cmd_deg_s = pitch_rate;
@@ -441,10 +447,10 @@ static void gimbal_update_targets(gimbal_t *gimbal)
 static void gimbal_update_rate_targets(gimbal_t *gimbal)
 {
     if (gimbal_abs(gimbal->feedforward.yaw_rate_cmd_deg_s) <
-        GIMBAL_RATE_HOLD_DEADBAND_DEG_S)
+        gimbal_tune.rate_hold_deadband_deg_s)
     {
         gimbal->feedforward.yaw_rate_target_deg_s =
-            GIMBAL_RATE_HOLD_KP * gimbal_wrap_deg(
+            gimbal_tune.yaw_rate_hold_kp * gimbal_wrap_deg(
                 gimbal->feedforward.yaw_hold_angle_deg -
                 gimbal->base_info.yaw_imu_angle);
     }
@@ -456,10 +462,10 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     }
 
     if (gimbal_abs(gimbal->feedforward.pitch_rate_cmd_deg_s) <
-        GIMBAL_RATE_HOLD_DEADBAND_DEG_S)
+        gimbal_tune.rate_hold_deadband_deg_s)
     {
         gimbal->feedforward.pitch_rate_target_deg_s =
-            GIMBAL_RATE_HOLD_KP * (
+            gimbal_tune.pitch_rate_hold_kp * (
                 gimbal->feedforward.pitch_hold_angle_deg -
                 gimbal->base_info.pitch_imu_angle);
     }
@@ -475,16 +481,20 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
 //重力补偿，需调试数值
 static float gimbal_gravity_compensation(gimbal_t *gimbal)
 {
-#if GIMBAL_GRAVITY_ENABLE
-    float angle_rad =
-        (gimbal->base_info.pitch_mec_angle - GIMBAL_GRAVITY_MIDDLE_DEG) *
-        GIMBAL_DEG_TO_RAD;
+    float angle_rad;
 
-    return GIMBAL_GRAVITY_K_NM * cosf(angle_rad) + GIMBAL_GRAVITY_B_NM;
-#else
-    (void)gimbal;
-    return 0.0f;
-#endif
+    if (gimbal_tune.gravity_enable == 0u)
+    {
+        (void)gimbal;
+        return 0.0f;
+    }
+
+    angle_rad = (gimbal->base_info.pitch_mec_angle -
+                 gimbal_tune.gravity_middle_deg) * GIMBAL_DEG_TO_RAD;
+
+    return gimbal_tune.gravity_sign *
+           (gimbal_tune.gravity_k_nm * cosf(angle_rad) +
+            gimbal_tune.gravity_b_nm);
 }
 
 //伪代码，yaw的阻力补偿
@@ -517,6 +527,7 @@ static float gimbal_gravity_compensation(gimbal_t *gimbal)
 static void gimbal_calc_output(gimbal_t *gimbal)
 {
     float gravity = gimbal_gravity_compensation(gimbal);
+    gimbal->base_info.gravity_f = gravity;
 
 
     switch (gimbal->gimbal_mode)
@@ -637,12 +648,12 @@ static void gimbal_calc_output(gimbal_t *gimbal)
 
         gimbal->base_info.output_gimbal_p =
             gimbal_clamp(gimbal->base_info.output_gimbal_p,
-                         -GIMBAL_TORQUE_LIMIT,
-                         GIMBAL_TORQUE_LIMIT);
+                         -gimbal_tune.pitch_torque_limit_nm,
+                         gimbal_tune.pitch_torque_limit_nm);
         gimbal->base_info.output_gimbal_y =
             gimbal_clamp(gimbal->base_info.output_gimbal_y,
-                         -GIMBAL_TORQUE_LIMIT,
-                         GIMBAL_TORQUE_LIMIT);
+                         -gimbal_tune.yaw_torque_limit_nm,
+                         gimbal_tune.yaw_torque_limit_nm);
     }
     else
     {
@@ -654,6 +665,22 @@ static void gimbal_calc_output(gimbal_t *gimbal)
 void Gimbal_Init(gimbal_t *gimbal)
 {
     if (gimbal == NULL) return;
+
+    /* Runtime tuning defaults. These can be edited in Keil Watch. */
+    gimbal_tune.gravity_enable = GIMBAL_GRAVITY_ENABLE;
+    gimbal_tune.gravity_k_nm = GIMBAL_GRAVITY_K_NM;
+    gimbal_tune.gravity_b_nm = GIMBAL_GRAVITY_B_NM;
+    gimbal_tune.gravity_sign = GIMBAL_GRAVITY_SIGN;
+    gimbal_tune.gravity_middle_deg = GIMBAL_GRAVITY_MIDDLE_DEG;
+    gimbal_tune.pitch_torque_limit_nm = GIMBAL_TORQUE_LIMIT;
+    gimbal_tune.yaw_torque_limit_nm = GIMBAL_TORQUE_LIMIT;
+    gimbal_tune.pitch_rate_hold_kp = GIMBAL_RATE_HOLD_KP;
+    gimbal_tune.yaw_rate_hold_kp = GIMBAL_RATE_HOLD_KP;
+    gimbal_tune.pitch_manual_rate_max_deg_s = GIMBAL_MANUAL_PITCH_RATE_DEG_S;
+    gimbal_tune.yaw_manual_rate_max_deg_s = GIMBAL_MANUAL_YAW_RATE_DEG_S;
+    gimbal_tune.rate_hold_deadband_deg_s = GIMBAL_RATE_HOLD_DEADBAND_DEG_S;
+    gimbal_tune.manual_pitch_sign = GIMBAL_MANUAL_PITCH_SIGN;
+    gimbal_tune.manual_yaw_sign = GIMBAL_MANUAL_YAW_SIGN;
 
     /* 绑定电机驱动 */
     gimbal->pitch_motor = &dm_motor[PITCH];

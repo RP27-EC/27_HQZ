@@ -37,11 +37,13 @@
 /* 最终输出力矩限幅 */
 #define GIMBAL_TORQUE_LIMIT        2.0f
 /* 重力补偿开关：0 关闭，1 开启 */
-#define GIMBAL_GRAVITY_ENABLE      0
+#define GIMBAL_GRAVITY_ENABLE      1
 /* 余弦重力补偿幅值*/
-#define GIMBAL_GRAVITY_K_NM        0.3f
+#define GIMBAL_GRAVITY_K_NM        1.0f
 /* 重力补偿固定偏置 */
 #define GIMBAL_GRAVITY_B_NM        0.0f
+/* 重力补偿方向：当前正方向输出能抬升 Pitch 时用 1.0f，方向相反时用 -1.0f */
+#define GIMBAL_GRAVITY_SIGN        1.0f
 /* 重力补偿相位角 */
 #define GIMBAL_GRAVITY_MIDDLE_DEG  0.0f
 /* 斜坡目标判定误差阈值 */
@@ -56,8 +58,12 @@
 #define GIMBAL_RC_AXIS_DEADBAND            20.0f
 /* 遥控器满杆时 Yaw 最大目标角速度*/
 #define GIMBAL_MANUAL_YAW_RATE_DEG_S       300.0f
+/* 操作手 Yaw 方向符号 */
+#define GIMBAL_MANUAL_YAW_SIGN             (-1.0f)
 /* 遥控器满杆时 Pitch 最大目标角速度*/
-#define GIMBAL_MANUAL_PITCH_RATE_DEG_S     150.0f
+#define GIMBAL_MANUAL_PITCH_RATE_DEG_S     10.0f
+/* 操作手 Pitch 方向符号*/
+#define GIMBAL_MANUAL_PITCH_SIGN           (1.0f)
 /* 鼠标 X 转换为 Yaw 的增益 */
 #define GIMBAL_MOUSE_YAW_RATE_GAIN         1.0f
 /* 鼠标 Y 输入为 Pitch 的增益 */
@@ -65,7 +71,7 @@
 /* 速控模式回转弱角度 */
 #define GIMBAL_RATE_HOLD_KP                0.5f
 /* 判断操作手输入已回中的角速度阈值 */
-#define GIMBAL_RATE_HOLD_DEADBAND_DEG_S    5.0f
+#define GIMBAL_RATE_HOLD_DEADBAND_DEG_S    2.0f
 
 /* 云台运行模式 */
 typedef enum
@@ -111,6 +117,25 @@ typedef struct
     float yaw_hold_angle_deg;       /* 速控回中后保持的 Yaw 角度 */
     float pitch_hold_angle_deg;     /* 速控回中后保持的 Pitch 角度 */
 } gimbal_feedforward_t;
+
+/* Runtime tuning values. Edit these in Keil Watch without reflashing. */
+typedef struct
+{
+    volatile uint8_t gravity_enable;
+    volatile float gravity_k_nm;
+    volatile float gravity_b_nm;
+    volatile float gravity_sign;
+    volatile float gravity_middle_deg;
+    volatile float pitch_torque_limit_nm;
+    volatile float yaw_torque_limit_nm;
+    volatile float pitch_rate_hold_kp;
+    volatile float yaw_rate_hold_kp;
+    volatile float pitch_manual_rate_max_deg_s;
+    volatile float yaw_manual_rate_max_deg_s;
+    volatile float rate_hold_deadband_deg_s;
+    volatile float manual_pitch_sign;
+    volatile float manual_yaw_sign;
+} gimbal_tune_t;
 
 /* 目标角与 8 路串级 PID */
 typedef struct
@@ -171,6 +196,7 @@ typedef struct gimbal_class_t
 } gimbal_t;
 
 extern gimbal_t Gimbal;
+extern gimbal_tune_t gimbal_tune;
 
 void Gimbal_Init(gimbal_t *gimbal);
 void Gimbal_Work(gimbal_t *gimbal);

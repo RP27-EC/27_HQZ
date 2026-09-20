@@ -9,7 +9,7 @@
 #define BOARD_RC_AXIS_DEADBAND          20.0f
 #define BOARD_RC_AXIS_MAX               660.0f
 #define BOARD_D5_YAW_RATE_MAX_DEG_S     300.0f
-#define BOARD_D5_PITCH_RATE_MAX_DEG_S   150.0f
+#define BOARD_D5_PITCH_RATE_MAX_DEG_S   10.0f
 #define BOARD_D5_RATE_LSB_DEG_S         0.1f
 
 #define  ID_PKT_01     0xD1
