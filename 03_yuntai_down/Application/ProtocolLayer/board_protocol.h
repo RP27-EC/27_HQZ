@@ -9,7 +9,7 @@
 #define BOARD_RC_AXIS_DEADBAND          20.0f
 #define BOARD_RC_AXIS_MAX               660.0f
 #define BOARD_D5_YAW_RATE_MAX_DEG_S     300.0f
-#define BOARD_D5_PITCH_RATE_MAX_DEG_S   150.0f
+#define BOARD_D5_PITCH_RATE_MAX_DEG_S   20.0f
 #define BOARD_D5_RATE_LSB_DEG_S         0.1f
 
 #define  ID_PKT_01     0xD1
@@ -24,11 +24,11 @@
 #define  ID_MEG_05     0xC5
 
 typedef struct{
-  uint8_t  car_state;       //0ÊÇĞ¶Á¦£¬1ÊÇÒ£¿Ø£¬2ÊÇ¼üÊó
-//	uint8_t  gimbal_state;    //0ÊÇĞ¶Á¦£¬1ÊÇÓĞÁ¦
-//	uint8_t  launch_state;    //0ÊÇ¹Ø·¢Éä»ú¹¹£¬1ÊÇ¿ª·¢Éä»ú¹¹
-  uint8_t  gimbal_mode;        //0ÊÇ»úĞµ£¬1ÊÇÍÓÂİ
-	uint8_t  vision_mode;     //0ÎŞÊÓ¾õÄ£Ê½£¬1ÊÇÆÕÍ¨×ÔÃé£¬2ÊÇĞ¡·û£¬3ÊÇ´ó·û£¬4ÊÇÇ°ÉÚ£¬5ÊÇÓ¢ĞÛ
+  uint8_t  car_state;       //0é„îˆšåµé”æ¶³ç´1é„îˆä»´éºÑç´2é„îˆæ•­æ¦§ï¿½
+//	uint8_t  gimbal_state;    //0é„îˆšåµé”æ¶³ç´1é„îˆ›æ¹é”ï¿½
+//	uint8_t  launch_state;    //0é„îˆšå§é™æˆçš éˆçƒ˜ç€¯é”›ï¿½1é„îˆšç´‘é™æˆçš éˆçƒ˜ç€¯
+  uint8_t  gimbal_mode;        //0é„îˆ›æº€å§Šå¸®ç´1é„îˆæª§é“»ï¿½
+	uint8_t  vision_mode;     //0éƒçŠºî‹ç‘™å¤‹Äå¯®å¿¥ç´1é„îˆ›æ«˜é–«æ°³åšœé¬å‹¶ç´2é„îˆšçš¬ç»—ï¸¼ç´3é„îˆšã‡ç»—ï¸¼ç´4é„îˆšå¢ éîŸ’ç´5é„îˆå«³é—†ï¿½
 
 	uint8_t  game_start;
 	uint8_t  my_color;
@@ -57,7 +57,7 @@ typedef struct{
 }Board_Gimbal_Target_Pkt_t;
 
 typedef struct{
-	uint8_t  launch_state;    //0ÊÇ¹Ø·¢Éä»ú¹¹£¬1ÊÇ¿ª·¢Éä»ú¹¹
+	uint8_t  launch_state;    //0é„îˆšå§é™æˆçš éˆçƒ˜ç€¯é”›ï¿½1é„îˆšç´‘é™æˆçš éˆçƒ˜ç€¯
   uint8_t  shoot_mode;
 	uint8_t  shoot_level;
 
@@ -67,14 +67,14 @@ typedef struct{
 
 typedef struct{
 	uint8_t blood[8];    
-  //Ó¢ĞÛ
-  //¹¤³Ì
-  //ÉÚ±ø
-  //²½±ø
-  //ÎŞÈË»ú
-  //À×´ï
-	//»ùµØ
-	//Ç°ÉÚ
+  //é‘»éæ³Ÿ
+  //å®¸ãƒ§â–¼
+  //éã„¥åº
+  //å§ãƒ¥åº
+  //éƒçŠ±æ±‰éˆï¿½
+  //é—†ç–¯æª
+	//é©å“„æ¹´
+	//é“å¶…æ‘ 
 }Board_Blood_Pkt_t;
 
 

@@ -35,7 +35,7 @@
 /* Pitch 机械上限 */
 #define GIMBAL_PITCH_MAX_DEG       30.0f
 /* 最终输出力矩限幅 */
-#define GIMBAL_TORQUE_LIMIT        2.0f
+#define GIMBAL_TORQUE_LIMIT        3.0f
 /* 重力补偿开关：0 关闭，1 开启 */
 #define GIMBAL_GRAVITY_ENABLE      1
 /* 余弦重力补偿幅值*/
@@ -61,7 +61,7 @@
 /* 操作手 Yaw 方向符号 */
 #define GIMBAL_MANUAL_YAW_SIGN             (-1.0f)
 /* 遥控器满杆时 Pitch 最大目标角速度*/
-#define GIMBAL_MANUAL_PITCH_RATE_DEG_S     10.0f
+#define GIMBAL_MANUAL_PITCH_RATE_DEG_S     20.0f
 /* 操作手 Pitch 方向符号*/
 #define GIMBAL_MANUAL_PITCH_SIGN           (1.0f)
 /* 鼠标 X 转换为 Yaw 的增益 */
