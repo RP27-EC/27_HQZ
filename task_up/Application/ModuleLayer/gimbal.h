@@ -41,7 +41,7 @@
 /* 重力补偿开关：0 关闭，1 开启 */
 #define GIMBAL_GRAVITY_ENABLE      1
 /* 余弦重力补偿幅值*/
-#define GIMBAL_GRAVITY_K_NM        1.0f
+#define GIMBAL_GRAVITY_K_NM        1.1f
 /* 重力补偿固定偏置 */
 #define GIMBAL_GRAVITY_B_NM        0.0f
 /* 重力补偿方向：当前正方向输出能抬升 Pitch 时用 1.0f，方向相反时用 -1.0f */
@@ -63,7 +63,7 @@
 /* 操作手 Yaw 方向符号 */
 #define GIMBAL_MANUAL_YAW_SIGN             (-1.0f)
 /* 遥控器满杆时 Pitch 最大目标角速度*/
-#define GIMBAL_MANUAL_PITCH_RATE_DEG_S     20.0f
+#define GIMBAL_MANUAL_PITCH_RATE_DEG_S     40.0f
 /* 操作手 Pitch 方向符号*/
 #define GIMBAL_MANUAL_PITCH_SIGN           (1.0f)
 /* 鼠标 X 转换为 Yaw 的增益 */

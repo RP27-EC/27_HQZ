@@ -18,6 +18,8 @@
 
 /* 小陀螺参数。S1 上拨使能，S2 下拨选择小陀螺模式，ch0 控制旋转速度。 */
 #define CHASSIS_SPIN_MAX_WZ              20.0f
+#define CHASSIS_SPIN_BASE_WZ             20.0f
+#define CHASSIS_SPIN_TRIM_WZ             5.0f
 #define CHASSIS_SPIN_STEP                0.1f
 #define CHASSIS_SPIN_DIRECTION           1.0f
 #define CHASSIS_SPIN_RC_DEADBAND         30.0f

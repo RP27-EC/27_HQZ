@@ -112,7 +112,11 @@ void Chassis_Spin_Update(chassis_cmd_t *cmd)
     }
 
     axis = Chassis_Spin_AxisValue(rc_sensor.info->ch0);
-    target_wz = axis * CHASSIS_SPIN_MAX_WZ * CHASSIS_SPIN_DIRECTION;
+    target_wz = CHASSIS_SPIN_DIRECTION *
+                (CHASSIS_SPIN_BASE_WZ + (axis * CHASSIS_SPIN_TRIM_WZ));
+    target_wz = constrain(target_wz,
+                        -CHASSIS_SPIN_MAX_WZ,
+                        CHASSIS_SPIN_MAX_WZ);
 
     spin_ramp_wz = Chassis_Spin_Ramp(spin_ramp_wz, target_wz, CHASSIS_SPIN_STEP);
 
