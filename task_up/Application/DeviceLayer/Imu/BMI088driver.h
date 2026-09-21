@@ -1,3 +1,5 @@
+/* BMI088driver.h - BMI088 寄存器驱动 */
+
 #ifndef BMI088DRIVER_H
 #define BMI088DRIVER_H
 
@@ -99,3 +101,4 @@ extern void BMI088_read(fp32 gyro[3], fp32 accel[3], fp32 *temperate);
 
 
 #endif
+

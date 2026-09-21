@@ -1,3 +1,5 @@
+/* gimbal.h - 云台控制 */
+
 #ifndef __GIMBAL_H
 #define __GIMBAL_H
 
@@ -180,8 +182,8 @@ typedef struct
 /* 云台对象，集中保存设备、状态、参数和控制接口 */
 typedef struct gimbal_class_t
 {
-    Motor_DM_t *pitch_motor;        /* Pitch DM4310 对象 */
-    Motor_DM_t *yaw_motor;          /* Yaw DM4310 对象 */
+    dm_motor_t *pitch_motor;        /* Pitch DM4310 对象 */
+    dm_motor_t *yaw_motor;          /* Yaw DM4310 对象 */
 
     gimbal_base_info_t base_info;   /* 反馈与输出信息 */
     gimbal_pid_info_t pid_info;     /* 目标与 PID 参数 */
@@ -202,3 +204,4 @@ void Gimbal_Init(gimbal_t *gimbal);
 void Gimbal_Work(gimbal_t *gimbal);
 
 #endif
+

@@ -1,3 +1,5 @@
+/* communicate.c - 上下板通信 */
+
 #include "communicate.h"
 #include "drv_can.h"
 #include "gimbal.h"
@@ -222,3 +224,6 @@ void C_Board_Communicate_HeartBeat(void)
         Board_HeartBeat.status = DEV_ONLINE;
     }
 }
+
+
+

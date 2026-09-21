@@ -1,3 +1,5 @@
+/* crc.h - CRC 校验 */
+
 #ifndef __CRC_H_
 #define __CRC_H_
 
@@ -15,3 +17,4 @@ uint32_t Verify_CRC16_Check_Sum(uint8_t *pchMessage, uint32_t dwLength);
 uint16_t Get_CRC16_Check_Sum(uint8_t *pchMessage,uint32_t dwLength,uint16_t wCRC);
 
 #endif
+

@@ -1,9 +1,6 @@
+/* motor.c - 电机对象管理 */
 
-/* Includes ------------------------------------------------------------------*/
 #include "motor.h"
-
-
-/* Private variables ---------------------------------------------------------*/
 //
 
 drv_can_t rm_motor_driver[] = {
@@ -41,16 +38,16 @@ extern CAN_HandleTypeDef hcan2;
 extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
 
-Motor_HT_Born_Info_t L_Wheel_Born_Info = 
+ht_cfg_t L_Wheel_Born_Info = 
 {	
 	.stdId = 0x009,
 	.hcan = &hcan1,
 	.order_correction = 0,
 };
-Motor_HT_Rx_Info_t L_Wheel_Rx_Info_t;
-Motor_HT_Tx_Info_t L_Wheel_Tx_Info_t;
-Motor_HT_State_t L_Wheel_State_t;
-Motor_HT_t L_Wheel = 
+ht_rx_t L_Wheel_Rx_Info_t;
+ht_tx_t L_Wheel_Tx_Info_t;
+ht_state_t L_Wheel_State_t;
+ht_motor_t L_Wheel = 
 {
 	.born_info = &L_Wheel_Born_Info,
 	
@@ -60,26 +57,26 @@ Motor_HT_t L_Wheel =
 	
 	.state = &L_Wheel_State_t,
 	
-	.single_init = &HT_Single_Motor_Init,
+	.single_init = &ht_motor_init,
 };
 /*HT_end*/
 #endif
 
 /*DM_start*/
-Motor_DM_Born_Info_t Yaw_Born_Info =
+dm_cfg_t Yaw_Born_Info =
 {
     .stdId = 0x02,
     .hcan = &hcan2,
 
 };
 
-Motor_DM_Rx_Info_t Yaw_Rx_Info_t;
+dm_rx_t Yaw_Rx_Info_t;
 
-Motor_DM_Tx_Info_t Yaw_Tx_Info_t;
+dm_tx_t Yaw_Tx_Info_t;
 
-Motor_DM_State_t Yaw_State_t;
+dm_state_t Yaw_State_t;
 
-Motor_DM_t Yaw_Motor = 
+dm_motor_t Yaw_Motor = 
 {
 	.born_info = &Yaw_Born_Info,
 	
@@ -89,29 +86,29 @@ Motor_DM_t Yaw_Motor =
 	
 	.state = &Yaw_State_t,
 	
-	.single_init = &DM_Single_Motor_Init,
+	.single_init = &dm_motor_init,
 };
 
-Motor_DM_Born_Info_t Pitch_Born_Info =
+dm_cfg_t Pitch_Born_Info =
 {
     .stdId = 0x01,
     .hcan = &hcan1,
 };
 
-Motor_DM_Rx_Info_t Pitch_Rx_Info_t;
-Motor_DM_Tx_Info_t Pitch_Tx_Info_t;
-Motor_DM_State_t Pitch_State_t;
+dm_rx_t Pitch_Rx_Info_t;
+dm_tx_t Pitch_Tx_Info_t;
+dm_state_t Pitch_State_t;
 
-Motor_DM_t Pitch_Motor =
+dm_motor_t Pitch_Motor =
 {
     .born_info = &Pitch_Born_Info,
     .rx_info = &Pitch_Rx_Info_t,
     .tx_info = &Pitch_Tx_Info_t,
     .state = &Pitch_State_t,
-    .single_init = &DM_Single_Motor_Init,
+    .single_init = &dm_motor_init,
 };
 
-Motor_DM_t dm_motor[] =
+dm_motor_t dm_motor[] =
 {
     [YAW] =
     {
@@ -119,7 +116,7 @@ Motor_DM_t dm_motor[] =
         .rx_info = &Yaw_Rx_Info_t,
         .tx_info = &Yaw_Tx_Info_t,
         .state = &Yaw_State_t,
-        .single_init = &DM_Single_Motor_Init,
+        .single_init = &dm_motor_init,
     },
     [PITCH] =
     {
@@ -127,23 +124,23 @@ Motor_DM_t dm_motor[] =
         .rx_info = &Pitch_Rx_Info_t,
         .tx_info = &Pitch_Tx_Info_t,
         .state = &Pitch_State_t,
-        .single_init = &DM_Single_Motor_Init,
+        .single_init = &dm_motor_init,
     },
 };
 
-Motor_DM_Group_t DM_Group =
+dm_group_t DM_Group =
 {
     .motor[YAW] = &dm_motor[YAW],
     .motor[PITCH] = &dm_motor[PITCH],
     .motor[2] = NULL,
     .motor[3] = NULL,
-    .group_init = Group_Motor_Init,
+    .group_init = dm_group_init,
 };
 /*DM_end*/
 
 /*RM START*/
 #if 0 /* Legacy RM motor: not used by the current gimbal board. */
-Motor_RM_Born_Info_t R_Fric_Born =
+rm_cfg_t R_Fric_Born =
 {
 	.rxId = 0,
 	
@@ -154,11 +151,11 @@ Motor_RM_Born_Info_t R_Fric_Born =
 	.stdId = 0x1FE,
 };
 
-Motor_RM_Tx_Info_t R_Fric_Tx;
+rm_tx_t R_Fric_Tx;
 
-Motor_RM_State_t R_Fric_State;
+rm_state_t R_Fric_State;
 
-Motor_RM_Rx_Info_t R_Fric_Rx;
+rm_rx_t R_Fric_Rx;
 
 pid_ctrl_t R_Fric_Speed_Ctrl = 
 {
@@ -169,12 +166,12 @@ pid_ctrl_t R_Fric_Speed_Ctrl =
 	.out_max = 8000.f,//
 };
 
-Motor_RM_Ctrl_Info_t R_Fric_Ctrl = 
+rm_ctrl_t R_Fric_Ctrl = 
 {
 	.speed_ctrl = &R_Fric_Speed_Ctrl,
 };
 
-Motor_RM_t R_Fric = 
+rm_motor_t R_Fric = 
 {
 	.born_info = &R_Fric_Born,
 	
@@ -189,7 +186,7 @@ Motor_RM_t R_Fric =
 	.ctrl = &R_Fric_Ctrl,
 };
 
-Motor_RM_Group_t RM_Group =
+rm_group_t RM_Group =
 {
 	.motor[0] = &R_Fric,
 	
@@ -203,7 +200,7 @@ Motor_RM_Group_t RM_Group =
 	
 	.hcan=&hcan1,
 	
-	.group_init = RM_Group_Motor_Init,
+	.group_init = rm_group_init,
 };
 
 /*RM END*/
@@ -234,8 +231,6 @@ KT_motor_t kt_motor[] = {
 	},
 };
 #endif
-
-/* Exported functions --------------------------------------------------------*/
 #if 0 /* Legacy RM motor initialization disabled. */
 void rm_motor_list_init()
 {
@@ -277,5 +272,7 @@ void rm_motor_list_heart_beat()
 	RM_Group.group_heartbeat(&RM_Group);
 }
 #endif
+
+
 
 

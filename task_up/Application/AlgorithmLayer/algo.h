@@ -1,3 +1,5 @@
+/* algo.h - 通用算法头文件 */
+
 #ifndef __ALGO_H
 #define __ALGO_H
 
@@ -12,3 +14,4 @@
 
 
 #endif
+

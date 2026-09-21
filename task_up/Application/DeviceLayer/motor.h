@@ -1,3 +1,5 @@
+/* motor.h - 电机对象管理 */
+
 #ifndef __MOTOR_H
 #define __MOTOR_H
 
@@ -10,15 +12,6 @@
 #include "motor_def.h"
 #include "drv_can.h"
 
-/*������岽��------------------------------------------------*/
-//���Ҫ��ɾ��RM���
-//1.rm_motor_driver���ӵ��ID��CAN���� 
-//2.dev_rm_motor_list_e��ӵ������
-//3.CAN1_rxDataHandler��CAN2_rxDataHandler�����ӻ�ȡ�����Ϣ�ĺ���
-//4.rm_motor_t rm_motor[]������ӵ���ܽṹ��
-//5.����pid�ṹ���Լ���rm_motor_list_init����mo tor_pid_init��ʼ��pid�ṹ��
-//���Ҫ�����������motor_out�︳ֵ����CAN_Sendͳһ����
-/*���ID�궨��------------------------------------------------*/
 #define ID_GIMB_P 0x11
 #define ID_GIMB_Y 0x12
 
@@ -29,12 +22,11 @@ typedef enum
 } dev_dm_motor_list_e;
 
 extern  KT_motor_t kt_motor[1];
-extern  Motor_HT_t L_Wheel;
-extern Motor_DM_t dm_motor[2];
-extern Motor_DM_Group_t DM_Group;
-extern  Motor_RM_t R_Fric;
-extern  Motor_RM_Group_t RM_Group;
-/* Exported functions --------------------------------------------------------*/
+extern  ht_motor_t L_Wheel;
+extern dm_motor_t dm_motor[2];
+extern dm_group_t DM_Group;
+extern  rm_motor_t R_Fric;
+extern  rm_group_t RM_Group;
 void rm_motor_list_init(void);
 void rm_motor_list_heart_beat(void);
 void kt_motor_list_init(void);
@@ -44,4 +36,7 @@ void dm_motor_list_heart_beat(void);
 uint8_t rm_motor_list_workstate(void);
 
 #endif
+
+
+
 

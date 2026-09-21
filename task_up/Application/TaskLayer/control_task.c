@@ -1,9 +1,5 @@
-/**
-  ******************************************************************************
-  * @file    control_task.c
-  * @brief   Gimbal control task, 1 ms period
-  ******************************************************************************
-  */
+/* control_task.c - 控制任务 */
+
 #include "control_task.h"
 #include "communicate.h"
 #include "imu_sensor.h"
@@ -17,7 +13,7 @@ volatile imu_debug_t imu_dbg;
 
 static void imu_debug_update(void)
 {
-    imu_info_t *info = imu_sensor.info;
+    imu_data_t *info = imu_dev.info;
 
     imu_dbg.acc_x = info->raw_info.acc_x;
     imu_dbg.acc_y = info->raw_info.acc_y;
@@ -44,9 +40,9 @@ static void imu_debug_update(void)
     imu_dbg.accz = info->base_info.accz;
     imu_dbg.temperature = info->base_info.temperature;
 
-    imu_dbg.dev_state = (uint8_t)imu_sensor.work_state.dev_state;
-    imu_dbg.cali_end = imu_sensor.work_state.cali_end;
-    imu_dbg.err_code = (uint8_t)imu_sensor.work_state.err_code;
+    imu_dbg.dev_state = (uint8_t)imu_dev.work_state.dev_state;
+    imu_dbg.cali_end = imu_dev.work_state.cali_end;
+    imu_dbg.err_code = (uint8_t)imu_dev.work_state.err_code;
 }
 
 static void gimbal_can_send(void)
@@ -69,15 +65,15 @@ void StartControlTask(void const *argument)
 
     for (;;)
     {
-        if ((imu_sensor.work_state.err_code == IMU_NONE_ERR) ||
-            (imu_sensor.work_state.err_code == IMU_DATA_CALI))
+        if ((imu_dev.work_state.err_code == IMU_E_NONE) ||
+            (imu_dev.work_state.err_code == IMU_E_CALI))
         {
-            imu_sensor.update(&imu_sensor);
+            imu_dev.update(&imu_dev);
         }
 
         imu_debug_update();
 #if GIMBAL_LOCAL_RC_ENABLE
-        rc_interrupt_update(&rc_sensor);
+        rc_interrupt_update(&rc_dev);
 #endif
         Module_Work();
         gimbal_can_send();
@@ -86,3 +82,6 @@ void StartControlTask(void const *argument)
         osDelay(1);
     }
 }
+
+
+

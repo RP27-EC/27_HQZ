@@ -1,34 +1,29 @@
+/* config_uart.c - ä¸²å£ä¸­æ–­å›è°ƒåˆ†å‘ */
+
 
 #include "config_uart.h"
 #include "rc_sensor.h"
 
 
-/**
-  * @Name    USART1_rxDataHandler
-  * @brief   ÊÓ¾õÊı¾İ¸üĞÂ
-**/
+/* USART1 å›è°ƒ(è§†è§‰, å½“å‰æœªå¯ç”¨) */
 //void USART1_rxDataHandler(uint8_t *rxBuf)
 //{
 
 //}
 
-/**
-  * @Name    USART3_rxDataHandler
-  * @brief   Ò£¿ØÆ÷¸üĞÂ
-**/
+/* USART3 å›è°ƒ(é¥æ§å™¨) */
 void USART3_rxDataHandler(uint8_t *rxBuf)
 {
-	// ¸üĞÂÒ£¿ØÊı¾İ
-	rc_sensor.update(&rc_sensor, rxBuf);//½âÎöĞ­Òé
-	rc_sensor.check(&rc_sensor);
+	// è§£æé¥æ§å™¨æ•°æ®
+	rc_dev.update(&rc_dev, rxBuf);  // æ›´æ–°æ•°æ®
+	rc_dev.check(&rc_dev);
 }
 
-/**
-  * @Name    USART6_rxDataHandler
-  * @brief    
-**/
+/* USART6 å›è°ƒ */
 
 void USART6_rxDataHandler(uint8_t *rxBuf)
 {
 	
 }
+
+

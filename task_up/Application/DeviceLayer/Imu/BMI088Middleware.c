@@ -1,3 +1,5 @@
+/* BMI088Middleware.c - BMI088 SPI 读写适配 */
+
 #include "BMI088Middleware.h"
 #include "main.h"
 
@@ -70,4 +72,5 @@ uint8_t BMI088_read_write_byte(uint8_t txdata)
     HAL_SPI_TransmitReceive(&hspi1, &txdata, &rx_data, 1, 1000);
     return rx_data;
 }
+
 

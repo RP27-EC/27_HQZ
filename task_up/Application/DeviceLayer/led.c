@@ -1,3 +1,5 @@
+/* led.c - LED 驱动 */
+
 #include "led.h"
 
 
@@ -126,6 +128,7 @@ void led_work(led_t *led)
 			break;
 	}
 }
+
 
 
 

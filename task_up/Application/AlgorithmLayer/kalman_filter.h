@@ -1,15 +1,5 @@
-/**
- ******************************************************************************
- * @file    kalman filter.h
- * @author  Wang Hongxi
- * @version V1.2.2
- * @date    2022/1/8
- * @brief
- ******************************************************************************
- * @attention
- *
- ******************************************************************************
- */
+/* kalman_filter.h - å¡å°”æ›¼æ»¤æ³¢å™¨ */
+
 #ifndef __KALMAN_FILTER_H
 #define __KALMAN_FILTER_H
 
@@ -28,14 +18,14 @@
 #include "math.h"
 #include "cmsis_os.h"
 
-// ÈôÔËËãËÙ¶È²»¹»,¿ÉÒÔÊ¹ÓÃq31´úÌæf32,µ«ÊÇ¾«¶È»á½µµÍ
+// å®šç‚¹ q31 è¿ç®—ä¼šé™ä½ç²¾åº¦, è¿™é‡Œç”¨ f32
 #define mat arm_matrix_instance_f32
-#define Matrix_Init arm_mat_init_f32
-#define Matrix_Add arm_mat_add_f32
-#define Matrix_Subtract arm_mat_sub_f32
-#define Matrix_Multiply arm_mat_mult_f32
-#define Matrix_Transpose arm_mat_trans_f32
-#define Matrix_Inverse arm_mat_inverse_f32
+#define mat_init arm_mat_init_f32
+#define mat_add arm_mat_add_f32
+#define mat_sub arm_mat_sub_f32
+#define mat_mul arm_mat_mult_f32
+#define mat_trans arm_mat_trans_f32
+#define mat_inv arm_mat_inverse_f32
 
 #define sizeof_float sizeof(float)
 #define sizeof_double sizeof(double)
@@ -53,33 +43,33 @@ typedef struct kf_t
     uint8_t UseAutoAdjustment;
     uint8_t MeasurementValidNum;
 
-    uint8_t *MeasurementMap;      // Á¿²âÓë×´Ì¬µÄ¹ØÏµ how measurement relates to the state
-    float *MeasurementDegree;     // ²âÁ¿Öµ¶ÔÓ¦H¾ØÕóÔªËØÖµ elements of each measurement in H
-    float *MatR_DiagonalElements; // Á¿²â·½²î variance for each measurement
-    float *StateMinVariance;      // ×îĞ¡·½²î ±ÜÃâ·½²î¹ı¶ÈÊÕÁ² suppress filter excessive convergence
+    uint8_t *MeasurementMap;  // é‡æµ‹ä¸çŠ¶æ€çš„å¯¹åº”å…³ç³»
+    float *MeasurementDegree;  // é‡æµ‹åœ¨ H ä¸­çš„ç³»æ•°
+    float *MatR_DiagonalElements;  // å„é‡æµ‹çš„æ–¹å·®
+    float *StateMinVariance;  // çŠ¶æ€æœ€å°æ–¹å·®, é˜²æ­¢è¿‡åº¦æ”¶æ•›
     uint8_t *temp;
 
-    // ÅäºÏÓÃ»§¶¨Òåº¯ÊıÊ¹ÓÃ,×÷Îª±êÖ¾Î»ÓÃÓÚÅĞ¶ÏÊÇ·ñÒªÌø¹ı±ê×¼KFÖĞÎå¸ö»·½ÚÖĞµÄÈÎÒâÒ»¸ö
+    // ç”¨æˆ·è‡ªå®šä¹‰å‡½æ•°, ä»¥æ ‡å¿—ä½åˆ¤æ–­æ˜¯å¦è·³è¿‡æ ‡å‡† KF çš„æŸä¸€æ­¥
     uint8_t SkipEq1, SkipEq2, SkipEq3, SkipEq4, SkipEq5;
 
-    // definiion of struct mat: rows & cols & pointer to vars,¾ØÕó½á¹¹ÌåµÄ±äÁ¿Ãû
-    mat xhat;      // x(k|k)ºóÑé×´Ì¬¹À¼Æ¾ØÕó
-    mat xhatminus; // x(k|k-1)ÏÈÑé×´Ì¬¹À¼Æ¾ØÕó
-    mat u;         // control vector uÊäÈëÏòÁ¿¾ØÕó
-    mat z;         // measurement vector z¹Û²âÏòÁ¿¾ØÕó
-    mat P;         // covariance matrix P(k|k)ºóÑé×´Ì¬¹À¼ÆÎó²îĞ­·½²î¾ØÕó
-    mat Pminus;    // covariance matrix P(k|k-1)ÏÈÑé×´Ì¬¹À¼ÆÎó²îĞ­·½²î¾ØÕó
-    mat F, FT;     // state transition matrix F FT×´Ì¬×ªÒÆ¾ØÕó¼°ÆäÄæ¾ØÕó
-    mat B;         // control matrix BÊäÈë¾ØÕó
-    mat H, HT;     // measurement matrix H¹Û²â¾ØÕó
-    mat Q;         // process noise covariance matrix Q¹ı³ÌÔëÉù¾ØÕó
-    mat R;         // measurement noise covariance matrix R²âÁ¿ÔëÉù¾ØÕó
-    mat K;         // kalman gain  K¿¨¶ûÂüÔöÒæ¾ØÕó
+    // çŸ©é˜µç»“æ„: è¡Œåˆ—æ•°ä¸æ•°æ®æŒ‡é’ˆ
+    mat xhat;  // x(k|k) çŠ¶æ€ä¼°è®¡
+    mat xhatminus;  // x(k|k-1) çŠ¶æ€é¢„æµ‹
+    mat u;         // æ§åˆ¶å‘é‡ u
+    mat z;         // é‡æµ‹å‘é‡ z
+    mat P;  // P(k|k) åæ–¹å·®
+    mat Pminus;  // P(k|k-1) åæ–¹å·®é¢„æµ‹
+    mat F, FT;  // çŠ¶æ€è½¬ç§»çŸ©é˜µ F åŠå…¶è½¬ç½®
+    mat B;  // æ§åˆ¶çŸ©é˜µ B
+    mat H, HT;  // é‡æµ‹çŸ©é˜µ H åŠå…¶è½¬ç½®
+    mat Q;  // è¿‡ç¨‹å™ªå£°åæ–¹å·® Q
+    mat R;  // é‡æµ‹å™ªå£°åæ–¹å·® R
+    mat K;  // å¡å°”æ›¼å¢ç›Š K
     mat S, temp_matrix, temp_matrix1, temp_vector, temp_vector1;
 
     int8_t MatStatus;
 
-    // ÓÃ»§¶¨Òåº¯Êı,¿ÉÒÔÌæ»»»òÀ©Õ¹»ù×¼KFµÄ¹¦ÄÜ
+    // ç”¨æˆ·è‡ªå®šä¹‰å‡½æ•°, å¯æ›¿æ¢æ ‡å‡† KF çš„å¯¹åº”æ­¥éª¤
     void (*User_Func0_f)(struct kf_t *kf);
     void (*User_Func1_f)(struct kf_t *kf);
     void (*User_Func2_f)(struct kf_t *kf);
@@ -88,7 +78,7 @@ typedef struct kf_t
     void (*User_Func5_f)(struct kf_t *kf);
     void (*User_Func6_f)(struct kf_t *kf);
 
-    // ¾ØÕó´æ´¢¿Õ¼äÖ¸Õë
+    // çŸ©é˜µå­˜å‚¨ç©ºé—´æŒ‡é’ˆ
     float *xhat_data, *xhatminus_data;
     float *u_data;
     float *z_data;
@@ -103,13 +93,14 @@ typedef struct kf_t
 } KalmanFilter_t;
 
 
-void Kalman_Filter_Init(KalmanFilter_t *kf, uint8_t xhatSize, uint8_t uSize, uint8_t zSize);
-void Kalman_Filter_Measure(KalmanFilter_t *kf);
-void Kalman_Filter_xhatMinusUpdate(KalmanFilter_t *kf);
-void Kalman_Filter_PminusUpdate(KalmanFilter_t *kf);
-void Kalman_Filter_SetK(KalmanFilter_t *kf);
-void Kalman_Filter_xhatUpdate(KalmanFilter_t *kf);
-void Kalman_Filter_P_Update(KalmanFilter_t *kf);
-float *Kalman_Filter_Update(KalmanFilter_t *kf);
+void kf_init(KalmanFilter_t *kf, uint8_t xhatSize, uint8_t uSize, uint8_t zSize);
+void kf_measure(KalmanFilter_t *kf);
+void kf_predict_state(KalmanFilter_t *kf);
+void kf_predict_cov(KalmanFilter_t *kf);
+void kf_calc_gain(KalmanFilter_t *kf);
+void kf_update_state(KalmanFilter_t *kf);
+void kf_update_cov(KalmanFilter_t *kf);
+float *kf_update(KalmanFilter_t *kf);
 
 #endif //__KALMAN_FILTER_H
+

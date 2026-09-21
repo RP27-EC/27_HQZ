@@ -1,50 +1,11 @@
-/**
- ******************************************************************************
- * @file        imu_xrobot.c
- * @author      RobotMaster C Board
- * @brief       ATOM-IMU 成品陀螺仪 UART 通信协议层
- *
- * 本文件实现与 XRobot ATOM-IMU V5.3 成品陀螺仪的 UART 通信协议。
- *
- * ==== 通信方式 ====
- *
- * 通过 USART1 + DMA 循环模式 + 空闲中断 接收数据。
- * DRV_UART_IRQHandler() 检测到 USART1 空闲中断后，
- * 调用 USART1_rxDataHandler() 进行帧解析。
- * 解析成功的数据存入全局变量 imu_data。
- *
- * ==== 使用流程 ====
- *
- * 1. main.c 中已调用 DEVICE_Init() → IMU_UART_Init()，完成初始化。
- * 2. 数据自动在 USART1 空闲中断中接收、校验、解析。
- * 3. 直接读取 imu_data 全局变量即可获得最新数据。
- *    见 imu_xrobot.h 中的示例代码。
- *
- * ==== 注意事项 ====
- *
- * - USART1 波特率需配置为 2000000，需要在usart.c中确认。
- * - DMA 接收缓冲区需足够大，即USART1_RX_BUF_LEN = 128，drv_uart.c和drv_uart.h中都有定义，删去其中一个并改为128即可。
- * - 需要在drv_uart.c的uart_rx_idle_callback函数中uart1的部分else if (huart == &huart1)内添加__HAL_DMA_SET_COUNTER(huart->hdmarx, USART1_RX_BUF_LEN)让DMA重启时重置计数器
- * - 需要在drv_uart.h里面添加extern DMA_HandleTypeDef hdma_usart1_rx;
- * - 删掉config_uart.c里面的USART1_rxDataHandler
- * @version V1.0
- * @date    2026-06-11
- ******************************************************************************
- */
+/* imu_xrobot.c - ATOM-IMU 串口解析 */
 
-/* Includes ------------------------------------------------------------------*/
 #include "imu_xrobot.h"
 #include "string.h"
 #include "usart.h"
 #include "drv_uart.h"
-
-/* Exported variables --------------------------------------------------------*/
-ImuUartData imu_data;
-
-/* Private variables ---------------------------------------------------------*/
+ImuUartData g_atom_imu;
 volatile uint16_t size_check;
-
-/* Private constants ---------------------------------------------------------*/
 #define IMU_FRAME_SIZE  64
 #define IMU_FRAME_HEAD  0xA5
 #define RAD_TO_DEG      57.29578f   /* 弧度转度 (180/π) */
@@ -86,16 +47,7 @@ static const uint8_t CRC8_TAB[256] = {
     0x74, 0x2a, 0xc8, 0x96, 0x15, 0x4b, 0xa9, 0xf7,
     0xb6, 0xe8, 0x0a, 0x54, 0xd7, 0x89, 0x6b, 0x35
 };
-
-/* Private function prototypes -----------------------------------------------*/
-/* Exported functions ---------------------------------------------------------*/
-
-/**
- * @brief  CRC8 校验计算 (多项式 0x31, 初始值 0xFF)
- * @param  data  待校验数据指针
- * @param  len   数据长度
- * @return CRC8 校验值
- */
+/* CRC8 校验 */
 uint8_t CRC8_Calc(uint8_t *data, uint16_t len) {
     uint8_t crc = 0xff;  /* 初始值 0xFF */
     for (uint16_t i = 0; i < len; i++) {
@@ -104,25 +56,16 @@ uint8_t CRC8_Calc(uint8_t *data, uint16_t len) {
     return crc;
 }
 
-/**
- * @brief  IMU UART 初始化，清空数据缓存
- * @note   在 DEVICE_Init() 中被调用
- */
+/* 清空接收缓存 */
 void IMU_UART_Init(void)
 {
     size_check = sizeof(ImuUartData);
-    memset(&imu_data, 0, sizeof(ImuUartData));
+    memset(&g_atom_imu, 0, sizeof(ImuUartData));
 }
 
 /* USART1 数据接收处理 --------------------------------------------------------*/
 
-/**
- * @brief  USART1 空闲中断数据处理器 
- * @note   在 USART1 空闲中断中被 DRV_UART_IRQHandler() 调用
- *         将欧拉角从弧度转换为度
- *
- * @param  rxBuf  DMA 接收缓冲区指针
- */
+/* 解析 ATOM-IMU 帧 */
 void USART1_rxDataHandler(uint8_t *rxBuf)
 {
     uint16_t rx_len = USART1_RX_BUF_LEN - hdma_usart1_rx.Instance->NDTR;
@@ -153,14 +96,18 @@ void USART1_rxDataHandler(uint8_t *rxBuf)
 
         if (calc_crc == recv_crc)
         {
-            memcpy(&imu_data, parse_buf, sizeof(ImuUartData));
+            memcpy(&g_atom_imu, parse_buf, sizeof(ImuUartData));
 
             /* 欧拉角弧度转度 */
-            imu_data.eulr_.yaw *= RAD_TO_DEG;
-            imu_data.eulr_.pit *= RAD_TO_DEG;
-            imu_data.eulr_.rol *= RAD_TO_DEG;
+            g_atom_imu.eulr_.yaw *= RAD_TO_DEG;
+            g_atom_imu.eulr_.pit *= RAD_TO_DEG;
+            g_atom_imu.eulr_.rol *= RAD_TO_DEG;
         }
 
         i += IMU_FRAME_SIZE;
     }
 }
+
+
+
+

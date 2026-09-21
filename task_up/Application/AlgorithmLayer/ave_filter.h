@@ -1,11 +1,5 @@
-/**
-  ******************************************************************************
-  * @file           : ave_filter.c\h
-  * @brief          : 
-  * @note           : 2022-1-21 15:10:59
-  ******************************************************************************
-  */
-	
+/* ave_filter.h - æ»‘åŠ¨å¹³å‡æ»¤æ³¢ */
+
 #ifndef __AVE_FILTER_H
 #define __AVE_FILTER_H
 
@@ -18,10 +12,12 @@ typedef struct
 	int16_t index;
 	float value[ave_filter_times_max];
 	float value_ave;
-	float filter_times;		//ÂË²¨´°¿ÚÊı×é³¤¶È
+	float filter_times;		// æ»¤æ³¢çª—å£é•¿åº¦
 }ave_filter_t;
 
 void ave_fil_init(ave_filter_t *ave_fil);
-float ave_fil_update(ave_filter_t *ave_fil, float value, uint16_t max);
+float avg_push(ave_filter_t *ave_fil, float value, uint16_t max);
 
 #endif
+
+

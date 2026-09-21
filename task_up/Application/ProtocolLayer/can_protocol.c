@@ -1,3 +1,5 @@
+/* can_protocol.c - CAN 报文分发 */
+
 #include "can_protocol.h"
 #include "communicate.h"
 #include "motor.h"
@@ -47,3 +49,4 @@ void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
         break;
     }
 }
+

@@ -1,17 +1,13 @@
+/* rp_driver_config.h - å¤–è®¾é©±åŠ¨é…ç½® */
+
 #ifndef __RP_DRIVER_CONFIG_H
 #define __RP_DRIVER_CONFIG_H
-
-/* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
 #include "stdbool.h"
-
-/* Exported macro ------------------------------------------------------------*/
 #define configDRV_CAN_USE_MAIL  1
-
-/* Exported types ------------------------------------------------------------*/
-/* Çı¶¯²ã --------------------------------------------------------------------*/
+/* é©±åŠ¨å±‚é…ç½® */
 /**
- *	@brief	Çı¶¯ÀàĞÍ
+ *	@brief é©±åŠ¨å±‚é…ç½®
  *	@class	driver
  */
 typedef enum drv_type{
@@ -23,7 +19,7 @@ typedef enum drv_type{
 } drv_type_t;
 
 /**
- *	@brief	canÇı¶¯ id
+ *	@brief CAN å¤–è®¾ id
  *	@class	driver
  */
 typedef enum {
@@ -32,7 +28,7 @@ typedef enum {
 } can_id_t;
 
 /**
- *	@brief	iicÇı¶¯ id
+ *	@brief IIC å¤–è®¾ ID
  *	@class	driver
  */
 typedef enum {
@@ -40,7 +36,7 @@ typedef enum {
 } iic_id_t;
 
 /**
- *	@brief	spiÇı¶¯ id
+ *	@brief SPI å¤–è®¾ ID
  *	@class	driver
  */
 typedef enum {
@@ -48,7 +44,7 @@ typedef enum {
 } spi_id_t;
 
 /**
- *	@brief	uartÇı¶¯ id
+ *	@brief UART å¤–è®¾ ID
  *	@class	driver
  */
 typedef enum {
@@ -61,7 +57,7 @@ typedef enum {
 } uart_id_t;
 
 /**
- *	@brief	iicÇı¶¯
+ *	@brief IIC å¤–è®¾
  *	@class	driver
  */
 typedef struct drv_iic {
@@ -70,21 +66,21 @@ typedef struct drv_iic {
 } drv_iic_t;
 
 /**
- *	@brief	canÇı¶¯
+ *	@brief CAN å¤–è®¾
  *	@class	driver
  */
 typedef struct drv_can {
-    can_id_t    can_id;				// CAN1»òCAN2
+    can_id_t    can_id;  // CAN1 æˆ– CAN2
     uint32_t    err_cnt;
-	uint32_t	rx_id;  		// ·´À¡±¨ÎÄ±êÊ¶·û
-	uint32_t	tx_id;  		// ÉÏ´«±¨ÎÄ±êÊ¶·û
-	uint8_t		data_id;		// Êı¾İÏÂ±ê
-    uint16_t    tx_period;  	// ¶¨Ê±·¢ËÍ¼ä¸ô(ms)
-	uint8_t		*CANx_XXX_DATA; // ·¢ËÍµÄÊı×é
+	uint32_t	rx_id;  // æ¥æ”¶æŠ¥æ–‡æ ‡è¯†ç¬¦
+	uint32_t	tx_id;  // å‘é€æŠ¥æ–‡æ ‡è¯†ç¬¦
+	uint8_t		data_id;  // æ•°æ®ä¸‹æ ‡
+    uint16_t    tx_period;  // å®šæ—¶å‘é€é—´éš”(ms)
+	uint8_t		*CANx_XXX_DATA;  // å‘é€æ•°æ®æŒ‡é’ˆ
 } drv_can_t;
 
 /**
- *	@brief	pwmÇı¶¯
+ *	@brief PWM å¤–è®¾
  *	@class	driver
  */
 typedef struct drv_pwm {
@@ -93,7 +89,7 @@ typedef struct drv_pwm {
 } drv_pwm_t;
 
 /**
- *	@brief	uartÇı¶¯
+ *	@brief UART å¤–è®¾
  *	@class	driver
  */
 typedef struct drv_uart {
@@ -103,3 +99,6 @@ typedef struct drv_uart {
 } drv_uart_t;
 
 #endif
+
+
+

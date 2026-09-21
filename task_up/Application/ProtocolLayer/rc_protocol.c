@@ -1,30 +1,20 @@
+/* rc_protocol.c - 遥控器协议解析 */
 
-/* Includes ------------------------------------------------------------------*/
 #include "rc_protocol.h"
 #include "rp_math.h"
 #include "rc_sensor.h"
-
-
-/* Private macro -------------------------------------------------------------*/
-/* Private function prototypes -----------------------------------------------*/
-void keyboard_cnt_max_set(rc_sensor_t *rc_sen);
-void keyboard_status_update(key_board_info_t *key);
+void keyboard_cnt_max_set(rc_dev_t *rc_sen);
+void keyboard_status_update(kb_key_t *key);
 
 extern uint32_t micros(void);
 uint32_t tt1, tt2, ttp1;
-
-/* Private typedef -----------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
-/* Exported variables --------------------------------------------------------*/
-/* Private functions ---------------------------------------------------------*/
-/* Exported functions --------------------------------------------------------*/
-void rc_sensor_init(rc_sensor_t *rc_sen)
+void rc_init(rc_dev_t *rc_sen)
 {
 	// 初始化为离线状态
 	rc_sen->info->offline_cnt = rc_sen->info->offline_max_cnt + 1;
 	rc_sen->work_state = DEV_OFFLINE;
 	
-	RC_ResetData(rc_sen);
+	rc_reset_data(rc_sen);
 	keyboard_cnt_max_set(rc_sen);
 	
 	if(rc_sen->id == DEV_ID_RC)
@@ -36,9 +26,9 @@ void rc_sensor_init(rc_sensor_t *rc_sen)
 /**
   * @brief  按键长按时间设置
   */
-void keyboard_cnt_max_set(rc_sensor_t *rc_sen)
+void keyboard_cnt_max_set(rc_dev_t *rc_sen)
 {
-	rc_sensor_info_t *info = rc_sen->info;
+	rc_data_t *info = rc_sen->info;
 	
   info->mouse_btn_l.cnt_max = MOUSE_BTN_L_CNT_MAX;
   info->mouse_btn_r.cnt_max = MOUSE_BTN_R_CNT_MAX;
@@ -63,7 +53,7 @@ void keyboard_cnt_max_set(rc_sensor_t *rc_sen)
 /**
   * @brief  鼠标数据更新
   */
-void rc_interrupt_update(rc_sensor_t *rc_sen)
+void rc_interrupt_update(rc_dev_t *rc_sen)
 {
 	/* 鼠标速度均值滤波 */
 	static int16_t mouse_x[REMOTE_SMOOTH_TIMES], mouse_y[REMOTE_SMOOTH_TIMES];
@@ -85,10 +75,10 @@ void rc_interrupt_update(rc_sensor_t *rc_sen)
 /**
  *	@brief	遥控器数据解析协议
  */
-void rc_sensor_update(rc_sensor_t *rc_sen, uint8_t *rxBuf)
+void rc_update(rc_dev_t *rc_sen, uint8_t *rxBuf)
 {
 
-	rc_sensor_info_t *rc_info = rc_sen->info;
+	rc_data_t *rc_info = rc_sen->info;
 	rc_info->offline_cnt=0;
 	/* 遥控器 */
 	rc_info->ch0 = (rxBuf[0] | rxBuf[1] << 8) & 0x07FF;
@@ -106,9 +96,9 @@ void rc_sensor_update(rc_sensor_t *rc_sen, uint8_t *rxBuf)
 	rc_info->s1.value = ((rxBuf[5] >> 4) & 0x000C) >> 2;
 	rc_info->s2.value = (rxBuf[5] >> 4) & 0x0003;	
 	/*遥控器限位置零*/
-	if(rc_sensor.info->ch3== -660)
+	if(rc_dev.info->ch3== -660)
 	{
-		rc_sensor.info->ch3=0;
+		rc_dev.info->ch3=0;
 	}
 
 	/* 键鼠 */
@@ -146,7 +136,7 @@ void rc_sensor_update(rc_sensor_t *rc_sen, uint8_t *rxBuf)
 /**
  *	@brief	更新键盘状态
  */
-void keyboard_update(rc_sensor_info_t	*info)
+void keyboard_update(rc_data_t	*info)
 {
   keyboard_status_update(&info->mouse_btn_l);
   keyboard_status_update(&info->mouse_btn_r);
@@ -172,7 +162,7 @@ void keyboard_update(rc_sensor_info_t	*info)
  *	@brief	更新键盘按键状态
  *  release -> release_to_press -> short_press -> long_press -> press_to_release
  */
-void keyboard_status_update(key_board_info_t *key)
+void keyboard_status_update(kb_key_t *key)
 {
 	key->last_status = key->status;
 
@@ -212,3 +202,5 @@ void keyboard_status_update(key_board_info_t *key)
     }
 }
  
+
+

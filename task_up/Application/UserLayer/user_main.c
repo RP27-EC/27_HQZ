@@ -1,28 +1,12 @@
-/**
- * @file        user_main.c
- * @author      SSDCFXB
- * @Version     V1.0
- * @date        18-November-2022
- * @brief       User Main
- * @update
- */
+/* user_main.c - ç”¨æˆ·ä»»åŠ¡å…¥å£ */
 
-/* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
 #include "tim.h"
 
 #include "user_main.h"
-/* Private macro -------------------------------------------------------------*/
-/* Private function prototypes -----------------------------------------------*/
-/* Private typedef -----------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
-/* Exported variables --------------------------------------------------------*/
-/* Private functions ---------------------------------------------------------*/
 void user_main(void);
-/* Exported functions --------------------------------------------------------*/
-
 /**
- *	@brief	ÓÃ»§Éè±¸³õÊ¼»¯(Init)
+ *	@brief	ç”¨æˆ·è®¾å¤‡åˆå§‹åŒ–
  */
 void USER_Init(void)
 {
@@ -34,15 +18,15 @@ void USER_Init(void)
 
 
 /**
- *	@brief	ÓÃ»§Ó¦ÓÃ²ã£¬1msÖ´ÐÐÒ»´Î(Loop)
+ *	@brief	ç”¨æˆ·åº”ç”¨å±‚, 1ms æ‰§è¡Œä¸€æ¬¡
  */
 void user_main(void)
 {
-	//µç»úÐÄÌø£¬ÓÃÓÚÅÐ¶ÏÊÇ·ñÊ§Áª
+  // ç”µæœºå¿ƒè·³, åˆ¤æ–­æ˜¯å¦å¤±è”
 	motor[FRIC_R].heartbeat(&motor[FRIC_R]);
 	motor[FRIC_L].heartbeat(&motor[FRIC_L]);
 	motor[DIAL].heartbeat(&motor[DIAL]);
-	rc_sensor.heart_beat(&rc_sensor);
+	rc_dev.heart_beat(&rc_dev);
 	 
 	if (launcher.info->rc_work_state == DEV_ONLINE)
 	{
@@ -57,7 +41,7 @@ void user_main(void)
 
 
 /**
- *	@brief	¶¨Ê±Æ÷ÖÐ¶Ï»Øµ÷£¬1ms½øÈëÒ»´Î
+ *	@brief	å®šæ—¶å™¨ä¸­æ–­å›žè°ƒ, 1ms ä¸€æ¬¡
  */
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
@@ -89,39 +73,3 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
  
  
  
-///*	
-//	·¢ËÍÊý×é
-//*/
-//int16_t send_buff[4];
-//float tar;
-//void StartControlTask(void const * argument)
-//{
-//	
-//	//µç»ú³õÊ¼»¯
-//	motor[GIMB_Y].init(&motor[GIMB_Y]);
-//	//µç»úËÙ¶Èpid³õÊ¼»¯
-//	motor[GIMB_Y].pid_init(&motor[GIMB_Y].pid.speed,gimb_y_speed_pid_param);
-//	
-//  for(;;)
-//  {
-//		//µç»úÐÄÌø£¬ÓÃÓÚÅÐ¶ÏÊÇ·ñÊ§Áª
-//		motor[GIMB_Y].heartbeat(&motor[GIMB_Y]);
-
-////		//pid¼ÆËã
-//		send_buff[motor[GIMB_Y].id.buff_p] = motor[GIMB_Y].c_speed(&motor[GIMB_Y],tar);
-
-
-////		//¿ØÖÆÊý¾ÝµÄ·¢ËÍ
-//		CAN1_Send_With_int16_to_uint8(motor[GIMB_Y].id.tx_id,send_buff);
-////		
-////		
-//		
-//		
-//    osDelay(1);
-//  }
-
-//}
-
-
-
-

@@ -1,3 +1,5 @@
+/* module.c - 模块统一入口 */
+
 #include "module.h"
 #include "gimbal.h"
 
@@ -11,3 +13,4 @@ void Module_Work(void)
 {
     Gimbal.work(&Gimbal);
 }
+

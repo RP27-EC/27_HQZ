@@ -1,7 +1,7 @@
+/* imu_sensor.h - IMU 设备抽象与姿态解算 */
+
 #ifndef __IMU_H
 #define __IMU_H
-
-/* Includes ------------------------------------------------------------------*/
 #include "rp_config.h"
 #include "BMI088driver.h"
 #include "BMI088reg.h"
@@ -10,19 +10,15 @@
 #include "PID.h"
 #include "rp_math.h"
 #include "ave_filter.h"
-
-/* Exported constants --------------------------------------------------------*/
-/* Exported macro ------------------------------------------------------------*/
 //#define IMU_Set_PWM(x) TIM3_Set_PWM(x) 
-/* Exported types ------------------------------------------------------------*/
 typedef enum{
-  IMU_NONE_ERR,
-  IMU_TYPE_ERR,
-  IMU_ID_ERR,
-  IMU_INIT_ERR,
-  IMU_DATA_ERR,
-  IMU_DATA_CALI,
-} imu_err_e;
+  IMU_E_NONE,
+  IMU_E_TYPE,
+  IMU_E_ID,
+  IMU_E_INIT,
+  IMU_E_DATA,
+  IMU_E_CALI,
+} imu_errno_t;
 
 typedef enum{
 	DR_SPI1,
@@ -30,19 +26,19 @@ typedef enum{
 	DR_SPI3,
 	DR_IIC,
 	
-}drv_type_e;
+}imu_bus_t;
 
 typedef struct drive_str{
-	drv_type_e tpye;
+	imu_bus_t tpye;
 	
 	int8_t (*send)(struct drive_str *self, uint8_t *Txbuff, uint16_t len);
 	int8_t (*read)(struct drive_str *self, uint8_t *Rxbuff, uint16_t len);
 	int8_t (*sendread)(struct drive_str *self, uint8_t *Txbuff, uint8_t *Rxbuff, uint16_t len);
-}driver_t;
+}imu_bus_ops_t;
 
-typedef struct work_state_struct {
+typedef struct imu_state {
 	dev_work_state_t dev_state;
-	imu_err_e	       err_code;
+	imu_errno_t	       err_code;
 	
 	uint8_t		err_cnt;
 	int8_t		init_code;
@@ -52,7 +48,7 @@ typedef struct work_state_struct {
 	uint8_t   offline_cnt;
 	uint8_t   offline_max_cnt;
 	
-} work_state_t;
+} imu_state_t;
 
 
 
@@ -65,7 +61,7 @@ typedef struct{
 	float gyro_y;
 	float gyro_z;	
 
-}	raw_info_t;
+}	imu_raw_t;
 
 typedef struct{
 	float accx;
@@ -87,40 +83,40 @@ typedef struct{
 
     float temperature;
 
-}	base_info_t;
+}	imu_fused_t;
 
 typedef struct{
 	float gx_offset;
 	float gy_offset;
 	float gz_offset;	
-}	offset_info_t;
+}	imu_offset_t;
 
-typedef struct imu_info_struct {
+typedef struct imu_data_struct {
 
-	raw_info_t  	raw_info;
-	base_info_t 	base_info;
-	offset_info_t	offset_info;
+	imu_raw_t  	raw_info;
+	imu_fused_t 	base_info;
+	imu_offset_t	offset_info;
 	
 	uint8_t		    init_flag;
 
-} imu_info_t;
+} imu_data_t;
 
-typedef struct imu_struct {
+typedef struct imu_dev {
 	
-	imu_info_t		*info;
-	driver_t	  	driver;
+	imu_data_t		*info;
+	imu_bus_ops_t	  	driver;
 	pid_ctrl_t		*temp_pid;
-	void			(*init)(struct imu_struct *self);
-	void			(*update)(struct imu_struct *self);
-	void			(*heart_beat)(struct work_state_struct *self);
-    	void            (*set_temperature)(struct imu_struct *self, float temp);
+	void			(*init)(struct imu_dev *self);
+	void			(*update)(struct imu_dev *self);
+	void			(*heart_beat)(struct imu_state *self);
+    	void            (*set_temperature)(struct imu_dev *self, float temp);
 	
-	work_state_t  	work_state;
+	imu_state_t  	work_state;
 	dev_id_t		id;	
-} imu_sensor_t;
+} imu_dev_t;
 
-extern imu_sensor_t imu_sensor;
-
-/* Exported functions --------------------------------------------------------*/
-
+extern imu_dev_t imu_dev;
 #endif
+
+
+

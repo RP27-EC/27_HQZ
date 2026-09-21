@@ -1,17 +1,6 @@
-/**
-  ******************************************************************************
-  * @file    drv_can.c
-  * @brief   CAN底层驱动
-  ******************************************************************************
-  * @attention
-  * 
-  * Copyright 2024 RobotPilots
-  ******************************************************************************
-  */
-/* Includes ------------------------------------------------------------------*/
-#include "drv_can.h"
+/* drv_can.c - CAN 驱动 */
 
-/* Exported variables --------------------------------------------------------*/
+#include "drv_can.h"
 /* CAN 200/1FF发送数组 */
 uint8_t CAN1_200_DATA[8] = {0};
 uint8_t CAN1_1FF_DATA[8] = {0};
@@ -19,12 +8,8 @@ uint8_t CAN1_2FF_DATA[8] = {0};
 uint8_t CAN2_200_DATA[8] = {0};
 uint8_t CAN2_1FF_DATA[8] = {0};
 uint8_t CAN2_2FF_DATA[8] = {0};
-
-/* Private function prototypes -----------------------------------------------*/
 void CAN1_rxDataHandler(uint32_t canId, uint8_t *rxBuf);
 void CAN2_rxDataHandler(uint32_t canId, uint8_t *rxBuf);
-
-/* Private variables ---------------------------------------------------------*/
 /**
   * @brief CAN1\CAN2实例
   */
@@ -34,12 +19,7 @@ extern CAN_HandleTypeDef hcan2;
 CAN_RxFrameTypeDef hcan1RxFrame;
 CAN_RxFrameTypeDef hcan2RxFrame;
 CAN_TxHeaderTypeDef CAN_TxHeadeType;
-/* Exported functions --------------------------------------------------------*/
-/**
-  * @brief  can接受中断，在stm32f4xx_hal_can.c内弱定义
-  * @param  
-  * @retval 
-  */
+/* CAN 接收中断回调 */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
   
@@ -61,11 +41,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   }
 }
 
-/**
-  * @brief  发送CAN1数据帧200
-  * @param  
-  * @retval 
-  */
+/* 组装 0x200 控制帧 */
 void CAN1_CMD_200()
 {
 	CAN_TxHeaderTypeDef tx_message;
@@ -79,11 +55,7 @@ void CAN1_CMD_200()
 	HAL_CAN_AddTxMessage(&hcan1, &tx_message, CAN1_200_DATA, &send_mail_box);
 }
 
-/**
-  * @brief  发送CAN2数据帧200
-  * @param  
-  * @retval 
-  */
+/* 组装 0x200 控制帧 */
 void CAN2_CMD_200()
 {
 	CAN_TxHeaderTypeDef tx_message;
@@ -97,11 +69,7 @@ void CAN2_CMD_200()
 	HAL_CAN_AddTxMessage(&hcan2, &tx_message, CAN2_200_DATA, &send_mail_box);
 }
 
-/**
-  * @brief  发送CAN1数据帧1FF
-  * @param  
-  * @retval 
-  */
+/* 组装 0x1FF 控制帧 */
 void CAN1_CMD_1FF()
 {
 	CAN_TxHeaderTypeDef tx_message;
@@ -115,11 +83,7 @@ void CAN1_CMD_1FF()
 	HAL_CAN_AddTxMessage(&hcan1, &tx_message, CAN1_1FF_DATA, &send_mail_box);
 }
 
-/**
-  * @brief  发送CAN2数据帧1FF
-  * @param  
-  * @retval 
-  */
+/* 组装 0x1FF 控制帧 */
 void CAN2_CMD_1FF()
 {
 	CAN_TxHeaderTypeDef tx_message;
@@ -133,12 +97,7 @@ void CAN2_CMD_1FF()
 	HAL_CAN_AddTxMessage(&hcan2, &tx_message, CAN2_1FF_DATA, &send_mail_box);
 }
 
-/**
-  * @brief  int16类型数组转换为uint8类型数组
-  * @param  uint8_t: *data
-  * @param  int16_t: *dat
-  * @retval None
-  */
+/* int16 拆成两字节 */
 void int16_to_uint8(uint8_t *data, int16_t *dat)
 {
 	data[0] = (uint8_t)((int16_t)dat[0] >> 8);
@@ -151,13 +110,7 @@ void int16_to_uint8(uint8_t *data, int16_t *dat)
 	data[7] = (uint8_t)((int16_t)dat[3]);			
 }
 
-/**
- * @brief  CAN数组自己定义，发送数据	 
- * @param  hcan1: CAN_HandleTypeDef
- * @param  CAN_DATA: 数据指针
- * @param  StdId: 标准ID
- * @retval
- */
+/* CAN1 发送 */
 void CAN1_SendData(uint32_t StdId, uint8_t *CAN_DATA)
 {
 	uint32_t send_mail_box;
@@ -171,13 +124,7 @@ void CAN1_SendData(uint32_t StdId, uint8_t *CAN_DATA)
 	HAL_CAN_AddTxMessage(&hcan1, &tx_message, CAN_DATA, &send_mail_box);
 }
 
-/**
- * @brief  CAN数组自己定义，发送数据	 
- * @param  hcan2: CAN_HandleTypeDef
- * @param  CAN_DATA: 数据指针
- * @param  StdId: 标准ID
- * @retval
- */
+/* CAN2 发送 */
 void CAN2_SendData(uint32_t StdId, uint8_t *CAN_DATA)
 {
 	uint32_t send_mail_box;
@@ -236,9 +183,7 @@ __WEAK void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
 }
 
-/**
- *  @brief  初始化CAN发送的ID等配置
- */
+/* 配置发送报文头 */
 void HAL_CAN_TxHeadeInit(uint16_t ID)
 {
 	CAN_TxHeadeType.StdId = ID;
@@ -249,11 +194,7 @@ void HAL_CAN_TxHeadeInit(uint16_t ID)
 }
 
 
-/**
-  * @brief  CAN滤波器初始化
-  * @param  
-  * @retval 
-  */
+/* 配置接收过滤器 */
 void CAN_Filter_Init(void)
 {
 	/* CAN1/CAN2 are already initialized by MX_CAN1_Init/MX_CAN2_Init. */
@@ -284,3 +225,6 @@ void CAN_Filter_Init(void)
 	/*使能CAN2中断*/
 	HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
 }
+
+
+

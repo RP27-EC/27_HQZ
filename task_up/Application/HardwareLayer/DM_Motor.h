@@ -1,3 +1,5 @@
+/* DM_Motor.h - 达妙电机驱动 */
+
 #ifndef __DM_MOTOR_H
 #define __DM_MOTOR_H
 
@@ -9,14 +11,14 @@
 #include "motor_def.h"
 #include "rp_math.h"
 #ifndef __HT_MOTOR_H
-/*���ָ�*/
-typedef enum Motor_MIT_Command_enum_e
+/* MIT 命令集 */
+typedef enum mit_cmd_enum_t
 {
-	Enter_Motor_Mode,//ʹ�ܵ������(ָʾ�Ʊ���)
-	Exit_Motor_Mode,//ʧ�ܵ������(ָʾ�Ʊ��)
-	Zero_Position_Sensor,//�趨��ǰ����Ƕ�Ϊ��
+	Enter_Motor_Mode,  // 使能电机(指示灯变亮)
+	Exit_Motor_Mode,  // 失能电机(指示灯变暗)
+	Zero_Position_Sensor,  // 把当前位置设为零点
 	
-}Motor_MIT_Command_e;
+}mit_cmd_t;
 #endif
 
 #define P_MIN -PI    // Radians
@@ -33,73 +35,73 @@ typedef enum Motor_MIT_Command_enum_e
 #define C_MAX 10.0f
 
 
-/*���ʹ��״̬*/
-typedef enum Motor_HT_Work_state_enum_e
+/* 电机错误状态 */
+typedef enum dm_err_enum_t
 {
-	Motor_Enable,//����ɿ�
-	Motor_Unenable,//������ɿ�
-	Over_Voltage,//��ѹ
-	Lack_Voltage,//Ƿѹ
-	Over_Current,//����
-	MOS_OverTemp,//������MOS����
-	Motor_OverTemp,//�������
-	Commun_Loss,//ͨ�Ŷ�ʧ
-	Unknow_Err,//δ֪����
-}Motor_DM_Work_state_e;
+	Motor_Enable,  // 电机使能
+	Motor_Unenable,  // 电机失能
+	Over_Voltage,  // 过压
+	Lack_Voltage,		// 欠压
+	Over_Current,  // 过流
+	MOS_OverTemp,  // 驱动 MOS 过温
+	Motor_OverTemp,  // 电机过温
+	Commun_Loss,  // 通信丢失
+	Unknow_Err,  // 未知错误
+}dm_err_t;
 
 
-/*�����ʼ������*/
-typedef struct Motor_DM_Born_Info_struct_t
+/* 电机初始化参数 */
+typedef struct dm_cfg_struct_t
 {	
-    uint32_t stdId;//������Ʊ���ID
+    uint32_t stdId;  // 控制报文 ID
 
 
 #ifdef __STM32F4xx_HAL_H
-    CAN_HandleTypeDef *hcan;//can��ѡ��
+    CAN_HandleTypeDef *hcan;  // 使用的 CAN 口
 #endif
 	
 #ifdef STM32H7xx_HAL_H
-    FDCAN_HandleTypeDef *hcan;//can��ѡ��
+    FDCAN_HandleTypeDef *hcan;  // 使用的 CAN 口
 #endif
 	
-	  int8_t order_correction;//Ť��������涨
-}Motor_DM_Born_Info_t;
+	  int8_t order_correction;  // 方向修正
+}dm_cfg_t;
 
-/*���յ��������Ϣ�ṹ��*/
-typedef struct Motor_DM_Rx_Info_struct_t
+/* 电机反馈信息 */
+typedef struct dm_rx_struct_t
 {
-	float speed;//����ٶ�(��λrad/s)
+	float speed;  // 转速(rad/s)
 	
-	float torque;//���ת��(��λN.m)
+	float torque;  // 输出转矩(N*m)
 	
 	float motor_angle_sum;
 
-  float motor_angle;//��������ƾ��ԽǶȣ�-PI~PI
+  float motor_angle;  // 电机绝对角度
 
 	float motor_angle_last;
 	
-	uint8_t num;//��������˳���
-}Motor_DM_Rx_Info_t;
+	uint8_t num;  // 电机序号
+}dm_rx_t;
 
-/*���͵��������Ϣ�ṹ��*/
-typedef struct Motor_DM_Tx_Info_struct_t
+/* 电机发送信息 */
+typedef struct dm_tx_struct_t
 {
-	float torque;//��Ҫ���͵�ת��(��λN.m)
+	float torque;  // 待发送转矩(N*m)
 	
-	float target_speed;//Ŀ���ٶ�(��λrad/s)
+	float target_speed;  // 目标转速(rad/s)
 	
-	float target_angle;//Ŀ��Ƕ�(��λrad)
+	float target_angle;  // 目标角度(rad)
 	
-	float Kp;//λ������
+	float Kp;  // 位置环增益
 	
-	float Kd;//�ٶ�����
+	float Kd;  // 速度环增益
 	
-	uint8_t single_tx_buff[8];//ʹ�õ������ʱ�ĸ�������
-}Motor_DM_Tx_Info_t;
-/* �����ο����� = (torque + Kp*err_angle + Kd*err_speed) */
+	uint8_t single_tx_buff[8];  // 单电机模式发送缓存
+}dm_tx_t;
+/* 参考输出 = torque + Kp*err_angle + Kd*err_speed */
 
-/*���״̬�ṹ��*/
-typedef struct Motor_DM_State_struct_t
+/* 电机状态 */
+typedef struct dm_state_struct_t
 {
     uint32_t offline_cnt;
 
@@ -107,58 +109,59 @@ typedef struct Motor_DM_State_struct_t
 
     dev_work_state_t status;
 	
-		Motor_DM_Work_state_e motor_state;
+		dm_err_t motor_state;
 	
-		Motor_DM_Work_state_e last_motor_state;
-}Motor_DM_State_t;
+		dm_err_t last_motor_state;
+}dm_state_t;
 
-/*������ܽṹ��*/
-typedef struct Motor_DM_struct_t
+/* 单电机对象 */
+typedef struct dm_motor_struct_t
 {
-	Motor_DM_Born_Info_t* born_info;
+	dm_cfg_t* born_info;
 	
-	Motor_DM_Rx_Info_t* rx_info;
+	dm_rx_t* rx_info;
 	
-	Motor_DM_Tx_Info_t* tx_info;
+	dm_tx_t* tx_info;
 	
-	Motor_DM_State_t* state;
+	dm_state_t* state;
 
 
 	
-	void (*single_init)(struct Motor_DM_struct_t *motor);
+	void (*single_init)(struct dm_motor_struct_t *motor);
 	
-	void (*single_sleep)(struct Motor_DM_struct_t *motor);
+	void (*single_sleep)(struct dm_motor_struct_t *motor);
 	
-	void (*zero_position)(struct Motor_DM_struct_t *motor);
+	void (*zero_position)(struct dm_motor_struct_t *motor);
 	
-	void (*single_set_torque)(struct Motor_DM_struct_t *motor);
+	void (*single_set_torque)(struct dm_motor_struct_t *motor);
 	
-	void (*single_set_speed)(struct Motor_DM_struct_t *motor);
+	void (*single_set_speed)(struct dm_motor_struct_t *motor);
 	
-	void (*single_set_angle)(struct Motor_DM_struct_t *motor);
+	void (*single_set_angle)(struct dm_motor_struct_t *motor);
 	
-	void (*rx)(struct Motor_DM_struct_t *motor, uint8_t *rxBuf);
+	void (*rx)(struct dm_motor_struct_t *motor, uint8_t *rxBuf);
 	
-	void (*single_heart_beat)(struct Motor_DM_struct_t *motor);
-}Motor_DM_t;
+	void (*single_heart_beat)(struct dm_motor_struct_t *motor);
+}dm_motor_t;
 
-/*�����ṹ�壬����ʹ��MIT��������ƣ��ýṹ��ֻ�ǰѵ������һЩͨ�õĹ�������������������ƣ������������Ķ���ģʽ*/
-typedef struct Motor_DM_Group_struct_t
+/* 电机组对象, 统一管理组内电机 */
+typedef struct dm_group_struct_t
 {
-	Motor_DM_t* motor[4];
+	dm_motor_t* motor[4];
 	
-	uint8_t motor_num;//ʵ�ʵ������
+	uint8_t motor_num;  // 组内电机数量
 	
-	void (*group_set_torque)(struct Motor_DM_Group_struct_t *group);
+	void (*group_set_torque)(struct dm_group_struct_t *group);
 	
-	void (*group_sleep)(struct Motor_DM_Group_struct_t *group);
+	void (*group_sleep)(struct dm_group_struct_t *group);
 	
-	void (*group_init)(struct Motor_DM_Group_struct_t *group);
+	void (*group_init)(struct dm_group_struct_t *group);
 	
-	void (*group_heartbeat)(struct Motor_DM_Group_struct_t *group);
-}Motor_DM_Group_t;
+	void (*group_heartbeat)(struct dm_group_struct_t *group);
+}dm_group_t;
 
-void DM_Single_Motor_Init(Motor_DM_t *motor);
-void Group_Motor_Init(Motor_DM_Group_t *group);
+void dm_motor_init(dm_motor_t *motor);
+void dm_group_init(dm_group_t *group);
 
 #endif
+

@@ -1,3 +1,5 @@
+/* HT_Motor.h - HT ç”µæœºé©±åŠ¨ */
+
 #ifndef __HT_MOTOR_H
 #define __HT_MOTOR_H
 
@@ -20,54 +22,54 @@
 #define HT_T_MAX 18.0f
 #define HT_C_MIN -40.0f    // A
 #define HT_C_MAX 40.0f
-#define HT_TORQUE_CONSTANT 0.45f //×ª¾Ø³£ÊıN.m/A
+#define HT_TORQUE_CONSTANT 0.45f  // è½¬çŸ©å¸¸æ•°(N*m/A)
 #define TIME_STEP 0.001
-/*µç»úÖ¸Áî¼¯*/
-typedef enum Motor_MIT_Command_enum_e
+/* MIT å‘½ä»¤é›† */
+typedef enum mit_cmd_enum_t
 {
-	Enter_Motor_Mode,//Ê¹ÄÜµç»ú¿ØÖÆ(Ö¸Ê¾µÆ±äÂÌ)
-	Exit_Motor_Mode,//Ê§ÄÜµç»ú¿ØÖÆ(Ö¸Ê¾µÆ±äºì)
-	Zero_Position_Sensor,//Éè¶¨µ±Ç°±àÂë½Ç¶ÈÎªÁã
+	Enter_Motor_Mode,  // ä½¿èƒ½ç”µæœº(æŒ‡ç¤ºç¯å˜äº®)
+	Exit_Motor_Mode,  // å¤±èƒ½ç”µæœº(æŒ‡ç¤ºç¯å˜æš—)
+	Zero_Position_Sensor,  // æŠŠå½“å‰ä½ç½®è®¾ä¸ºé›¶ç‚¹
 	
-}Motor_MIT_Command_e;
+}mit_cmd_t;
 
-/*µç»úÄ£Ê½*/
-typedef enum Motor_HT_Work_mode_enum_e
+/* ç”µæœºæ¨¡å¼ */
+typedef enum ht_mode_enum_t
 {
-	Motor_Control,//µç»ú¿É¿Ø
-	Motor_UnControl,//µç»ú²»¿É¿Ø
-}Motor_HT_Work_mode_e;
+	Motor_Control,  // ç”µæœºå—æ§
+	Motor_UnControl,  // ç”µæœºä¸å—æ§
+}ht_mode_t;
 
-/*µç»ú³õÊ¼»¯²ÎÊı*/
-typedef struct Motor_HT_Born_Info_struct_t
+/* ç”µæœºåˆå§‹åŒ–å‚æ•° */
+typedef struct ht_cfg_struct_t
 {	
-    uint32_t stdId;//µç»ú¿ØÖÆ±¨ÎÄID
+    uint32_t stdId;  // æ§åˆ¶æŠ¥æ–‡ ID
 
 #ifdef __STM32F4xx_HAL_H
-    CAN_HandleTypeDef *hcan;//can¿ÚÑ¡Ôñ
+    CAN_HandleTypeDef *hcan;  // ä½¿ç”¨çš„ CAN å£
 #endif
 	
 #ifdef STM32H7xx_HAL_H
-    FDCAN_HandleTypeDef *hcan;//can¿ÚÑ¡Ôñ
+    FDCAN_HandleTypeDef *hcan;  // ä½¿ç”¨çš„ CAN å£
 #endif
-	  int8_t order_correction;//Õı·½Ïò¹æ¶¨
+	  int8_t order_correction;  // æ–¹å‘ä¿®æ­£
 
-}Motor_HT_Born_Info_t;
+}ht_cfg_t;
 
-/*½ÓÊÕµç»ú±¨ÎÄĞÅÏ¢½á¹¹Ìå*/
-typedef struct Motor_HT_Rx_Info_struct_t
+/* ç”µæœºåé¦ˆä¿¡æ¯ */
+typedef struct ht_rx_struct_t
 {
-	float encoder;//ÉÏµçºóµÄ½Ç¶ÈÀÛ¼Ó(µ¥Î»rad),-95,5~95.5
+	float encoder;  // ä¸Šç”µåè§’åº¦ç´¯è®¡(rad)
 	
 	float encoder_last;
 	
 	float encoder_err;
 	
-	float speed;//µç»úËÙ¶È(µ¥Î»rad/s)
+	float speed;  // è½¬é€Ÿ(rad/s)
 	
-	float torque;//µç»ú×ª¾Ø(µ¥Î»N.m)
+	float torque;  // è¾“å‡ºè½¬çŸ©(N*m)
 	
-	float torque_current;//µç»úµçÁ÷(µ¥Î»A)
+	float torque_current;  // è¾“å‡ºç”µæµ(A)
 	
 	float motor_angle_sum;
 	
@@ -75,37 +77,37 @@ typedef struct Motor_HT_Rx_Info_struct_t
 	
 	float motor_angle_sum_filter;
 
-  float motor_angle;//µç»ú»¡¶ÈÖÆ¾ø¶Ô½Ç¶È£¬0~2PI
+  float motor_angle;  // ç”µæœºç»å¯¹è§’åº¦
 	
 	float motor_angle_last;
 	
-	/*¸üĞÂÊ±¼ä¼ÆËã*/
+/* ä¸Šç”µæ—¶é—´æˆ³ */
 	uint32_t time_now;
 	
 	uint32_t time_last;
 	
 	float time;
-}Motor_HT_Rx_Info_t;
+}ht_rx_t;
 
-/*·¢ËÍµç»ú±¨ÎÄĞÅÏ¢½á¹¹Ìå*/
-typedef struct Motor_HT_Tx_Info_struct_t
+/* ç”µæœºå‘é€ä¿¡æ¯ */
+typedef struct ht_tx_struct_t
 {
-	float torque;//ĞèÒª·¢ËÍµÄ×ª¾Ø(µ¥Î»N.m)
+	float torque;  // å¾…å‘é€è½¬çŸ©(N*m)
 	
-	float target_speed;//Ä¿±êËÙ¶È(µ¥Î»rad/s)
+	float target_speed;  // ç›®æ ‡è½¬é€Ÿ(rad/s)
 	
-	float target_angle;//Ä¿±ê½Ç¶È(µ¥Î»rad)
+	float target_angle;  // ç›®æ ‡è§’åº¦(rad)
 	
-	float Kp;//Î»ÖÃÔöÒæ
+	float Kp;  // ä½ç½®ç¯å¢ç›Š
 	
-	float Kd;//ËÙ¶ÈÔöÒæ
+	float Kd;  // é€Ÿåº¦ç¯å¢ç›Š
 	
-	uint8_t single_tx_buff[8];//Ê¹ÓÃµç»ú·¢ËÍÊ±µÄ¸öÈËÊı×é
-}Motor_HT_Tx_Info_t;
-/* Çı¶¯²Î¿¼Á¦¾Ø = (torque + Kp*err_angle + Kd*err_speed) */
+	uint8_t single_tx_buff[8];  // å•ç”µæœºæ¨¡å¼å‘é€ç¼“å­˜
+}ht_tx_t;
+/* å‚è€ƒè¾“å‡º = torque + Kp*err_angle + Kd*err_speed */
 
-/*µç»ú×´Ì¬½á¹¹Ìå*/
-typedef struct Motor_HT_State_struct_t
+/* ç”µæœºçŠ¶æ€ */
+typedef struct ht_state_struct_t
 {
     uint32_t offline_cnt;
 
@@ -113,55 +115,56 @@ typedef struct Motor_HT_State_struct_t
 
     dev_work_state_t status;
 
-		Motor_HT_Work_mode_e mode;
-}Motor_HT_State_t;
+		ht_mode_t mode;
+}ht_state_t;
 
-/*µ¥µç»ú×Ü½á¹¹Ìå*/
-typedef struct Motor_HT_struct_t
+/* å•ç”µæœºå¯¹è±¡ */
+typedef struct ht_motor_struct_t
 {
-	Motor_HT_Born_Info_t* born_info;
+	ht_cfg_t* born_info;
 	
-	Motor_HT_Rx_Info_t* rx_info;
+	ht_rx_t* rx_info;
 	
-	Motor_HT_Tx_Info_t* tx_info;
+	ht_tx_t* tx_info;
 	
-	Motor_HT_State_t* state;
+	ht_state_t* state;
 
 	
-	void (*single_init)(struct Motor_HT_struct_t *motor);
+	void (*single_init)(struct ht_motor_struct_t *motor);
 	
-	void (*single_sleep)(struct Motor_HT_struct_t *motor);
+	void (*single_sleep)(struct ht_motor_struct_t *motor);
 	
-	void (*zero_position)(struct Motor_HT_struct_t *motor);
+	void (*zero_position)(struct ht_motor_struct_t *motor);
 	
-	void (*single_set_torque)(struct Motor_HT_struct_t *motor);
+	void (*single_set_torque)(struct ht_motor_struct_t *motor);
 	
-	void (*single_set_speed)(struct Motor_HT_struct_t *motor);
+	void (*single_set_speed)(struct ht_motor_struct_t *motor);
 	
-	void (*single_set_angle)(struct Motor_HT_struct_t *motor);
+	void (*single_set_angle)(struct ht_motor_struct_t *motor);
 	
-	void (*rx)(struct Motor_HT_struct_t *motor, uint8_t *rxBuf);
+	void (*rx)(struct ht_motor_struct_t *motor, uint8_t *rxBuf);
 	
-	void (*single_heart_beat)(struct Motor_HT_struct_t *motor);
-}Motor_HT_t;
+	void (*single_heart_beat)(struct ht_motor_struct_t *motor);
+}ht_motor_t;
 
-/*¶àµç»ú½á¹¹Ìå£¬ÓÉÓÚº£Ì©Ö»ÓĞµ¥µç»ú¿ØÖÆ£¬¸Ã½á¹¹ÌåÖ»ÊÇ°Ñµ¥µç»úµÄÒ»Ğ©Í¨ÓÃµÄ¹¦ÄÜÕûºÏÆğÀ´£¬·½±ã¿ØÖÆ*/
-typedef struct Motor_HT_Group_struct_t
+/* ç”µæœºç»„å¯¹è±¡, ç»Ÿä¸€ç®¡ç†ç»„å†…ç”µæœº */
+typedef struct ht_group_struct_t
 {
-		Motor_HT_t* motor[4];
+		ht_motor_t* motor[4];
 	
-	  void (*group_set_torque)(struct Motor_HT_Group_struct_t *group);
+	  void (*group_set_torque)(struct ht_group_struct_t *group);
 	
-		void (*group_sleep)(struct Motor_HT_Group_struct_t *group);
+		void (*group_sleep)(struct ht_group_struct_t *group);
 	
-	  void (*group_init)(struct Motor_HT_Group_struct_t *group);
+	  void (*group_init)(struct ht_group_struct_t *group);
 	
-	  void (*group_heartbeat)(struct Motor_HT_Group_struct_t *group);
+	  void (*group_heartbeat)(struct ht_group_struct_t *group);
 	
-}Motor_HT_Group_t;
+}ht_group_t;
 
-void HT_Single_Motor_Init(Motor_HT_t *motor);
-void HT_Group_Motor_Init(Motor_HT_Group_t *group);
+void ht_motor_init(ht_motor_t *motor);
+void HT_Group_Motor_Init(ht_group_t *group);
 extern uint8_t flag_rx;
 
 #endif
+

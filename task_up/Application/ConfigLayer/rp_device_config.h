@@ -1,13 +1,10 @@
+/* rp_device_config.h - 设备 ID 与状态定义 */
+
 #ifndef __RP_DEVICE_CONFIG_H
 #define __RP_DEVICE_CONFIG_H
-
-/* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
 #include "stdbool.h"
 #include "rp_driver_config.h"
-
-/* Exported macro ------------------------------------------------------------*/
-/* Exported types ------------------------------------------------------------*/
 /* 设备层 --------------------------------------------------------------------*/
 /**
  *	@brief	设备id列表
@@ -45,8 +42,8 @@ typedef enum DEV_RESET_STATE
  *	@brief	错误代码(通用)
  *  @note   可自定义设备错误代码类型并替换变量errno的变量类型，如
  *          typedef enum {
- *              IMU_NONE_ERR,
- *              IMU_ID_ERR,
+ *              IMU_E_NONE,
+ *              IMU_E_ID,
  *              IMU_COM_FAILED,
  *              IMU_DEV_NOT_FOUND,
  *              ...
@@ -56,7 +53,7 @@ typedef enum DEV_RESET_STATE
  *              ...
  *	            imu_errno_t errno;
  *              ...	
- *          } imu_sensor_t;
+ *          } imu_dev_t;
  *	@class	device
  */
 typedef enum {
@@ -92,3 +89,6 @@ typedef enum {
 
 
 #endif
+
+
+

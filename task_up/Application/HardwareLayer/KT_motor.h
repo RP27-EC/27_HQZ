@@ -1,3 +1,5 @@
+/* KT_motor.h - KT 电机驱动 */
+
 #ifndef __KT_motor_H
 #define __KT_motor_H
 
@@ -226,3 +228,4 @@ void KT_motor_class_init(KT_motor_t *motor);
 void kt_motor_multi_control(int16_t* iqControl, char kt_motor_num, motor_drive_e drive_type);
 
 #endif
+

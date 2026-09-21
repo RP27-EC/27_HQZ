@@ -1,11 +1,5 @@
-/**
-  ******************************************************************************
-  * @file           : ave_filter.c\h
-  * @brief          : 
-  * @note           : 2022-1-21 15:10:59
-  ******************************************************************************
-  */
-	
+/* low_pass_filter.h - 一阶低通滤波 */
+
 #ifndef __LOW_PASS_FILTER_H
 #define __LOW_PASS_FILTER_H
 
@@ -13,3 +7,4 @@
 
 float low_pass_filter(float input, float prevOutput, float alpha) ;
 #endif
+

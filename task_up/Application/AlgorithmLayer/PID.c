@@ -1,11 +1,10 @@
+/* PID.c - 单环 PID */
+
 #include "pid.h"
 #include "rp_math.h"
 #include <math.h>
 
-/**
- * @brief 单环 PID 
- * @param pid PID 
- */
+/* 单环 PID 计算 */
 void single_pid_ctrl(pid_ctrl_t *pid)
 {
     if (pid == NULL)
@@ -57,10 +56,7 @@ void single_pid_ctrl(pid_ctrl_t *pid)
     pid->last_err = pid->err;
 }
 
-/**
- * @brief 积分器与状态清零
- * @param pid PID 
- */
+/* 积分与状态清零 */
 void integral_to_zero(pid_ctrl_t *pid)
 {
     if (pid == NULL)
@@ -76,10 +72,7 @@ void integral_to_zero(pid_ctrl_t *pid)
     pid->out = 0.0f;
 }
 
-/**
- * @brief 误差计算
- * @param pid PID
- */
+/* 计算误差 */
 void pid_err_cal(pid_ctrl_t *pid)
 {
     if (pid == NULL)
@@ -90,18 +83,7 @@ void pid_err_cal(pid_ctrl_t *pid)
     pid->err = pid->target - pid->measure;
 }
 
-/**
- * @brief  PID 计算
- * @param out           外环 PID 指针
- * @param inn           内环 PID 指针
- * @param target        控制目标值
- * @param mea_out       外环观测反馈值
- * @param mea_in        内环观测反馈值
- * @param rate_feedforward 内环目标角速度前馈   //遥控器等的输入前馈作用于此
- * @param inner_scale   内环极性确定
- * @param err_cal_mode  外环就近转位
- * @return float        内环最终输出量
- */
+/* 串级 PID 计算 */
 float all_pid_calc(pid_ctrl_t *out, pid_ctrl_t *inn, float target, float mea_out, float mea_in, float rate_feedforward, float inner_scale, uint8_t err_cal_mode)
 {
     if (inn == NULL)
@@ -155,3 +137,5 @@ float all_pid_calc(pid_ctrl_t *out, pid_ctrl_t *inn, float target, float mea_out
 
     return inn->out;
 }
+
+

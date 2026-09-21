@@ -1,35 +1,20 @@
-/**
- * @file        rc_sensor.c
- * @author      RobotPilots@2020
- * @Version     V1.0
- * @date        9-September-2020
- * @brief       Device Rc.
- */
+/* rc_sensor.c - 遥控器设备抽象 */
 
-/* Includes ------------------------------------------------------------------*/
 #include "rc_sensor.h"
 #include "rp_math.h"
 
-extern void rc_sensor_init(rc_sensor_t *rc_sen);
-extern void rc_sensor_update(rc_sensor_t *rc_sen, uint8_t *rxBuf);
-
-/* Private macro -------------------------------------------------------------*/
-/* Private function prototypes -----------------------------------------------*/
-static void rc_sensor_check(rc_sensor_t *rc_sen);
-static void rc_sensor_heart_beat(rc_sensor_t *rc_sen);
-
-/* Private typedef -----------------------------------------------------------*/
-
-/* Private variables ---------------------------------------------------------*/
-/* Exported variables --------------------------------------------------------*/
+extern void rc_init(rc_dev_t *rc_sen);
+extern void rc_update(rc_dev_t *rc_sen, uint8_t *rxBuf);
+static void rc_check(rc_dev_t *rc_sen);
+static void rc_heartbeat(rc_dev_t *rc_sen);
 // 遥控器驱动
-drv_uart_t rc_sensor_driver = {
+drv_uart_t rc_uart_drv = {
 	.id = DRV_UART3,
 	.tx_byte = NULL,
 };
 
 // 遥控器信息
-rc_sensor_info_t rc_sensor_info = {
+rc_data_t rc_data = {
 	// 波轮跳变判断值
 	.tw_step_value[RC_TB_UP] = -600,
 	.tw_step_value[RC_TB_MU] = -200,
@@ -39,17 +24,15 @@ rc_sensor_info_t rc_sensor_info = {
 };
 
 // 遥控器传感器
-rc_sensor_t rc_sensor = {
-	.info = &rc_sensor_info,
-	.init = rc_sensor_init,
-	.update = rc_sensor_update,
-	.check = rc_sensor_check,
-	.heart_beat = rc_sensor_heart_beat,
+rc_dev_t rc_dev = {
+	.info = &rc_data,
+	.init = rc_init,
+	.update = rc_update,
+	.check = rc_check,
+	.heart_beat = rc_heartbeat,
 	.work_state = DEV_OFFLINE,
 	.id = DEV_ID_RC,
 };
-
-/* Private functions ---------------------------------------------------------*/
 /**
  *	@brief	遥控器数据检查
  *  step[0]:拨轮推到顶跳变
@@ -58,12 +41,12 @@ rc_sensor_t rc_sensor = {
  *  step[3]:拨轮往下推一点跳变
  *  不知道谁写的抽象玩意，注释没有一点
  */
-static void rc_sensor_check(rc_sensor_t *rc_sen)
+static void rc_check(rc_dev_t *rc_sen)
 {
 	/*波轮跳变----------------------------------------------------------------*/
 	static int16_t thumbwheel_record = 0;	// 用来记录最大拨到多少的
 	static uint8_t thumbwheel_last_step[4]; // 用来记录上一次跳变的值
-	rc_sensor_info_t *rc_info = rc_sen->info;
+	rc_data_t *rc_info = rc_sen->info;
 
 	/* 更新最大波轮值*/
 	if ((abs(rc_info->thumbwheel.value_last) < abs(rc_info->thumbwheel.value)) &&
@@ -190,9 +173,9 @@ static void rc_sensor_check(rc_sensor_t *rc_sen)
 /**
  *	@brief	遥控器心跳包
  */
-static void rc_sensor_heart_beat(rc_sensor_t *rc_sen)
+static void rc_heartbeat(rc_dev_t *rc_sen)
 {
-	rc_sensor_info_t *rc_info = rc_sen->info;
+	rc_data_t *rc_info = rc_sen->info;
 
 	rc_info->offline_cnt++;
 	if (rc_info->offline_cnt > rc_info->offline_max_cnt)
@@ -209,21 +192,19 @@ static void rc_sensor_heart_beat(rc_sensor_t *rc_sen)
 		}
 	}
 }
-
-/* Exported functions --------------------------------------------------------*/
-bool RC_IsChannelReset(void)
+bool rc_channel_reset(void)
 {
-	if ((DeathZoom(rc_sensor_info.ch0, 0, 50) == 0) &&
-		(DeathZoom(rc_sensor_info.ch1, 0, 50) == 0) &&
-		(DeathZoom(rc_sensor_info.ch2, 0, 50) == 0) &&
-		(DeathZoom(rc_sensor_info.ch3, 0, 50) == 0))
+	if ((deadzone(rc_data.ch0, 0, 50) == 0) &&
+		(deadzone(rc_data.ch1, 0, 50) == 0) &&
+		(deadzone(rc_data.ch2, 0, 50) == 0) &&
+		(deadzone(rc_data.ch3, 0, 50) == 0))
 	{
 		return true;
 	}
 	return false;
 }
 
-void RC_ResetData(rc_sensor_t *rc)
+void rc_reset_data(rc_dev_t *rc)
 {
 	// 通道值强行设置成中间值(不拨动摇杆的状态)
 	rc->info->ch0 = 0;
@@ -268,3 +249,5 @@ void RC_ResetData(rc_sensor_t *rc)
 	rc->info->thumbwheel.step[RC_TB_MD] = 0;
 	rc->info->thumbwheel.step[RC_TB_DN] = 0;
 }
+
+

@@ -1,3 +1,5 @@
+/* motor_def.h - 电机公共定义 */
+
 
 #ifndef __MOTOR_DEF_H
 #define __MOTOR_DEF_H
@@ -86,12 +88,12 @@ typedef enum motor_dir_e
 	MOTOR_F,
 		
 }motor_dir_e;
-
-/* Exported function ------------------------------------------------------------*/
 void motor_pid_init(motor_pid_t *motor_pid,motor_pid_t extern_motor_pid);
 
 
 
 #endif
+
+
 
 

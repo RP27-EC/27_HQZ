@@ -1,3 +1,5 @@
+/* communicate.h - 上下板通信 */
+
 #ifndef __COMMUNICATE_H
 #define __COMMUNICATE_H
 
@@ -105,3 +107,4 @@ void Send_To_Down_Board(void);
 void C_Board_Communicate_HeartBeat(void);
 
 #endif
+

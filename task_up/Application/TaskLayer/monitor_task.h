@@ -1,3 +1,5 @@
+/* monitor_task.h - 设备监控任务 */
+
 #ifndef __MONITOR_TASK
 #define __MONITOR_TASK
 
@@ -10,3 +12,4 @@ void StartMonitorTask(void const * argument);
 
 
 #endif
+

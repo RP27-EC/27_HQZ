@@ -1,19 +1,5 @@
-/**
- ******************************************************************************
- * @file        drv_uart.c
- * @author      RobotPilots@2020
- * @brief       UART Driver Package(Based on HAL).
- ******************************************************************************
- * @attention
- * 
- * Copyright 2020 RobotPilots
- * 
- * @Version     V1.0
- * @date        15-August-2020
- ******************************************************************************
- */
- 
-/* Includes ------------------------------------------------------------------*/
+/* drv_uart.c - 串口驱动 */
+
 #include "drv_uart.h"
 #include "string.h"
 #include <stdio.h>//串口打印
@@ -24,15 +10,11 @@ extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart3;
 //extern UART_HandleTypeDef huart5;
 extern UART_HandleTypeDef huart6;
-
-/* Private macro -------------------------------------------------------------*/
 #define USART3_RX_DATA_FRAME_LEN	(18u)	// 数据帧长度
 #define USART3_RX_BUF_LEN			(USART3_RX_DATA_FRAME_LEN + 6u)	// 接收缓冲区长度
 
 
 #define USART6_RX_BUF_LEN	  100	//200
-
-/* Private function prototypes -----------------------------------------------*/
 __WEAK void USART1_rxDataHandler(uint8_t *rxBuf);
 //__WEAK void USART3_rxDataHandler(uint8_t *rxBuf);
 __WEAK void USART3_rxDataHandler(uint8_t *rxBuf);
@@ -47,18 +29,9 @@ static HAL_StatusTypeDef DMAEx_MultiBufferStart_NoIT(DMA_HandleTypeDef *hdma, \
                                                     uint32_t DstAddress, \
                                                     uint32_t SecondMemAddress, \
                                                     uint32_t DataLength);
-
-/* Private typedef -----------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
 uint8_t usart1_dma_rxbuf[USART1_RX_BUF_LEN];
 uint8_t usart3_dma_rxbuf[2][USART3_RX_BUF_LEN];
 uint8_t usart6_dma_rxbuf[USART6_RX_BUF_LEN];
-
-/* Exported variables --------------------------------------------------------*/
-
-/* Private functions ---------------------------------------------------------*/
-
-
 static void dma_m0_rxcplt_callback(DMA_HandleTypeDef *hdma)
 {
 	// 将当前目标内存设置为Memory1
@@ -75,11 +48,7 @@ static void dma_m1_rxcplt_callback(DMA_HandleTypeDef *hdma)
 	memset(usart3_dma_rxbuf[1], 0, USART3_RX_BUF_LEN);
 }
 
-/**
-  * @brief   clear idle it flag after uart receive a frame data
-  * @param   uart IRQHandler id
-  * @usage   call in DRV_UART_IRQHandler() function
-  */
+/* 串口空闲中断回调 */
 static void uart_rx_idle_callback(UART_HandleTypeDef* huart)
 {
 	/* clear idle it flag avoid idle interrupt all the time */
@@ -88,7 +57,7 @@ static void uart_rx_idle_callback(UART_HandleTypeDef* huart)
 	if (huart == &huart3)
 	{
 		//表示接收到遥控器数据，遥控器在线
-//		rc_sensor.work_state=DEV_ONLINE;
+//		rc_dev.work_state=DEV_ONLINE;
 		//接下来开始切换DMA缓冲区，
 		/* clear DMA transfer complete flag */
 		__HAL_DMA_DISABLE(huart->hdmarx);
@@ -281,12 +250,7 @@ static HAL_StatusTypeDef DMA_Start(DMA_HandleTypeDef *hdma, \
 	} 
 	return status; 	
 }
-/* Exported functions --------------------------------------------------------*/
-/**
-  * @brief   callback this function when uart interrupt 
-  * @param   uart IRQHandler id
-  * @usage   call in uart handler function USARTx_IRQHandler()
-  */
+/* 串口中断统一入口 */
 void DRV_UART_IRQHandler(UART_HandleTypeDef *huart)
 {
     // 判断是否为空闲中断
@@ -297,9 +261,7 @@ void DRV_UART_IRQHandler(UART_HandleTypeDef *huart)
 	}
 }
 
-/**
- *	@brief	USART1 Initialization
- */
+/* USART1 初始化 */
 void USART1_Init(void)
 {
 	__HAL_UART_CLEAR_IDLEFLAG(&huart1);
@@ -314,9 +276,7 @@ void USART1_Init(void)
 			  USART1_RX_BUF_LEN);
 }
 
-/**
- *	@brief	USART3 Initialization
- */
+/* USART3 初始化 */
 void USART3_Init(void)
 {
 	__HAL_UART_CLEAR_IDLEFLAG(&huart3);
@@ -332,9 +292,7 @@ void USART3_Init(void)
 							    USART3_RX_DATA_FRAME_LEN);
 }
 
-/**
- *	@brief	USART6 Initialization
- */
+/* USART6 初始化 */
 void USART6_Init(void)
 {
 	__HAL_UART_CLEAR_IDLEFLAG(&huart6);
@@ -388,4 +346,7 @@ __WEAK void USART3_rxDataHandler(uint8_t *rxBuf)
 __WEAK void USART6_rxDataHandler(uint8_t *rxBuf)
 {	
 }
+
+
+
 

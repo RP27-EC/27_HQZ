@@ -1,3 +1,5 @@
+/* led_task.c - LED 任务 */
+
 #include "led_task.h"
 
 
@@ -19,6 +21,7 @@ void StartLedTask(void const * argument)
 		osDelay(1);
   }
 }
+
 
 
 

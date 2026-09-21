@@ -1,21 +1,8 @@
-/**
- * @file        rp_math.h
- * @author      RobotPilots
- * @Version     v1.1
- * @brief       RobotPilots Robots' Math Libaray.
- * @update
- *              v1.0(11-September-2020)
- *              v1.1(13-November-2021)
- *                  1.增加位操作函数
- */
+/* rp_math.h - 数学工具 */
 
 #ifndef __RP_MATH_H
 #define __RP_MATH_H
-
-/* Includes ------------------------------------------------------------------*/
 #include "stm32f4xx_hal.h"
-
-/* Exported macro ------------------------------------------------------------*/
 #define ANGLE_TO_RAD 0.01745f
 
 typedef enum jugde_logical_e // 逻辑判断
@@ -34,8 +21,6 @@ typedef struct Time_trigger_struct{
 	uint32_t delay_tick;
 	uint8_t if_ignore_first;
 }Time_trigger_t;
-/* Exported types ------------------------------------------------------------*/
-/* Exported functions --------------------------------------------------------*/
 /* 位操作函数 */
 #define SET_EVENT(EVENT, FLAG) ((EVENT) |= FLAG)
 #define CLEAR_EVENT(EVENT, FLAG) ((EVENT) &= ~(FLAG))
@@ -54,10 +39,12 @@ typedef struct Time_trigger_struct{
 int16_t RampInt(int16_t final, int16_t now, int16_t ramp);
 float RampFloat(float final, float now, float ramp);
 /* 死区函数 */
-float DeathZoom(float input, float center, float death);
+float deadzone(float input, float center, float death);
 /* 低通滤波 */
 float Lowpass(float X_last, float X_new, float K);
 /* 半圈处理 */
 float motor_half_cycle(float angle, float max);
 
 #endif
+
+

@@ -1,3 +1,5 @@
+/* power_limit.h - 功率限制 */
+
 #ifndef __POWER_LIMIT_H
 #define __POWER_LIMIT_H
 
@@ -12,4 +14,5 @@
 void Chassis_Motor_Power_Limit(int16_t *data);
 
 #endif
+
 

@@ -1,12 +1,10 @@
+/* rc_sensor.h - ÈÅ•ÊéßÂô®ËÆæÂ§áÊäΩË±° */
+
 #ifndef __RC_SENSOR_H
 #define __RC_SENSOR_H
-
-/* Includes ------------------------------------------------------------------*/
 #include "rp_config.h"
-
-/* Exported macro ------------------------------------------------------------*/
-#define RC_ONLINE	 (rc_sensor.work_state==DEV_ONLINE)
-#define RC_OFFLINE	 (rc_sensor.work_state==DEV_OFFLINE)
+#define RC_ONLINE	 (rc_dev.work_state==DEV_ONLINE)
+#define RC_OFFLINE	 (rc_dev.work_state==DEV_OFFLINE)
 /* ----------------------- RC Channel Definition------------------------------*/
 
 #define    RC_CH_VALUE_MIN       ((uint16_t)364 )
@@ -47,187 +45,181 @@
 #define    KEY_PRESSED_OFFSET_V        ((uint16_t)0x01<<14)
 #define    KEY_PRESSED_OFFSET_B        ((uint16_t)0x01<<15)
 
-/* ºÏ≤‚∞¥º¸≥§∞¥ ±º‰ */
-#define MOUSE_BTN_L_CNT_MAX     833         //ms  Û±Í◊Ûº¸£¨«∞…⁄∆µ¬ 
-#define MOUSE_BTN_R_CNT_MAX     500         //ms  Û±Í”“º¸
-#define KEY_Q_CNT_MAX           500         //ms Qº¸
-#define KEY_W_CNT_MAX           400		//ms Wº¸
-#define KEY_E_CNT_MAX           500         //ms Eº¸
-#define KEY_R_CNT_MAX           500         //ms Rº¸
-#define KEY_A_CNT_MAX           400	    //ms Aº¸
-#define KEY_S_CNT_MAX           400	    //ms Sº¸
-#define KEY_D_CNT_MAX           400	    //ms Dº¸
-#define KEY_F_CNT_MAX           500         //ms Fº¸
-#define KEY_G_CNT_MAX           500         //ms Gº¸
-#define KEY_Z_CNT_MAX           500         //ms Zº¸
-#define KEY_X_CNT_MAX           500         //ms Xº¸
-#define KEY_C_CNT_MAX           500         //ms Cº¸
-#define KEY_V_CNT_MAX           500         //ms Vº¸
-#define KEY_B_CNT_MAX           500         //ms Bº¸
-#define KEY_SHIFT_CNT_MAX       500         //ms SHIFTº¸
-#define KEY_CTRL_CNT_MAX        2500        //ms CTRLº¸
+/* ÊåâÈîÆÈïøÊåâÂà§ÂÆöÊó∂Èó¥(ms) */
+#define MOUSE_BTN_L_CNT_MAX     833    // Â∑¶ÈîÆËøûÁÇπÂà§ÂÆöÊó∂Èó¥(ms)
+#define MOUSE_BTN_R_CNT_MAX     500    // Âè≥ÈîÆÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_Q_CNT_MAX           500    // Q ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_W_CNT_MAX           400    // W ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_E_CNT_MAX           500    // E ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_R_CNT_MAX           500    // R ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_A_CNT_MAX           400    // A ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_S_CNT_MAX           400    // S ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_D_CNT_MAX           400    // D ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_F_CNT_MAX           500    // F ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_G_CNT_MAX           500    // G ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_Z_CNT_MAX           500    // Z ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_X_CNT_MAX           500    // X ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_C_CNT_MAX           500    // C ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_V_CNT_MAX           500    // V ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_B_CNT_MAX           500    // B ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_SHIFT_CNT_MAX       500    // Shift ÈïøÊåâÂà§ÂÆö(ms)
+#define KEY_CTRL_CNT_MAX        2500    // Ctrl ÈïøÊåâÂà§ÂÆö(ms)
 
-/* ∆Ωª¨¬À≤®¥Œ ˝ */
-#define REMOTE_SMOOTH_TIMES     10          // Û±Í∆Ωª¨¬À≤®¥Œ ˝
+/* Èº†Ê†áÁßªÂä®Âπ≥ÂùáÊª§Ê≥¢ */
+#define REMOTE_SMOOTH_TIMES     10    // Êª§Ê≥¢Á™óÂè£ÈïøÂ∫¶
 
 /* ----------------------- Function Definition-------------------------------- */
-/* “£øÿ“°∏ÀÕ®µ¿∆´“∆÷µ */
-#define		RC_SW1_VALUE				(rc_sensor_info.s1)
-#define		RC_SW2_VALUE				(rc_sensor_info.s2)
-#define		RC_LEFT_CH_LR_VALUE			(rc_sensor_info.ch2)
-#define		RC_LEFT_CH_UD_VALUE			(rc_sensor_info.ch3)
-#define		RC_RIGH_CH_LR_VALUE			(rc_sensor_info.ch0)
-#define		RC_RIGH_CH_UD_VALUE			(rc_sensor_info.ch1)
-#define		RC_THUMB_WHEEL_VALUE		(rc_sensor_info.thumbwheel)
+/* ÈÅ•ÊéßÂô®ÈÄöÈÅìÂèñÂÄºÂÆè */
+#define		RC_SW1_VALUE				(rc_data.s1)
+#define		RC_SW2_VALUE				(rc_data.s2)
+#define		RC_LEFT_CH_LR_VALUE			(rc_data.ch2)
+#define		RC_LEFT_CH_UD_VALUE			(rc_data.ch3)
+#define		RC_RIGH_CH_LR_VALUE			(rc_data.ch0)
+#define		RC_RIGH_CH_UD_VALUE			(rc_data.ch1)
+#define		RC_THUMB_WHEEL_VALUE		(rc_data.thumbwheel)
 
-/* ºÏ≤‚“£øÿ∆˜ø™πÿ◊¥Ã¨ */
-#define    IF_RC_SW1_UP      (rc_sensor_info.s1.value == RC_SW_UP)
-#define    IF_RC_SW1_MID     (rc_sensor_info.s1.value == RC_SW_MID)
-#define    IF_RC_SW1_DOWN    (rc_sensor_info.s1.value == RC_SW_DOWN)
-#define    IF_RC_SW2_UP      (rc_sensor_info.s2.value == RC_SW_UP)
-#define    IF_RC_SW2_MID     (rc_sensor_info.s2.value == RC_SW_MID)
-#define    IF_RC_SW2_DOWN    (rc_sensor_info.s2.value == RC_SW_DOWN)
+/* ËØªÊã®ÊùÜÁä∂ÊÄÅ */
+#define    IF_RC_SW1_UP      (rc_data.s1.value == RC_SW_UP)
+#define    IF_RC_SW1_MID     (rc_data.s1.value == RC_SW_MID)
+#define    IF_RC_SW1_DOWN    (rc_data.s1.value == RC_SW_DOWN)
+#define    IF_RC_SW2_UP      (rc_data.s2.value == RC_SW_UP)
+#define    IF_RC_SW2_MID     (rc_data.s2.value == RC_SW_MID)
+#define    IF_RC_SW2_DOWN    (rc_data.s2.value == RC_SW_DOWN)
 
-/* ªÒ»° Û±Í»˝÷·µƒ“∆∂ØÀŸ∂» */
-#define    MOUSE_X_MOVE_SPEED    (rc_sensor_info.mouse_vx)
-#define    MOUSE_Y_MOVE_SPEED    (rc_sensor_info.mouse_vy)
-#define    MOUSE_Z_MOVE_SPEED    (rc_sensor_info.mouse_vz)
+/* Èº†Ê†áÁßªÂä®ÈÄüÂ∫¶ */
+#define    MOUSE_X_MOVE_SPEED    (rc_data.mouse_vx)
+#define    MOUSE_Y_MOVE_SPEED    (rc_data.mouse_vy)
+#define    MOUSE_Z_MOVE_SPEED    (rc_data.mouse_vz)
 
-/* ºÏ≤‚ Û±Í∞¥º¸◊¥Ã¨ 
-   ∞¥œ¬Œ™1£¨√ª∞¥œ¬Œ™0*/
-#define    MOUSE_PRESSED_LEFT    (rc_sensor_info.mouse_btn_l==1)
-#define    MOUSE_PRESSED_RIGH    (rc_sensor_info.mouse_btn_r==1)
+/* Èº†Ê†áÊåâÈîÆ: 1=Êåâ‰∏ã, 0=ÊùæÂºÄ */
+#define    MOUSE_PRESSED_LEFT    (rc_data.mouse_btn_l==1)
+#define    MOUSE_PRESSED_RIGH    (rc_data.mouse_btn_r==1)
 
 
-/* ºÏ≤‚º¸≈Ã∞¥º¸◊¥Ã¨ 
-   »Ù∂‘”¶∞¥º¸±ª∞¥œ¬£¨‘Ú¬ﬂº≠±Ì¥Ô Ωµƒ÷µŒ™1£¨∑Ò‘ÚŒ™0 */
-#define    KEY_PRESSED         (  rc_sensor_info.key_v  )
-#define    KEY_PRESSED_W       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_W)    != 0 )
-#define    KEY_PRESSED_S       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_S)    != 0 )
-#define    KEY_PRESSED_A       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_A)    != 0 )
-#define    KEY_PRESSED_D       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_D)    != 0 )
-#define    KEY_PRESSED_Q       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_Q)    != 0 )
-#define    KEY_PRESSED_E       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_E)    != 0 )
-#define    KEY_PRESSED_G       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_G)    != 0 )
-#define    KEY_PRESSED_X       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_X)    != 0 )
-#define    KEY_PRESSED_Z       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_Z)    != 0 )
-#define    KEY_PRESSED_C       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_C)    != 0 )
-#define    KEY_PRESSED_B       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_B)    != 0 )
-#define    KEY_PRESSED_V       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_V)    != 0 )
-#define    KEY_PRESSED_F       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_F)    != 0 )
-#define    KEY_PRESSED_R       ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_R)    != 0 )
-#define    KEY_PRESSED_CTRL    ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_CTRL) != 0 )
-#define    KEY_PRESSED_SHIFT   ( (rc_sensor_info.key_v & KEY_PRESSED_OFFSET_SHIFT) != 0 )
-
-/* Exported types ------------------------------------------------------------*/
-/* ∞¥º¸◊¥Ã¨√∂æŸ */
+/* ÈîÆÁõòÊåâÈîÆ: ÂØπÂ∫î‰Ωç‰∏∫ 1 Ë°®Á§∫Êåâ‰∏ã */
+#define    KEY_PRESSED         (  rc_data.key_v  )
+#define    KEY_PRESSED_W       ( (rc_data.key_v & KEY_PRESSED_OFFSET_W)    != 0 )
+#define    KEY_PRESSED_S       ( (rc_data.key_v & KEY_PRESSED_OFFSET_S)    != 0 )
+#define    KEY_PRESSED_A       ( (rc_data.key_v & KEY_PRESSED_OFFSET_A)    != 0 )
+#define    KEY_PRESSED_D       ( (rc_data.key_v & KEY_PRESSED_OFFSET_D)    != 0 )
+#define    KEY_PRESSED_Q       ( (rc_data.key_v & KEY_PRESSED_OFFSET_Q)    != 0 )
+#define    KEY_PRESSED_E       ( (rc_data.key_v & KEY_PRESSED_OFFSET_E)    != 0 )
+#define    KEY_PRESSED_G       ( (rc_data.key_v & KEY_PRESSED_OFFSET_G)    != 0 )
+#define    KEY_PRESSED_X       ( (rc_data.key_v & KEY_PRESSED_OFFSET_X)    != 0 )
+#define    KEY_PRESSED_Z       ( (rc_data.key_v & KEY_PRESSED_OFFSET_Z)    != 0 )
+#define    KEY_PRESSED_C       ( (rc_data.key_v & KEY_PRESSED_OFFSET_C)    != 0 )
+#define    KEY_PRESSED_B       ( (rc_data.key_v & KEY_PRESSED_OFFSET_B)    != 0 )
+#define    KEY_PRESSED_V       ( (rc_data.key_v & KEY_PRESSED_OFFSET_V)    != 0 )
+#define    KEY_PRESSED_F       ( (rc_data.key_v & KEY_PRESSED_OFFSET_F)    != 0 )
+#define    KEY_PRESSED_R       ( (rc_data.key_v & KEY_PRESSED_OFFSET_R)    != 0 )
+#define    KEY_PRESSED_CTRL    ( (rc_data.key_v & KEY_PRESSED_OFFSET_CTRL) != 0 )
+#define    KEY_PRESSED_SHIFT   ( (rc_data.key_v & KEY_PRESSED_OFFSET_SHIFT) != 0 )
+/* ÊåâÈîÆÁä∂ÊÄÅ */
 typedef enum
 {
-  release,              //∑≈À…
-  release_to_press,     //œ¬Ωµ—ÿ
-  short_press,          //∂Ã∞¥
-  long_press,           //≥§∞¥
-  press_to_release,     //…œ…˝—ÿ
+  release,  // ÊùæÂºÄ
+  release_to_press,  // Êåâ‰∏ãÊ≤ø
+  short_press,  // Áü≠Êåâ
+  long_press,  // ÈïøÊåâ
+  press_to_release,  // ÊùæÂºÄ
 }key_board_status_e;
 
-/* ∞¥º¸–≈œ¢ */
+/* ÊåâÈîÆ‰ø°ÊÅØ */
 typedef struct key_board_info_struct {
-  uint8_t			  value; 			//÷µ
-  key_board_status_e status;            //◊¥Ã¨
-  key_board_status_e last_status;       //…œ“ª¥Œ◊¥Ã¨
+  uint8_t			  value;  // ÂΩìÂâçÂÄº
+  key_board_status_e status;  // Áä∂ÊÄÅ
+  key_board_status_e last_status;       // ‰∏äÊ¨°Áä∂ÊÄÅ
 	
-  int16_t cnt;                          //µ±«∞º∆ ˝
-  int16_t cnt_max;                      //º∆ ˝…œœﬁ
-}key_board_info_t;
+  int16_t cnt;  // Êåâ‰∏ãËÆ°Êï∞
+  int16_t cnt_max;  // ÈïøÊåâÈòàÂÄº
+}kb_key_t;
 
-/* ≤¶∏À–≈œ¢ */
+/* Êã®ÊùÜ‰ø°ÊÅØ */
 typedef struct
 {
-  uint8_t value_last;  //…œ“ª¥Œ÷µ
-  uint8_t value;       //–¬÷µ
-  uint8_t status;      //◊¥Ã¨
-}remote_switch_info_t;
+  uint8_t value_last;  // ‰∏äÊ¨°ÂÄº
+  uint8_t value;  // ÂΩìÂâçÂÄº
+  uint8_t status;  // Áä∂ÊÄÅ
+}sw_state_t;
 
-/* ≤¶¬÷–≈œ¢ */
+/* Êã®ËΩÆ‰ø°ÊÅØ */
 typedef struct
 {
-  int16_t value_last;   //…œ“ª¥Œ÷µ
-  int16_t value;        //–¬÷µ
-  uint8_t step[4];      //≤®¬÷Ã¯±‰¥”0±‰1ªÚ1µΩ0
-  uint8_t step_rising_trigger[4]; //≤®¬÷Ã¯±‰À≤º‰Œ™1
+  int16_t value_last;  // ‰∏äÊ¨°ÂÄº
+  int16_t value;  // ÂΩìÂâçÂÄº
+  uint8_t step[4];  // Âõõ‰∏™Ê°£‰ΩçÁøªËΩ¨Ê†áÂøó
+  uint8_t step_rising_trigger[4];  // Ê°£‰ΩçË∑≥ÂèòÊ†áÂøó
 	
-}thumbwheel_info_t;
+}dial_t;
 
-/* “£øÿ∆˜≤¶∏À◊¥Ã¨√∂æŸ */
+/* Êã®ÊùÜÁä∂ÊÄÅ */
 typedef enum 
 {
-  keep_R,         //±£≥÷
-  up_R,           //œÚ…œ≤¶
-  mid_R,          //œÚ÷–≤¶
-  down_R,         //œÚœ¬≤¶
+  keep_R,  // ‰øùÊåÅ
+  up_R,  // ‰∏äÊã®
+  mid_R,  // ‰∏≠‰Ωç
+  down_R,  // ‰∏ãÊã®
 }remote_status_e;
 
 typedef struct rc_sensor_info_struct {
-	/* ≤¶¬÷Ã¯±‰÷µ */
+/* Êã®ËΩÆÊ°£‰ΩçÈòàÂÄº */
 	int16_t    tw_step_value[4];
 	
-	/* “£øÿ∆˜ */
+/* ÈÅ•ÊéßÂô®ÈÄöÈÅì */
 	int16_t 	ch0;
 	int16_t 	ch1;
 	int16_t 	ch2;
 	int16_t 	ch3;
-	remote_switch_info_t s1;
-	remote_switch_info_t s2;
-	thumbwheel_info_t 			thumbwheel;						//≤¶¬÷
-	/* º¸ Û */
-  int16_t                 mouse_vx;             // Û±Íx÷·ÀŸ∂»
-  int16_t                 mouse_vy;             // Û±Íy÷·ÀŸ∂»
-  int16_t                 mouse_vz;             // Û±Íz÷·ÀŸ∂»
-  float                   mouse_x;         	    // Û±Íx÷·¬À≤®∫ÛÀŸ∂»
-  float                   mouse_y;          	  // Û±Íy÷·¬À≤®∫ÛÀŸ∂»
-  float                   mouse_z;          	  // Û±Íz÷·¬À≤®∫ÛÀŸ∂»
-  key_board_info_t        mouse_btn_l;          // Û±Í◊Ûº¸
-  key_board_info_t        mouse_btn_r;          // Û±Í”“º¸
-  key_board_info_t        Q;                    //∞¥º¸Q
-  key_board_info_t        W;                    //∞¥º¸W
-  key_board_info_t        E;                    //∞¥º¸E
-  key_board_info_t        R;                    //∞¥º¸R
-  key_board_info_t        A;                    //∞¥º¸A
-  key_board_info_t        S;                    //∞¥º¸S
-  key_board_info_t        D;                    //∞¥º¸D
-  key_board_info_t        F;                    //∞¥º¸F
-  key_board_info_t        G;                    //∞¥º¸G
-  key_board_info_t        Z;                    //∞¥º¸Z
-  key_board_info_t        X;                    //∞¥º¸X
-  key_board_info_t        C;                    //∞¥º¸C
-  key_board_info_t        V;                    //∞¥º¸V
-  key_board_info_t        B;                    //∞¥º¸B
-  key_board_info_t        Shift;                //∞¥º¸Shift
-  key_board_info_t        Ctrl;                 //∞¥º¸Ctrl
+	sw_state_t s1;
+	sw_state_t s2;
+	dial_t 			thumbwheel;  // Êã®ËΩÆ
+/* Èº†Ê†á */
+  int16_t                 mouse_vx;  // Èº†Ê†á x ÈÄüÂ∫¶
+  int16_t                 mouse_vy;  // Èº†Ê†á y ÈÄüÂ∫¶
+  int16_t                 mouse_vz;  // Èº†Ê†á z ÈÄüÂ∫¶
+  float                   mouse_x;  // Êª§Ê≥¢Âêé x ÈÄüÂ∫¶
+  float                   mouse_y;  // Êª§Ê≥¢Âêé y ÈÄüÂ∫¶
+  float                   mouse_z;  // Êª§Ê≥¢Âêé z ÈÄüÂ∫¶
+  kb_key_t        mouse_btn_l;  // Èº†Ê†áÂ∑¶ÈîÆ
+  kb_key_t        mouse_btn_r;  // Èº†Ê†áÂè≥ÈîÆ
+  kb_key_t        Q;  // Q ÈîÆ
+  kb_key_t        W;  // W ÈîÆ
+  kb_key_t        E;  // E ÈîÆ
+  kb_key_t        R;  // R ÈîÆ
+  kb_key_t        A;  // A ÈîÆ
+  kb_key_t        S;  // S ÈîÆ
+  kb_key_t        D;  // D ÈîÆ
+  kb_key_t        F;  // F ÈîÆ
+  kb_key_t        G;  // G ÈîÆ
+  kb_key_t        Z;  // Z ÈîÆ
+  kb_key_t        X;  // X ÈîÆ
+  kb_key_t        C;  // C ÈîÆ
+  kb_key_t        V;  // V ÈîÆ
+  kb_key_t        B;  // B ÈîÆ
+  kb_key_t        Shift;  // Shift ÈîÆ
+  kb_key_t        Ctrl;  // Ctrl ÈîÆ
 	uint16_t								key_v;
 	
 	int16_t		offline_cnt;
 	int16_t		offline_max_cnt;
-} rc_sensor_info_t;
+} rc_data_t;
 
-typedef struct rc_sensor_struct {
-	rc_sensor_info_t	*info;
+typedef struct rc_dev_struct {
+	rc_data_t	*info;
 	drv_uart_t		  	*driver;
-	void				(*init)(struct rc_sensor_struct *self);
-	void				(*update)(struct rc_sensor_struct *self, uint8_t *rxBuf);
-	void				(*check)(struct rc_sensor_struct *self);	
-	void				(*heart_beat)(struct rc_sensor_struct *self);
+	void				(*init)(struct rc_dev_struct *self);
+	void				(*update)(struct rc_dev_struct *self, uint8_t *rxBuf);
+	void				(*check)(struct rc_dev_struct *self);	
+	void				(*heart_beat)(struct rc_dev_struct *self);
 	dev_work_state_t	work_state;
 	dev_errno_t			errno;
 	dev_id_t			id;
-} rc_sensor_t;
+} rc_dev_t;
 
-extern rc_sensor_info_t rc_sensor_info;
-extern rc_sensor_t 		rc_sensor;
-
-
-/* Exported functions --------------------------------------------------------*/
-bool RC_IsChannelReset(void);
-void RC_ResetData(rc_sensor_t *rc);
+extern rc_data_t rc_data;
+extern rc_dev_t 		rc_dev;
+bool rc_channel_reset(void);
+void rc_reset_data(rc_dev_t *rc);
 	
 #endif
+

@@ -1,3 +1,5 @@
+/* gimbal.c - 云台控制 */
+
 #include "gimbal.h"
 #include "imu_sensor.h"
 #include "rc_sensor.h"
@@ -115,7 +117,7 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
                                   gimbal_tune.pitch_manual_rate_max_deg_s);
     }
 #elif GIMBAL_LOCAL_RC_ENABLE
-    if (rc_sensor.work_state == DEV_ONLINE)
+    if (rc_dev.work_state == DEV_ONLINE)
     {
         if (Board_Rx_Info.state_pkt.car_state == 1u)
         {
@@ -126,10 +128,10 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
         }
         else if (Board_Rx_Info.state_pkt.car_state == 2u)
         {
-            yaw_rate = gimbal_clamp(rc_sensor_info.mouse_x * GIMBAL_MOUSE_YAW_RATE_GAIN,
+            yaw_rate = gimbal_clamp(rc_data.mouse_x * GIMBAL_MOUSE_YAW_RATE_GAIN,
                                     -gimbal_tune.yaw_manual_rate_max_deg_s,
                                     gimbal_tune.yaw_manual_rate_max_deg_s);
-            pitch_rate = gimbal_clamp(rc_sensor_info.mouse_y * GIMBAL_MOUSE_PITCH_RATE_GAIN,
+            pitch_rate = gimbal_clamp(rc_data.mouse_y * GIMBAL_MOUSE_PITCH_RATE_GAIN,
                                       -gimbal_tune.pitch_manual_rate_max_deg_s,
                                       gimbal_tune.pitch_manual_rate_max_deg_s);
         }
@@ -219,7 +221,7 @@ static void gimbal_pid_init(gimbal_t *gimbal)
 /* 传感器数据同步与坐标偏置换算 */
 static void gimbal_info_update(gimbal_t *gimbal)
 {
-    imu_info_t *imu = imu_sensor.info;
+    imu_data_t *imu = imu_dev.info;
 
     /* IMU 姿态与角速度 */
     //获取IMU的角度和角速度信息
@@ -778,3 +780,6 @@ void Gimbal_Work(gimbal_t *gimbal)
     gimbal->pitch_motor->tx_info->torque = gimbal->base_info.output_gimbal_p;
     gimbal->yaw_motor->tx_info->torque = gimbal->base_info.output_gimbal_y;
 }
+
+
+

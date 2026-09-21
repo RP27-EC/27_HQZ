@@ -1,25 +1,15 @@
-/**
- * @file  device.c
- */
- 
-/* Includes ------------------------------------------------------------------*/
+/* device.c - 设备统一初始化 */
+
 #include "device.h"
-
-/* Private macro -------------------------------------------------------------*/
-/* Private function prototypes -----------------------------------------------*/
-/* Private typedef -----------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
-/* Exported variables --------------------------------------------------------*/
-
-
-/* Private functions ---------------------------------------------------------*/
-/* Exported functions --------------------------------------------------------*/
 void DEVICE_Init(void)
 {
-	imu_sensor.init(&imu_sensor);
-	rc_sensor.init(&rc_sensor);
+	imu_dev.init(&imu_dev);
+	rc_dev.init(&rc_dev);
 	dm_motor_list_init();
 	
 
 }
+
+
+
 
