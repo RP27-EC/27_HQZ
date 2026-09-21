@@ -86,9 +86,16 @@ static void Chassis_Control_KinematicsInverse(const chassis_cmd_t *cmd)
 
 static uint8_t Chassis_Control_PidUpdate(void)
 {
-    float torque_limit = (chassis_ctrl.state.cmd.source == CHASSIS_SRC_RC_FOLLOW) ?
-                        CHASSIS_FOLLOW_TORQUE_LIMIT_NM :
-                        CHASSIS_TEST_TORQUE_LIMIT_NM;
+    float torque_limit = CHASSIS_TEST_TORQUE_LIMIT_NM;
+
+    if (chassis_ctrl.state.cmd.source == CHASSIS_SRC_RC_FOLLOW)
+    {
+        torque_limit = CHASSIS_FOLLOW_TORQUE_LIMIT_NM;
+    }
+    else if (chassis_ctrl.state.cmd.source == CHASSIS_SRC_SPIN)
+    {
+        torque_limit = CHASSIS_SPIN_TORQUE_LIMIT_NM;
+    }
 
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {

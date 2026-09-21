@@ -617,6 +617,11 @@
               <FilePath>..\Application\ModuleLayer\chassis_follow.c</FilePath>
             </File>
             <File>
+              <FileName>chassis_spin.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ModuleLayer\chassis_spin.c</FilePath>
+            </File>
+            <File>
               <FileName>gimbal.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\ModuleLayer\gimbal.c</FilePath>

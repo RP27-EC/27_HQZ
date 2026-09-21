@@ -9,6 +9,7 @@
 #include "main.h"
 #include "chassis_config.h"
 #include "chassis_follow.h"
+#include "chassis_spin.h"
 
 
 Board_Tx_Pkt_t    board_tx_pkt;
@@ -212,6 +213,10 @@ void Board_Tx_Pkt_05(Board_t* board)
         {
             yaw_rate = Board_Remote_Axis_To_Rate(rc_sensor.info->ch0,
                                                  BOARD_D5_YAW_RATE_MAX_DEG_S);
+        }
+        else if (Chassis_Spin_IsSelected() != 0u)
+        {
+            yaw_rate = 0.0f;
         }
         else
         {

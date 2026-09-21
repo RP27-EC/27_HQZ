@@ -12,6 +12,7 @@ typedef enum
     CHASSIS_SRC_NONE = 0,
     CHASSIS_SRC_RC,
     CHASSIS_SRC_RC_FOLLOW,
+    CHASSIS_SRC_SPIN,
     CHASSIS_SRC_KEYBOARD,
 } chassis_source_e;
 
