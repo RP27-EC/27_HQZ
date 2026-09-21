@@ -5,6 +5,10 @@
 
 #include "rp_math.h"
 
+//目前纯P的控制器，目前响应速度还可以，跟随得也还行
+//但可以牺牲了一些操作手感，后续再看看
+//后续可以根据情况去加速度规划器和前馈力控方案等
+
 chassis_control_t chassis_ctrl;
 //检查浮点数的有效性
 static uint8_t Chassis_Control_ValueValid(float value)
@@ -82,6 +86,10 @@ static void Chassis_Control_KinematicsInverse(const chassis_cmd_t *cmd)
 
 static uint8_t Chassis_Control_PidUpdate(void)
 {
+    float torque_limit = (chassis_ctrl.state.cmd.source == CHASSIS_SRC_RC_FOLLOW) ?
+                        CHASSIS_FOLLOW_TORQUE_LIMIT_NM :
+                        CHASSIS_TEST_TORQUE_LIMIT_NM;
+
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
         if (chassis_ctrl.wheel == NULL ||
@@ -100,6 +108,7 @@ static uint8_t Chassis_Control_PidUpdate(void)
             chassis_ctrl.wheel->motor[i]->rx_info->speed;
         pid->target = chassis_ctrl.state.wheel_target[i];
         pid->measure = chassis_ctrl.state.wheel_speed[i];
+        pid->out_max = torque_limit;
         if ((fabsf(pid->target) < CHASSIS_ZERO_TARGET_BAND) &&
             (fabsf(pid->measure) < CHASSIS_STOP_SPEED_BAND))
         {
@@ -120,8 +129,8 @@ static uint8_t Chassis_Control_PidUpdate(void)
 
         chassis_ctrl.state.wheel_torque_out[i] =
             constrain(pid->out,
-                      -CHASSIS_TEST_TORQUE_LIMIT_NM,
-                      CHASSIS_TEST_TORQUE_LIMIT_NM);
+                      -torque_limit,
+                      torque_limit);
     }
 
     return 1u;

@@ -6,7 +6,9 @@
 #include "drv_can.h"
 #include "rp_device_config.h"
 #include "rp_math.h"
+#include "main.h"
 #include "chassis_config.h"
+#include "chassis_follow.h"
 
 
 Board_Tx_Pkt_t    board_tx_pkt;
@@ -32,6 +34,8 @@ void Board_Init(Board_t* board)
 {
 	board->status->offline_cnt = board->status->offline_cnt_max;
 	board->status->status = DEV_OFFLINE;
+	board->status->gimbal_rx_time_ms = 0u;
+	board->status->gimbal_data_valid = 0u;
 	
 	board->tx_01 = Board_Tx_Pkt_01;
 	board->tx_02 = Board_Tx_Pkt_02;
@@ -203,8 +207,21 @@ void Board_Tx_Pkt_05(Board_t* board)
     if (rc_sensor.work_state == DEV_ONLINE)
     {
         valid = 1u;
-#if CHASSIS_BRINGUP_ENABLE && CHASSIS_OWNS_RC_YAW
-        yaw_rate = 0.0f;
+#if CHASSIS_BRINGUP_ENABLE
+        if (Chassis_Follow_IsSelected() != 0u)
+        {
+            yaw_rate = Board_Remote_Axis_To_Rate(rc_sensor.info->ch0,
+                                                 BOARD_D5_YAW_RATE_MAX_DEG_S);
+        }
+        else
+        {
+#if CHASSIS_OWNS_RC_YAW
+            yaw_rate = 0.0f;
+#else
+            yaw_rate = Board_Remote_Axis_To_Rate(rc_sensor.info->ch0,
+                                                 BOARD_D5_YAW_RATE_MAX_DEG_S);
+#endif
+        }
 #else
         yaw_rate = Board_Remote_Axis_To_Rate(rc_sensor.info->ch0,
                                              BOARD_D5_YAW_RATE_MAX_DEG_S);
@@ -265,6 +282,9 @@ void Board_Rx_Meg_02(Board_t* board,uint8_t* rxbuf)
   board->rx_meg->gimbal_meg.pitch_mec   = uint_to_float(t2, -4.f, 4.f,16);
   board->rx_meg->gimbal_meg.yaw_imu     = uint_to_float(t3, -360.0f, 360.0f,16);
   board->rx_meg->gimbal_meg.pitch_imu   = uint_to_float(t4, -360.0f, 360.0f,16);
+
+  board->status->gimbal_rx_time_ms = HAL_GetTick();
+  board->status->gimbal_data_valid = 1u;
 
 	board->status->offline_cnt = 0;
 }

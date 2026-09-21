@@ -52,7 +52,7 @@ void Chassis_Input_Update(void)
     cmd.source = CHASSIS_SRC_NONE;
 
 #if CHASSIS_RC_INPUT_ENABLE
-    /* 沿用 task_down 当前的 S1 上拨使能习惯，未使能时底盘保持停止。 */
+    /* 未使能时底盘保持停止。 */
     if ((rc_sensor.work_state == DEV_ONLINE) &&
         (rc_sensor.info != NULL) &&
         (rc_sensor.info->s1.value == RC_SW_UP))
@@ -70,7 +70,7 @@ void Chassis_Input_Update(void)
 #endif
 
 #if CHASSIS_KEYBOARD_INPUT_ENABLE
-    /* 键鼠输入后续在这里复用同一个 chassis_cmd_t。 */
+    /* 键鼠输入后续在这复用同一个 chassis_cmd_t。 */
 #endif
 
     chassis_input_cmd = cmd;

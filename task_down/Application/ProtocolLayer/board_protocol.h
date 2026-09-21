@@ -132,6 +132,9 @@ typedef  struct{
 	dev_work_state_t status;
 	uint16_t offline_cnt;
 
+	volatile uint32_t gimbal_rx_time_ms;
+	volatile uint8_t  gimbal_data_valid;
+
 }Board_Status_t;
 
 typedef struct Board_Struct_t{

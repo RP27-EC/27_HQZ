@@ -17,6 +17,7 @@
 #include "board_comm_config.h"
 #include "chassis_config.h"
 #include "chassis_control.h"
+#include "chassis_follow.h"
 #include "chassis_input.h"
 
 /* Private macro -------------------------------------------------------------*/
@@ -35,6 +36,7 @@ void DEVICE_Init(void)
     board.init(&board);
 #if CHASSIS_BRINGUP_ENABLE
     rm_motor_list_init();
+    Chassis_Follow_Init();
     Chassis_Input_Init();
     Chassis_Control_Init();
 #endif

@@ -15,6 +15,7 @@
 #include "chassis_config.h"
 #include "chassis_input.h"
 #include "chassis_control.h"
+#include "chassis_follow.h"
 
 uint8_t open_ui = 0;
 
@@ -45,7 +46,9 @@ void StartCtrlTask(void const *argument)
 #endif
 
 #if CHASSIS_BRINGUP_ENABLE
+        Chassis_Follow_UpdateMode();
         Chassis_Input_Update();
+        Chassis_Follow_Update(&chassis_input_cmd);
         Chassis_Control_Update(&chassis_input_cmd);
 #elif !BOARD_COMM_DEBUG
         infantry.work(&infantry);
