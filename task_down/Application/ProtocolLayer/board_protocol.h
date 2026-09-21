@@ -9,7 +9,7 @@
 #define BOARD_RC_AXIS_DEADBAND          20.0f
 #define BOARD_RC_AXIS_MAX               660.0f
 #define BOARD_D5_YAW_RATE_MAX_DEG_S     300.0f
-#define BOARD_D5_PITCH_RATE_MAX_DEG_S   20.0f
+#define BOARD_D5_PITCH_RATE_MAX_DEG_S   150.0f
 #define BOARD_D5_RATE_LSB_DEG_S         0.1f
 
 #define  ID_PKT_01     0xD1
@@ -24,11 +24,11 @@
 #define  ID_MEG_05     0xC5
 
 typedef struct{
-  uint8_t  car_state;       //0鏄嵏鍔涳紝1鏄仴鎺э紝2鏄敭榧�
-//	uint8_t  gimbal_state;    //0鏄嵏鍔涳紝1鏄湁鍔�
-//	uint8_t  launch_state;    //0鏄叧鍙戝皠鏈烘瀯锛�1鏄紑鍙戝皠鏈烘瀯
-  uint8_t  gimbal_mode;        //0鏄満姊帮紝1鏄檧铻�
-	uint8_t  vision_mode;     //0鏃犺瑙夋ā寮忥紝1鏄櫘閫氳嚜鐬勶紝2鏄皬绗︼紝3鏄ぇ绗︼紝4鏄墠鍝紝5鏄嫳闆�
+  uint8_t  car_state;       //0閺勵垰宓忛崝娑崇礉1閺勵垶浠撮幒褝绱�2閺勵垶鏁Η锟�
+//	uint8_t  gimbal_state;    //0閺勵垰宓忛崝娑崇礉1閺勵垱婀侀崝锟�
+//	uint8_t  launch_state;    //0閺勵垰鍙ч崣鎴濈殸閺堢儤鐎敍锟�1閺勵垰绱戦崣鎴濈殸閺堢儤鐎�
+  uint8_t  gimbal_mode;        //0閺勵垱婧€濮婂府绱�1閺勵垶妾ч摶锟�
+	uint8_t  vision_mode;     //0閺冪姾顫嬬憴澶嬆佸蹇ョ礉1閺勵垱娅橀柅姘冲殰閻嫸绱�2閺勵垰鐨粭锔肩礉3閺勵垰銇囩粭锔肩礉4閺勵垰澧犻崫顭掔礉5閺勵垵瀚抽梿锟�
 
 	uint8_t  game_start;
 	uint8_t  my_color;
@@ -57,7 +57,7 @@ typedef struct{
 }Board_Gimbal_Target_Pkt_t;
 
 typedef struct{
-	uint8_t  launch_state;    //0鏄叧鍙戝皠鏈烘瀯锛�1鏄紑鍙戝皠鏈烘瀯
+	uint8_t  launch_state;    //0閺勵垰鍙ч崣鎴濈殸閺堢儤鐎敍锟�1閺勵垰绱戦崣鎴濈殸閺堢儤鐎�
   uint8_t  shoot_mode;
 	uint8_t  shoot_level;
 
@@ -67,14 +67,14 @@ typedef struct{
 
 typedef struct{
 	uint8_t blood[8];    
-  //鑻遍泟
-  //宸ョ▼
-  //鍝ㄥ叺
-  //姝ュ叺
-  //鏃犱汉鏈�
-  //闆疯揪
-	//鍩哄湴
-	//鍓嶅摠
+  //閼婚亶娉�
+  //瀹搞儳鈻�
+  //閸濄劌鍙�
+  //濮濄儱鍙�
+  //閺冪姳姹夐張锟�
+  //闂嗙柉鎻�
+	//閸╁搫婀�
+	//閸撳秴鎽�
 }Board_Blood_Pkt_t;
 
 

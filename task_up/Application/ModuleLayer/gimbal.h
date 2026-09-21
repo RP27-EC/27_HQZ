@@ -37,7 +37,7 @@
 /* Pitch 机械上限 */
 #define GIMBAL_PITCH_MAX_DEG       30.0f
 /* 最终输出力矩限幅 */
-#define GIMBAL_TORQUE_LIMIT        3.0f
+#define GIMBAL_TORQUE_LIMIT        10.0f
 /* 重力补偿开关：0 关闭，1 开启 */
 #define GIMBAL_GRAVITY_ENABLE      1
 /* 余弦重力补偿幅值*/
@@ -63,17 +63,35 @@
 /* 操作手 Yaw 方向符号 */
 #define GIMBAL_MANUAL_YAW_SIGN             (-1.0f)
 /* 遥控器满杆时 Pitch 最大目标角速度*/
-#define GIMBAL_MANUAL_PITCH_RATE_DEG_S     40.0f
+#define GIMBAL_MANUAL_PITCH_RATE_DEG_S     150.0f
 /* 操作手 Pitch 方向符号*/
 #define GIMBAL_MANUAL_PITCH_SIGN           (1.0f)
 /* 鼠标 X 转换为 Yaw 的增益 */
 #define GIMBAL_MOUSE_YAW_RATE_GAIN         1.0f
 /* 鼠标 Y 输入为 Pitch 的增益 */
 #define GIMBAL_MOUSE_PITCH_RATE_GAIN       1.0f
-/* 速控模式回转弱角度 */
-#define GIMBAL_RATE_HOLD_KP                0.5f
-/* 判断操作手输入已回中的角速度阈值 */
-#define GIMBAL_RATE_HOLD_DEADBAND_DEG_S    2.0f
+
+/* ========== 速控松杆位置保持：Yaw / Pitch 各自独立的 PI ========== */
+/* 操作手角速度低于该值，保持环完全接管，松杆后锁在当前位置 */
+#define GIMBAL_RATE_HOLD_ENTER_DEG_S       2.0f
+/* 操作手角速度高于该值，完全交还操作手，保持环不参与 */
+#define GIMBAL_RATE_HOLD_EXIT_DEG_S        8.0f
+
+/* Yaw 保持环：输入角度误差(deg)，输出目标角速度(deg/s) */
+#define GIMBAL_YAW_HOLD_KP                 3.0f
+#define GIMBAL_YAW_HOLD_KI                 0.003f
+#define GIMBAL_YAW_HOLD_INTEGRAL_MAX       5000.0f
+#define GIMBAL_YAW_HOLD_OUT_MAX            150.0f
+
+/* Pitch 保持环：输入角度误差(deg)，输出目标角速度(deg/s) */
+#define GIMBAL_PITCH_HOLD_KP               50.0f
+#define GIMBAL_PITCH_HOLD_KI               0.0f
+#define GIMBAL_PITCH_HOLD_INTEGRAL_MAX     5000.0f
+#define GIMBAL_PITCH_HOLD_OUT_MAX          1000.0f
+
+/* 保持环误差死区，抑制 IMU 噪声引起的静态抖动 */
+#define GIMBAL_HOLD_ERR_DEADBAND_DEG       0.2f
+
 
 /* 云台运行模式 */
 typedef enum
@@ -130,11 +148,20 @@ typedef struct
     volatile float gravity_middle_deg;
     volatile float pitch_torque_limit_nm;
     volatile float yaw_torque_limit_nm;
-    volatile float pitch_rate_hold_kp;
-    volatile float yaw_rate_hold_kp;
+    /* 速控松杆保持环：两轴独立 PI，Keil Watch 在线可改 */
+    volatile float yaw_hold_kp;
+    volatile float yaw_hold_ki;
+    volatile float yaw_hold_integral_max;
+    volatile float yaw_hold_out_max;
+    volatile float pitch_hold_kp;
+    volatile float pitch_hold_ki;
+    volatile float pitch_hold_integral_max;
+    volatile float pitch_hold_out_max;
+    /* 保持环与操作手指令的交接区间 */
+    volatile float rate_hold_enter_deg_s;
+    volatile float rate_hold_exit_deg_s;
     volatile float pitch_manual_rate_max_deg_s;
     volatile float yaw_manual_rate_max_deg_s;
-    volatile float rate_hold_deadband_deg_s;
     volatile float manual_pitch_sign;
     volatile float manual_yaw_sign;
 } gimbal_tune_t;
@@ -159,6 +186,9 @@ typedef struct
     pid_ctrl_t pitch_gyro_inner;   /* Pitch IMU 角速度内环 */
     pid_ctrl_t pitch_mec_outer;    /* Pitch 机械角度外环 */
     pid_ctrl_t pitch_mec_inner;    /* Pitch 电机速度内环 */
+
+    pid_ctrl_t yaw_hold;           /* Yaw 速控松杆保持环（角度 -> 角速度） */
+    pid_ctrl_t pitch_hold;         /* Pitch 速控松杆保持环（角度 -> 角速度） */
 } gimbal_pid_info_t;
 
 /* 云台反馈与输出信息 */

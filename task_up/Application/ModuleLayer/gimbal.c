@@ -172,6 +172,8 @@ static void gimbal_clear_all_pid(gimbal_t *gimbal)
     gimbal_pid_clear(&gimbal->pid_info.pitch_gyro_inner);
     gimbal_pid_clear(&gimbal->pid_info.pitch_mec_outer);
     gimbal_pid_clear(&gimbal->pid_info.pitch_mec_inner);
+    gimbal_pid_clear(&gimbal->pid_info.yaw_hold);
+    gimbal_pid_clear(&gimbal->pid_info.pitch_hold);
 }
 
 /* 参数默认值 */
@@ -214,6 +216,21 @@ static void gimbal_pid_init(gimbal_t *gimbal)
     pid = &gimbal->pid_info.pitch_mec_inner;
     pid->kp = 1.2f; pid->ki = 0.0f; pid->kd = 0.0f;
     pid->integral_max = 0.0f; pid->out_max = 10.0f;
+
+    /* 速控松杆保持环：角度误差 -> 目标角速度修正量 */
+    pid = &gimbal->pid_info.yaw_hold;
+    pid->kp = GIMBAL_YAW_HOLD_KP; pid->ki = GIMBAL_YAW_HOLD_KI; pid->kd = 0.0f;
+    pid->integral_max = GIMBAL_YAW_HOLD_INTEGRAL_MAX;
+    pid->out_max = GIMBAL_YAW_HOLD_OUT_MAX;
+    pid->deadband = GIMBAL_HOLD_ERR_DEADBAND_DEG;
+    pid->d_filter_alpha = 0.0f;
+
+    pid = &gimbal->pid_info.pitch_hold;
+    pid->kp = GIMBAL_PITCH_HOLD_KP; pid->ki = GIMBAL_PITCH_HOLD_KI; pid->kd = 0.0f;
+    pid->integral_max = GIMBAL_PITCH_HOLD_INTEGRAL_MAX;
+    pid->out_max = GIMBAL_PITCH_HOLD_OUT_MAX;
+    pid->deadband = GIMBAL_HOLD_ERR_DEADBAND_DEG;
+    pid->d_filter_alpha = 0.0f;
 
     gimbal_clear_all_pid(gimbal);
 }
@@ -445,38 +462,87 @@ static void gimbal_update_targets(gimbal_t *gimbal)
     }
 }
 
-/* 更新速控模式的目标角速度 */
-static void gimbal_update_rate_targets(gimbal_t *gimbal)
+/* 保持环与操作手的交接系数：1 = 完全保持，0 = 完全跟随操作手 */
+static float gimbal_hold_blend(float rate_mag)
 {
-    if (gimbal_abs(gimbal->feedforward.yaw_rate_cmd_deg_s) <
-        gimbal_tune.rate_hold_deadband_deg_s)
+    float enter = gimbal_tune.rate_hold_enter_deg_s;
+    float exit = gimbal_tune.rate_hold_exit_deg_s;
+
+    if (rate_mag <= enter)
     {
-        gimbal->feedforward.yaw_rate_target_deg_s =
-            gimbal_tune.yaw_rate_hold_kp * gimbal_wrap_deg(
-                gimbal->feedforward.yaw_hold_angle_deg -
-                gimbal->base_info.yaw_imu_angle);
+        return 1.0f;
     }
-    else
+    if ((rate_mag >= exit) || (exit <= enter))
     {
-        gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
-        gimbal->feedforward.yaw_rate_target_deg_s =
-            gimbal->feedforward.yaw_rate_cmd_deg_s;
+        return 0.0f;
     }
 
-    if (gimbal_abs(gimbal->feedforward.pitch_rate_cmd_deg_s) <
-        gimbal_tune.rate_hold_deadband_deg_s)
+    return (exit - rate_mag) / (exit - enter);
+}
+
+/*
+ * 更新速控模式目标角速度。
+ *
+ * 结构上是在内环速度环之前再套一层角度 PI：操作手有输入时保持角跟随
+ * 当前角，保持环输出接近零，不打手手感；操作手松杆后保持角冻结，保持环
+ * 把角度误差换成角速度修正量叠加上去。两个轴各自独立调参。
+ */
+static void gimbal_update_rate_targets(gimbal_t *gimbal)
+{
+    float yaw_cmd = gimbal->feedforward.yaw_rate_cmd_deg_s;
+    float pitch_cmd = gimbal->feedforward.pitch_rate_cmd_deg_s;
+    float yaw_mag = gimbal_abs(yaw_cmd);
+    float pitch_mag = gimbal_abs(pitch_cmd);
+    float yaw_blend;
+    float pitch_blend;
+
+    /* 增益每周期同步一次，方便在 Keil Watch 里在线改参 */
+    gimbal->pid_info.yaw_hold.kp = gimbal_tune.yaw_hold_kp;
+    gimbal->pid_info.yaw_hold.ki = gimbal_tune.yaw_hold_ki;
+    gimbal->pid_info.yaw_hold.integral_max = gimbal_tune.yaw_hold_integral_max;
+    gimbal->pid_info.yaw_hold.out_max = gimbal_tune.yaw_hold_out_max;
+    gimbal->pid_info.pitch_hold.kp = gimbal_tune.pitch_hold_kp;
+    gimbal->pid_info.pitch_hold.ki = gimbal_tune.pitch_hold_ki;
+    gimbal->pid_info.pitch_hold.integral_max = gimbal_tune.pitch_hold_integral_max;
+    gimbal->pid_info.pitch_hold.out_max = gimbal_tune.pitch_hold_out_max;
+
+    /*
+     * 操作手接管区间：保持角跟随当前角，同时清掉积分。
+     * 保持角跟随保证手动响应不被拖慢，清积分保证上一次保持的积分
+     * 不会残留到下一次松杆，避免交接瞬间产生力矩突变。
+     */
+    if (yaw_mag > gimbal_tune.rate_hold_enter_deg_s)
     {
-        gimbal->feedforward.pitch_rate_target_deg_s =
-            gimbal_tune.pitch_rate_hold_kp * (
-                gimbal->feedforward.pitch_hold_angle_deg -
-                gimbal->base_info.pitch_imu_angle);
+        gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
+        integral_to_zero(&gimbal->pid_info.yaw_hold);
     }
-    else
+    if (pitch_mag > gimbal_tune.rate_hold_enter_deg_s)
     {
-        gimbal->feedforward.pitch_hold_angle_deg = gimbal->base_info.pitch_imu_angle;
-        gimbal->feedforward.pitch_rate_target_deg_s =
-            gimbal->feedforward.pitch_rate_cmd_deg_s;
+        gimbal->feedforward.pitch_hold_angle_deg = gimbal->base_info.pitch_mec_angle;
+        integral_to_zero(&gimbal->pid_info.pitch_hold);
     }
+
+    /* 保持环：角度误差 -> 角速度修正量 */
+    gimbal->pid_info.yaw_hold.err = gimbal_wrap_deg(
+        gimbal->feedforward.yaw_hold_angle_deg - gimbal->base_info.yaw_imu_angle);
+    single_pid_ctrl(&gimbal->pid_info.yaw_hold);
+
+    /*
+     * Pitch 保持环用编码器机械角，不用 IMU 欧拉角。
+     * IMU 装在偏航部分，云台俯仰时它测不到俯仰变化，用 IMU 角度会得到
+     * 恒为零的误差，保持环就不会出力。编码器给的是精确相对角，锁位置够用。
+     */
+    gimbal->pid_info.pitch_hold.err =
+        gimbal->feedforward.pitch_hold_angle_deg - gimbal->base_info.pitch_mec_angle;
+    single_pid_ctrl(&gimbal->pid_info.pitch_hold);
+
+    yaw_blend = gimbal_hold_blend(yaw_mag);
+    pitch_blend = gimbal_hold_blend(pitch_mag);
+
+    gimbal->feedforward.yaw_rate_target_deg_s =
+        yaw_cmd + yaw_blend * gimbal->pid_info.yaw_hold.out;
+    gimbal->feedforward.pitch_rate_target_deg_s =
+        pitch_cmd + pitch_blend * gimbal->pid_info.pitch_hold.out;
 }
 
 /* Pitch 轴重力力矩补偿 */
@@ -616,9 +682,9 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          &gimbal->pid_info.pitch_gyro_inner,
                          gimbal->feedforward.pitch_rate_target_deg_s,
                          0.0f,
-                         gimbal->base_info.pitch_imu_speed,
+                         gimbal->base_info.pitch_mec_speed,
                          0.0f,
-                         1.0f,
+                         GIMBAL_RAD_TO_DEG,
                          0) + gravity;
 
         gimbal->base_info.output_gimbal_y =
@@ -676,11 +742,18 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_tune.gravity_middle_deg = GIMBAL_GRAVITY_MIDDLE_DEG;
     gimbal_tune.pitch_torque_limit_nm = GIMBAL_TORQUE_LIMIT;
     gimbal_tune.yaw_torque_limit_nm = GIMBAL_TORQUE_LIMIT;
-    gimbal_tune.pitch_rate_hold_kp = GIMBAL_RATE_HOLD_KP;
-    gimbal_tune.yaw_rate_hold_kp = GIMBAL_RATE_HOLD_KP;
+    gimbal_tune.yaw_hold_kp = GIMBAL_YAW_HOLD_KP;
+    gimbal_tune.yaw_hold_ki = GIMBAL_YAW_HOLD_KI;
+    gimbal_tune.yaw_hold_integral_max = GIMBAL_YAW_HOLD_INTEGRAL_MAX;
+    gimbal_tune.yaw_hold_out_max = GIMBAL_YAW_HOLD_OUT_MAX;
+    gimbal_tune.pitch_hold_kp = GIMBAL_PITCH_HOLD_KP;
+    gimbal_tune.pitch_hold_ki = GIMBAL_PITCH_HOLD_KI;
+    gimbal_tune.pitch_hold_integral_max = GIMBAL_PITCH_HOLD_INTEGRAL_MAX;
+    gimbal_tune.pitch_hold_out_max = GIMBAL_PITCH_HOLD_OUT_MAX;
+    gimbal_tune.rate_hold_enter_deg_s = GIMBAL_RATE_HOLD_ENTER_DEG_S;
+    gimbal_tune.rate_hold_exit_deg_s = GIMBAL_RATE_HOLD_EXIT_DEG_S;
     gimbal_tune.pitch_manual_rate_max_deg_s = GIMBAL_MANUAL_PITCH_RATE_DEG_S;
     gimbal_tune.yaw_manual_rate_max_deg_s = GIMBAL_MANUAL_YAW_RATE_DEG_S;
-    gimbal_tune.rate_hold_deadband_deg_s = GIMBAL_RATE_HOLD_DEADBAND_DEG_S;
     gimbal_tune.manual_pitch_sign = GIMBAL_MANUAL_PITCH_SIGN;
     gimbal_tune.manual_yaw_sign = GIMBAL_MANUAL_YAW_SIGN;
 
@@ -756,7 +829,7 @@ void Gimbal_Work(gimbal_t *gimbal)
         }
 
         gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
-        gimbal->feedforward.pitch_hold_angle_deg = gimbal->base_info.pitch_imu_angle;
+        gimbal->feedforward.pitch_hold_angle_deg = gimbal->base_info.pitch_mec_angle;
 
         // 切换帧先卸力，下一帧从当前角度开始是斜坡步进
         gimbal->base_info.output_gimbal_p = 0.0f;
