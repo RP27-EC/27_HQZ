@@ -57,7 +57,7 @@ void Chassis_Input_Update(void)
         (rc_sensor.info != NULL) &&
         (rc_sensor.info->s1.value == RC_SW_UP))
     {
-        cmd.vx = Chassis_RcAxisValue(rc_sensor.info->ch3) * CHASSIS_MAX_VX;
+        cmd.vx = -Chassis_RcAxisValue(rc_sensor.info->ch3) * CHASSIS_MAX_VX;
         cmd.vy = Chassis_RcAxisValue(rc_sensor.info->ch2) * CHASSIS_MAX_VY;
 #if CHASSIS_OWNS_RC_YAW
         cmd.wz = Chassis_RcAxisValue(rc_sensor.info->ch0) * CHASSIS_MAX_WZ;

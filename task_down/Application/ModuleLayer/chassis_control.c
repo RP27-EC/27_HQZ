@@ -52,7 +52,7 @@ static void Chassis_Control_KinematicsInverse(const chassis_cmd_t *cmd)
     float trans = fabsf(front) + fabsf(left);
     float rotate = fabsf(cycle);
     float total = trans + rotate;
-
+    //限制底盘最大速度
     if (total > CHASSIS_CTRL_MAX_SPEED)
     {
         float rotate_limit = CHASSIS_CTRL_MAX_SPEED * 0.6f;
@@ -100,8 +100,23 @@ static uint8_t Chassis_Control_PidUpdate(void)
             chassis_ctrl.wheel->motor[i]->rx_info->speed;
         pid->target = chassis_ctrl.state.wheel_target[i];
         pid->measure = chassis_ctrl.state.wheel_speed[i];
-        pid->err = pid->target - pid->measure;
-        single_pid_ctrl(pid);
+        if ((fabsf(pid->target) < CHASSIS_ZERO_TARGET_BAND) &&
+            (fabsf(pid->measure) < CHASSIS_STOP_SPEED_BAND))
+        {
+            pid->err = 0.0f;
+            pid->last_err = 0.0f;
+            pid->integral = 0.0f;
+            pid->pout = 0.0f;
+            pid->iout = 0.0f;
+            pid->dout = 0.0f;
+            pid->last_dout = 0.0f;
+            pid->out = 0.0f;
+        }
+        else
+        {
+            pid->err = pid->target - pid->measure;
+            single_pid_ctrl(pid);
+        }
 
         chassis_ctrl.state.wheel_torque_out[i] =
             constrain(pid->out,
