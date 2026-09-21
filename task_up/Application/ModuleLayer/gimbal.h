@@ -37,7 +37,7 @@
 /* Pitch 机械上限 */
 #define GIMBAL_PITCH_MAX_DEG       30.0f
 /* 最终输出力矩限幅 */
-#define GIMBAL_TORQUE_LIMIT        10.0f
+#define GIMBAL_TORQUE_LIMIT        6.0f
 /* 重力补偿开关：0 关闭，1 开启 */
 #define GIMBAL_GRAVITY_ENABLE      1
 /* 余弦重力补偿幅值*/
@@ -78,7 +78,7 @@
 #define GIMBAL_RATE_HOLD_EXIT_DEG_S        8.0f
 
 /* Yaw 保持环：输入角度误差(deg)，输出目标角速度(deg/s) */
-#define GIMBAL_YAW_HOLD_KP                 3.0f
+#define GIMBAL_YAW_HOLD_KP                 10.0f
 #define GIMBAL_YAW_HOLD_KI                 0.003f
 #define GIMBAL_YAW_HOLD_INTEGRAL_MAX       5000.0f
 #define GIMBAL_YAW_HOLD_OUT_MAX            150.0f
