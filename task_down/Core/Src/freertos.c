@@ -25,6 +25,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "board_comm_config.h"
 
 /* USER CODE END Includes */
 
@@ -142,10 +143,14 @@ void MX_FREERTOS_Init(void) {
   CommandTaskHandle = osThreadNew(StartCommandTask, NULL, &CommandTask_attributes);
 
   /* creation of UpdataTask */
+#if !BOARD_COMM_DEBUG
   UpdataTaskHandle = osThreadNew(StartUpdataTask, NULL, &UpdataTask_attributes);
+#endif
 
   /* creation of UITask */
+#if BOARD_UI_ENABLE
   UITaskHandle = osThreadNew(StartUITask, NULL, &UITask_attributes);
+#endif
 
   /* creation of ConnectTask */
   ConnectTaskHandle = osThreadNew(StartConnectTask, NULL, &ConnectTask_attributes);

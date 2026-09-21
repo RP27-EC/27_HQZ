@@ -42,11 +42,12 @@ void StartCtrlTask(void const *argument)
             board.tx_pkt->gimbal_target_pkt.pitch_imu_tar = 0.0f;
         }
 
+#endif
+
 #if CHASSIS_BRINGUP_ENABLE
         Chassis_Input_Update();
         Chassis_Control_Update(&chassis_input_cmd);
-#endif
-#else
+#elif !BOARD_COMM_DEBUG
         infantry.work(&infantry);
 
 #if BOARD_CAP_ENABLE

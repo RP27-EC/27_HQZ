@@ -6,14 +6,21 @@
 #include "rp_math.h"
 
 chassis_control_t chassis_ctrl;
-
+//检查浮点数的有效性
 static uint8_t Chassis_Control_ValueValid(float value)
 {
     return (value == value) && (value < 1000000.0f) && (value > -1000000.0f);
 }
 
+//检查底盘是否在线
 static uint8_t Chassis_Control_CheckOnline(void)
 {
+    if (chassis_ctrl.wheel == NULL)
+    {
+        chassis_ctrl.state.all_online = 0u;
+        return 0u;
+    }
+
     uint8_t online = 1u;
 
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
@@ -21,6 +28,8 @@ static uint8_t Chassis_Control_CheckOnline(void)
         chassis_ctrl.state.wheel_online[i] =
             (chassis_ctrl.wheel->motor[i] != NULL &&
              chassis_ctrl.wheel->motor[i]->state != NULL &&
+             chassis_ctrl.wheel->motor[i]->ctrl != NULL &&
+             chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl != NULL &&
              chassis_ctrl.wheel->motor[i]->state->status == DEV_ONLINE) ? 1u : 0u;
 
         if (chassis_ctrl.state.wheel_online[i] == 0u)
@@ -33,11 +42,13 @@ static uint8_t Chassis_Control_CheckOnline(void)
     return online;
 }
 
+//底盘运动学逆解
 static void Chassis_Control_KinematicsInverse(const chassis_cmd_t *cmd)
 {
     float front = cmd->vx;
     float left = cmd->vy;
     float cycle = cmd->wz;
+    //曼哈顿距离近似
     float trans = fabsf(front) + fabsf(left);
     float rotate = fabsf(cycle);
     float total = trans + rotate;
@@ -69,10 +80,20 @@ static void Chassis_Control_KinematicsInverse(const chassis_cmd_t *cmd)
     chassis_ctrl.state.wheel_target[WHEEL_RB] =  front - left + cycle;
 }
 
-static void Chassis_Control_PidUpdate(void)
+static uint8_t Chassis_Control_PidUpdate(void)
 {
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
+        if (chassis_ctrl.wheel == NULL ||
+            chassis_ctrl.wheel->motor[i] == NULL ||
+            chassis_ctrl.wheel->motor[i]->ctrl == NULL ||
+            chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl == NULL ||
+            chassis_ctrl.wheel->motor[i]->rx_info == NULL)
+        {
+            chassis_ctrl.state.fault = 1u;
+            return 0u;
+        }
+
         pid_ctrl_t *pid = chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl;
 
         chassis_ctrl.state.wheel_speed[i] =
@@ -87,25 +108,59 @@ static void Chassis_Control_PidUpdate(void)
                       -CHASSIS_TEST_TORQUE_LIMIT_NM,
                       CHASSIS_TEST_TORQUE_LIMIT_NM);
     }
+
+    return 1u;
 }
 
-static void Chassis_Control_Output(void)
+static uint8_t Chassis_Control_Output(void)
 {
+    if (chassis_ctrl.wheel == NULL || chassis_ctrl.wheel->group_set_torque == NULL)
+    {
+        chassis_ctrl.state.fault = 1u;
+        return 0u;
+    }
+
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
+        if (chassis_ctrl.wheel->motor[i] == NULL ||
+            chassis_ctrl.wheel->motor[i]->tx_info == NULL)
+        {
+            chassis_ctrl.state.fault = 1u;
+            return 0u;
+        }
+
         chassis_ctrl.wheel->motor[i]->tx_info->torque =
             chassis_ctrl.state.wheel_torque_out[i];
     }
 
     chassis_ctrl.wheel->group_set_torque(chassis_ctrl.wheel);
+
+    return 1u;
 }
 
 void Chassis_Control_Init(void)
 {
+    uint8_t init_ok = 1u;
+
     chassis_ctrl.wheel = &wheel_group;
 
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
+        chassis_ctrl.state.wheel_target[i] = 0.0f;
+        chassis_ctrl.state.wheel_speed[i] = 0.0f;
+        chassis_ctrl.state.wheel_torque_out[i] = 0.0f;
+        chassis_ctrl.state.wheel_online[i] = 0u;
+
+        if (chassis_ctrl.wheel == NULL ||
+            chassis_ctrl.wheel->motor[i] == NULL ||
+            chassis_ctrl.wheel->motor[i]->ctrl == NULL ||
+            chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl == NULL ||
+            chassis_ctrl.wheel->motor[i]->tx_info == NULL)
+        {
+            init_ok = 0u;
+            continue;
+        }
+
         pid_ctrl_t *pid = chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl;
 
         pid->kp = CHASSIS_SPEED_KP;
@@ -119,10 +174,6 @@ void Chassis_Control_Init(void)
         pid->err = 0.0f;
         pid->out = 0.0f;
 
-        chassis_ctrl.state.wheel_target[i] = 0.0f;
-        chassis_ctrl.state.wheel_speed[i] = 0.0f;
-        chassis_ctrl.state.wheel_torque_out[i] = 0.0f;
-        chassis_ctrl.state.wheel_online[i] = 0u;
         chassis_ctrl.wheel->motor[i]->tx_info->torque = 0.0f;
     }
 
@@ -132,8 +183,8 @@ void Chassis_Control_Init(void)
     chassis_ctrl.state.cmd.valid = 0u;
     chassis_ctrl.state.cmd.source = CHASSIS_SRC_NONE;
     chassis_ctrl.state.all_online = 0u;
-    chassis_ctrl.state.enabled = 1u;
-    chassis_ctrl.state.fault = 0u;
+    chassis_ctrl.state.enabled = init_ok;
+    chassis_ctrl.state.fault = (init_ok == 0u) ? 1u : 0u;
 }
 
 void Chassis_Control_SetEnable(uint8_t enable)
@@ -155,6 +206,12 @@ void Chassis_Control_Stop(void)
 
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
+        if (chassis_ctrl.wheel->motor[i] == NULL ||
+            chassis_ctrl.wheel->motor[i]->tx_info == NULL)
+        {
+            continue;
+        }
+
         chassis_ctrl.state.wheel_torque_out[i] = 0.0f;
         chassis_ctrl.wheel->motor[i]->tx_info->torque = 0.0f;
     }
@@ -200,7 +257,17 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
     }
 
     Chassis_Control_KinematicsInverse(cmd);
-    Chassis_Control_PidUpdate();
-    Chassis_Control_Output();
+    if (Chassis_Control_PidUpdate() == 0u)
+    {
+        Chassis_Control_Stop();
+        return;
+    }
+
+    if (Chassis_Control_Output() == 0u)
+    {
+        Chassis_Control_Stop();
+        return;
+    }
+
     chassis_ctrl.state.fault = 0u;
 }

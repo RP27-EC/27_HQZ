@@ -54,6 +54,7 @@ void Chassis_Input_Update(void)
 #if CHASSIS_RC_INPUT_ENABLE
     /* 沿用 task_down 当前的 S1 上拨使能习惯，未使能时底盘保持停止。 */
     if ((rc_sensor.work_state == DEV_ONLINE) &&
+        (rc_sensor.info != NULL) &&
         (rc_sensor.info->s1.value == RC_SW_UP))
     {
         cmd.vx = Chassis_RcAxisValue(rc_sensor.info->ch3) * CHASSIS_MAX_VX;
