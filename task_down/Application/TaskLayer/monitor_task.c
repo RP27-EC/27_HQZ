@@ -14,6 +14,7 @@
 #include "judge.h"
 #include "iwdg.h"
 #include "board_comm_config.h"
+#include "chassis_config.h"
 
 void StartMonitorTask(void const *argument)
 {
@@ -21,7 +22,7 @@ void StartMonitorTask(void const *argument)
 
     for (;;)
     {
-#if !BOARD_COMM_DEBUG
+#if (!BOARD_COMM_DEBUG) || CHASSIS_BRINGUP_ENABLE
         rm_motor_list_heart_beat();
 #endif
         rc_sensor.heart_beat(&rc_sensor);

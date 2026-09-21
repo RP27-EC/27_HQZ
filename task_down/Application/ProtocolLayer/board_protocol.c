@@ -6,6 +6,7 @@
 #include "drv_can.h"
 #include "rp_device_config.h"
 #include "rp_math.h"
+#include "chassis_config.h"
 
 
 Board_Tx_Pkt_t    board_tx_pkt;
@@ -202,8 +203,12 @@ void Board_Tx_Pkt_05(Board_t* board)
     if (rc_sensor.work_state == DEV_ONLINE)
     {
         valid = 1u;
+#if CHASSIS_BRINGUP_ENABLE && CHASSIS_OWNS_RC_YAW
+        yaw_rate = 0.0f;
+#else
         yaw_rate = Board_Remote_Axis_To_Rate(rc_sensor.info->ch0,
                                              BOARD_D5_YAW_RATE_MAX_DEG_S);
+#endif
         pitch_rate = Board_Remote_Axis_To_Rate(rc_sensor.info->ch1,
                                                BOARD_D5_PITCH_RATE_MAX_DEG_S);
     }
