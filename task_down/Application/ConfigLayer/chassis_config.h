@@ -21,10 +21,15 @@
 /* 小陀螺参数。S1 上拨使能，S2 下拨选择小陀螺模式，ch0 控制旋转速度。 */
 #define CHASSIS_SPIN_MAX_WZ              20.0f
 #define CHASSIS_SPIN_BASE_WZ             20.0f
-#define CHASSIS_SPIN_TRIM_WZ             5.0f
+#define CHASSIS_SPIN_TRIM_WZ             0.0f
 #define CHASSIS_SPIN_STEP                0.1f
 #define CHASSIS_SPIN_DIRECTION           1.0f
 #define CHASSIS_SPIN_RC_DEADBAND         30.0f
+#define CHASSIS_SPIN_TRANSLATION_ENABLE   1u
+#define CHASSIS_SPIN_TRANSLATION_FRAME_GIMBAL 1u
+#define CHASSIS_SPIN_TRANSLATION_YAW_SIGN 1.0f
+#define CHASSIS_SPIN_TRANSLATION_SIGN     1.0f
+#define CHASSIS_SPIN_GIMBAL_TIMEOUT_MS    50u
 #define CHASSIS_SPIN_TORQUE_LIMIT_NM     3.0f
 
 /* 底盘跟随云台参数。S1 上拨使能，S2 上拨选择跟随模式。 */

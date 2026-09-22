@@ -218,7 +218,8 @@ void Board_Tx_Pkt_05(Board_t* board)
         }
         else if (Chassis_Spin_IsSelected() != 0u)
         {
-            yaw_rate = 0.0f;
+            yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
+                                                 BOARD_D5_YAW_RATE_MAX_DEG_S);
         }
         else
         {

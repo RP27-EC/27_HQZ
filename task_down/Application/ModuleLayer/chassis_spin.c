@@ -5,6 +5,8 @@
 #include <math.h>
 #include <stddef.h>
 
+#include "board_protocol.h"
+#include "main.h"
 #include "rc_sensor.h"
 #include "rp_math.h"
 
@@ -43,6 +45,66 @@ static float Chassis_Spin_Ramp(float current, float target, float step)
     }
 
     return target;
+}
+
+static uint8_t Chassis_Spin_GimbalValid(void)
+{
+    uint32_t age;
+
+    if ((board.status == NULL) || (board.status->gimbal_data_valid == 0u))
+    {
+        return 0u;
+    }
+
+    age = HAL_GetTick() - board.status->gimbal_rx_time_ms;
+    return (age <= CHASSIS_SPIN_GIMBAL_TIMEOUT_MS) ? 1u : 0u;
+}
+
+static void Chassis_Spin_UpdateTranslation(chassis_cmd_t *cmd)
+{
+    float vx_gimbal;
+    float vy_gimbal;
+    float yaw_mec;
+    float theta;
+
+    if (cmd == NULL)
+    {
+        return;
+    }
+
+#if !CHASSIS_SPIN_TRANSLATION_ENABLE
+    cmd->vx = 0.0f;
+    cmd->vy = 0.0f;
+#elif CHASSIS_SPIN_TRANSLATION_FRAME_GIMBAL
+    if (Chassis_Spin_GimbalValid() == 0u)
+    {
+        cmd->vx = 0.0f;
+        cmd->vy = 0.0f;
+        return;
+    }
+
+    yaw_mec = board.rx_meg->gimbal_meg.yaw_mec;
+    if ((yaw_mec != yaw_mec) || (fabsf(yaw_mec) > 4.0f))
+    {
+        cmd->vx = 0.0f;
+        cmd->vy = 0.0f;
+        return;
+    }
+
+    vx_gimbal = cmd->vx;
+    vy_gimbal = cmd->vy;
+    theta = CHASSIS_SPIN_TRANSLATION_YAW_SIGN * yaw_mec;
+
+    cmd->vx = CHASSIS_SPIN_TRANSLATION_SIGN *
+              ((cosf(theta) * vx_gimbal) - (sinf(theta) * vy_gimbal));
+    cmd->vy = CHASSIS_SPIN_TRANSLATION_SIGN *
+              ((sinf(theta) * vx_gimbal) + (cosf(theta) * vy_gimbal));
+#else
+    (void)vx_gimbal;
+    (void)vy_gimbal;
+    (void)yaw_mec;
+    (void)theta;
+#endif
 }
 
 void Chassis_Spin_Init(void)
@@ -122,8 +184,8 @@ void Chassis_Spin_Update(chassis_cmd_t *cmd)
 
     spin_ramp_wz = Chassis_Spin_Ramp(spin_ramp_wz, target_wz, CHASSIS_SPIN_STEP);
 
-    cmd->vx = 0.0f;
-    cmd->vy = 0.0f;
+    Chassis_Spin_UpdateTranslation(cmd);
+
     cmd->wz = spin_ramp_wz;
     cmd->valid = 1u;
     cmd->source = CHASSIS_SRC_SPIN;
