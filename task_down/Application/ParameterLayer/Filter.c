@@ -1,15 +1,17 @@
+/* Filter.c - 婊ゆ尝鍙傛暟 */
+
 #include "Filter.h"
-/*对水平速度的滤波*/
-KalmanFilter_t vaEstimateKF;	   // 卡尔曼滤波器结构体
+
+KalmanFilter_t vaEstimateKF;
 
 float vaEstimateKF_F[4] = {1.0f, 0.001f, 
-                           0.0f, 1.0f};	   // 状态转移矩阵，控制周期为0.001s
+                           0.0f, 1.0f};
 
 float vaEstimateKF_P[4] = {1.0f, 0.0f,
-                           0.0f, 1.0f};    // 后验估计协方差初始值
+                           0.0f, 1.0f};
 
 float vaEstimateKF_Q[4] = {0.1f, 0.0f, 
-                           0.0f, 0.1f};    // Q矩阵初始值
+                           0.0f, 0.1f};
 
 float vaEstimateKF_R[4] = {200.0f, 0.0f, 
                             0.0f,  200.0f}; 	
@@ -17,12 +19,12 @@ float vaEstimateKF_R[4] = {200.0f, 0.0f,
 float vaEstimateKF_K[4];
 													 
 const float vaEstimateKF_H[4] = {1.0f, 0.0f,
-                                 0.0f, 1.0f};	// 设置矩阵H为常量
+                                 0.0f, 1.0f};
 
 																 
 void xvEstimateKF_Init(KalmanFilter_t *EstimateKF)
 {
-    Kalman_Filter_Init(EstimateKF, 2, 0, 2);	// 状态向量2维 没有控制量 测量向量2维
+    kf_init(EstimateKF, 2, 0, 2);
 	
 		memcpy(EstimateKF->F_data, vaEstimateKF_F, sizeof(vaEstimateKF_F));
     memcpy(EstimateKF->P_data, vaEstimateKF_P, sizeof(vaEstimateKF_P));
@@ -34,26 +36,26 @@ void xvEstimateKF_Init(KalmanFilter_t *EstimateKF)
 
 void xvEstimateKF_Update(KalmanFilter_t *EstimateKF ,float acc,float vel)
 {   	
-    //卡尔曼滤波器测量值更新
-    EstimateKF->MeasuredVector[0] =	vel;//测量速度
-    EstimateKF->MeasuredVector[1] = acc;//测量加速度
+
+    EstimateKF->MeasuredVector[0] =	vel;
+    EstimateKF->MeasuredVector[1] = acc;
     		
-    //卡尔曼滤波器更新函数
-    Kalman_Filter_Update(EstimateKF);
+
+    kf_update(EstimateKF);
 
 }
 
-/*对水平位移的滤波*/
-KalmanFilter_t XEstimateKF;	   // 卡尔曼滤波器结构体
+
+KalmanFilter_t XEstimateKF;
 
 float XEstimateKF_F[4] = {1.0f, 0.001f, 
-                           0.0f, 1.0f};	   // 状态转移矩阵，控制周期为0.001s
+                           0.0f, 1.0f};
 
 float XEstimateKF_P[4] = {1.0f, 0.0f,
-                           0.0f, 1.0f};    // 后验估计协方差初始值
+                           0.0f, 1.0f};
 
 float XEstimateKF_Q[4] = {0.1f, 0.0f, 
-                           0.0f, 0.1f};    // Q矩阵初始值
+                           0.0f, 0.1f};
 
 float XEstimateKF_R[4] = {200.0f, 0.0f, 
                             0.0f,  100.0f}; 	
@@ -61,12 +63,12 @@ float XEstimateKF_R[4] = {200.0f, 0.0f,
 float XEstimateKF_K[4];
 													 
 const float XEstimateKF_H[4] = {1.0f, 0.0f,
-                                 0.0f, 1.0f};	// 设置矩阵H为常量
+                                 0.0f, 1.0f};
 
 																 
 void XEstimateKF_Init(KalmanFilter_t *EstimateKF)
 {
-	 Kalman_Filter_Init(EstimateKF, 2, 0, 2);	// 状态向量2维 没有控制量 测量向量2维
+	 kf_init(EstimateKF, 2, 0, 2);
 	
 		memcpy(EstimateKF->F_data, XEstimateKF_F, sizeof(XEstimateKF_F));
     memcpy(EstimateKF->P_data, XEstimateKF_P, sizeof(XEstimateKF_P));
@@ -86,14 +88,15 @@ void XEstimateKF_Clear(KalmanFilter_t *EstimateKF)
 
 void XEstimateKF_Update(KalmanFilter_t *EstimateKF ,float vel,float s)
 {   	
-    //卡尔曼滤波器测量值更新
-    EstimateKF->MeasuredVector[0] =	s;//测量位移
-    EstimateKF->MeasuredVector[1] = vel;//测量速度
+
+    EstimateKF->MeasuredVector[0] =	s;
+    EstimateKF->MeasuredVector[1] = vel;
     		
-    //卡尔曼滤波器更新函数
-    Kalman_Filter_Update(EstimateKF);
+
+    kf_update(EstimateKF);
 
 }
+
 
 
 

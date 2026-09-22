@@ -1,15 +1,10 @@
+/* rp_user_config.h - 鐢ㄦ埛鍙傛暟閰嶇疆 */
+
 #ifndef __RP_USER_CONFIG_H
 #define __RP_USER_CONFIG_H
-
-/* Includes ------------------------------------------------------------------*/
 #include "stm32h7xx_hal.h"
 #include "stdbool.h"
 
-/* Exported macro ------------------------------------------------------------*/
-
-/* Exported types ------------------------------------------------------------*/
-
-/* 应用层 --------------------------------------------------------------------*/
 /* Remote Mode Enum */
 typedef enum {
 	RC = 0,
@@ -18,14 +13,14 @@ typedef enum {
 } remote_mode_t;
 
 typedef enum {
-	SYS_STATE_NORMAL,	// 系统正常
-	SYS_STATE_RCLOST,	// 遥控失联
-	SYS_STATE_RCERR,	// 遥控出错
-	SYS_STATE_WRONG,	// 其它系统错误
+	SYS_STATE_NORMAL,
+	SYS_STATE_RCLOST,
+	SYS_STATE_RCERR,
+	SYS_STATE_WRONG,
 } sys_state_t;
 
 typedef enum {
-	SYS_MODE_NORMAL,	// 常规模式
+	SYS_MODE_NORMAL,  // SYS妯″紡NORMAL
 	SYS_MODE_CNT,
 } sys_mode_t;
 
@@ -34,7 +29,7 @@ typedef struct {
 	uint8_t reset_ok;
 	uint8_t turn_start;
 	uint8_t turn_ok;
-	uint8_t forward; // 1:头为正 0:尾为正
+	uint8_t forward;  // 鍓嶈繘
 	uint8_t turn_right;
 	uint8_t turn_left;
 } gimbal_symbal_t;
@@ -47,12 +42,13 @@ typedef struct __symbal_struct
 } symbal_t;
 
 typedef struct {
-	remote_mode_t		remote_mode;	// 控制方式
-	sys_state_t			state;			// 系统状态
-	sys_mode_t			mode;			// 系统模式
+	remote_mode_t		remote_mode;  // remote妯″紡
+	sys_state_t			state;
+	sys_mode_t			mode;  // 妯″紡
 } system_t;
 
 extern symbal_t	symbal;
 extern system_t sys;
 
 #endif
+

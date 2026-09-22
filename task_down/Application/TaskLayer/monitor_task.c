@@ -1,9 +1,5 @@
-/**
- ******************************************************************************
- * @file    monitor_task.c
- * @brief   Device heartbeat monitor task.
- ******************************************************************************
- */
+/* monitor_task.c - 设备监控任务 */
+
 #include "monitor_task.h"
 #include "board_protocol.h"
 #include "infantry.h"
@@ -25,9 +21,9 @@ void StartMonitorTask(void const *argument)
 #if (!BOARD_COMM_DEBUG) || CHASSIS_BRINGUP_ENABLE
         rm_motor_list_heart_beat();
 #endif
-        rc_sensor.heart_beat(&rc_sensor);
+        rc_dev.heart_beat(&rc_dev);
 #if !BOARD_COMM_DEBUG
-        imu_sensor.heart_beat(&imu_sensor.work_state);
+        imu_dev.heart_beat(&imu_dev.work_state);
 #endif
         board.heartbeat(&board);
 
@@ -48,3 +44,4 @@ void StartMonitorTask(void const *argument)
         osDelay(1);
     }
 }
+

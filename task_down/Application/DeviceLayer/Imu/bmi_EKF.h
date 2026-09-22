@@ -1,15 +1,5 @@
-/**
- ******************************************************************************
- * @file    QuaternionEKF.h
- * @author  Wang Hongxi
- * @version V1.2.0
- * @date    2022/3/8
- * @brief   attitude update with gyro bias estimate and chi-square test
- ******************************************************************************
- * @attention
- *
- ******************************************************************************
- */
+/* bmi_EKF.h - 四元数 EKF 姿态解算 */
+
 #ifndef _BMI_EKF_H
 #define _BMI_EKF_H
 #include "kalman_filter.h"
@@ -30,7 +20,7 @@ typedef struct
     float ary;
     float arx;
     float trans[9];
-} gimbal_transform_t;
+} imu_frame_t;
 
 typedef struct
 {
@@ -73,21 +63,22 @@ typedef struct
     int16_t YawRoundCount;
 
     float YawAngleLast;
-} QEKF_INS_t;
+} ekf_att_t;
 
-extern gimbal_transform_t EKFgim_trans;
-extern QEKF_INS_t QEKF_INS;
+extern imu_frame_t ekf_imu_frame;
+extern ekf_att_t g_ekf;
 extern float chiSquare;
 extern float ChiSquareTestThreshold;
-void IMU_QuaternionEKF_Init(float* init_quaternion,float process_noise1, float process_noise2, float measure_noise, float lambda);
-void IMU_QuaternionEKF_Update(float gx, float gy, float gz, float ax, float ay, float az, float dt);
-void transform_init(gimbal_transform_t *gim_trans);
-void Vector_Transform(float gx, float gy, float gz,\
+void ekf_init(float* init_quaternion,float process_noise1, float process_noise2, float measure_noise, float lambda);
+void ekf_update(float gx, float gy, float gz, float ax, float ay, float az, float dt);
+void imu_frame_init(imu_frame_t *imu_frame);
+void imu_frame_rotate(float gx, float gy, float gz,\
 	                  float ax, float ay, float az,\
 	                  float *ggx, float *ggy, float *ggz,\
 					  float *aax, float *aay, float *aaz);
-void BMI_Get_Acceleration(float pitch, float roll, float yaw,\
+void imu_world_accel(float pitch, float roll, float yaw,\
 						  float ax, float ay, float az,\
 						  float *accx, float *accy, float *accz);
 
 #endif
+

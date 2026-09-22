@@ -1,3 +1,5 @@
+/* Command_Instance.h - 指令实例 */
+
 #ifndef __COMMAND_Instance_H
 #define __COMMAND_Instance_H
 
@@ -23,3 +25,4 @@ void Cmd_Heartbeat(void);
 void Command_Update(void);
 extern command_t command[COMMAND_LIST];
 #endif
+

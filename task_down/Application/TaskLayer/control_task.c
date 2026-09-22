@@ -1,9 +1,5 @@
-/**
-  ******************************************************************************
-  * @file    control_task.c
-  * @brief   Vehicle control task.
-  ******************************************************************************
-  */
+/* control_task.c - 控制任务 */
+
 #include "control_task.h"
 #include "cap.h"
 #include "ui.h"
@@ -28,8 +24,8 @@ void StartCtrlTask(void const *argument)
     {
 #if BOARD_COMM_DEBUG
         /* S1 up: arm; middle/down: disarm and keep the board link alive. */
-        if ((rc_sensor.work_state == DEV_ONLINE) &&
-            (rc_sensor.info->s1.value == RC_SW_UP))
+        if ((rc_dev.work_state == DEV_ONLINE) &&
+            (rc_dev.info->s1.value == RC_SW_UP))
         {
             board.tx_pkt->car_pkt.car_state = 1u;
             board.tx_pkt->car_pkt.gimbal_mode = 1u;
@@ -75,3 +71,4 @@ void StartCtrlTask(void const *argument)
         osDelay(1);
     }
 }
+

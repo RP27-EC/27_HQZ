@@ -1,34 +1,16 @@
-/**
-  ******************************************************************************
-  * @file    drv_can.c
-  * @brief   CAN底层驱动
-  ******************************************************************************
-  * @attention
-  * 
-  * Copyright 2024 RobotPilots
-  ******************************************************************************
-  */
-/* Includes ------------------------------------------------------------------*/
+/* drv_can.c - CAN 驱动 */
 #include "drv_can.h"
 #include "fdcan.h"
-/* Exported variables --------------------------------------------------------*/
 /* CAN 200/1FF发送数组 */
-
-/* Private function prototypes -----------------------------------------------*/
 void CAN1_rxDataHandler(uint32_t canId, uint8_t *rxBuf);
 void CAN2_rxDataHandler(uint32_t canId, uint8_t *rxBuf);
 void CAN3_rxDataHandler(uint32_t canId, uint8_t *rxBuf);
-/* Private variables ---------------------------------------------------------*/
-/**
-  * @brief CAN1\CAN2实例
-  */
-
+/* FDCAN_HandleTypeDef */
 extern FDCAN_HandleTypeDef hfdcan3;
 
 CAN_RxFrameTypeDef hcan1RxFrame;
 CAN_RxFrameTypeDef hcan2RxFrame;
 CAN_RxFrameTypeDef hcan3RxFrame;
-/* Exported functions --------------------------------------------------------*/
 void FDCAN1_Restart(void) {
     // 禁用 FDCAN 模块
     HAL_FDCAN_DeInit(&hfdcan1);
@@ -58,11 +40,7 @@ void FDCAN2_Restart(void) {
     // 启用中断
     HAL_FDCAN_ActivateNotification(&hfdcan2, FDCAN_IT_RX_FIFO0_NEW_MESSAGE | FDCAN_IT_ERROR_WARNING, 0);
 }
-/**
-  * @brief  can接受中断，在stm32f4xx_hal_can.c内弱定义
-  * @param  
-  * @retval 
-  */
+/* FDCAN 接收中断回调 */
 void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hcan, uint32_t RxFifo0ITs)
 {
   
@@ -97,13 +75,7 @@ void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
 }
 
 
-/**
-  * @brief  CAN发送数据
-  * @param  hcan: CAN_HandleTypeDef
-  * @param  stdId: 标准ID
-  * @param  dat: 数组指针
-  * @retval HAL_StatusTypeDef
-  */
+/* 通用 CAN 发送 */
 HAL_StatusTypeDef CAN_SendData(FDCAN_HandleTypeDef *hcan, uint32_t stdId, uint8_t *dat)
 {
 	FDCAN_TxHeaderTypeDef tx_message;
@@ -127,32 +99,22 @@ HAL_StatusTypeDef CAN_SendData(FDCAN_HandleTypeDef *hcan, uint32_t stdId, uint8_
 	return HAL_OK;
 }
 /* rxData Handler [Weak] functions -------------------------------------------*/
-/**
- *  @brief  [__WEAK] 需要在Protocol Layer中实现具体的 CAN1 处理协议
- */
+/* __WEAK */
 __WEAK void CAN1_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
 }
 
-/**
- *  @brief  [__WEAK] 需要在Protocol Layer中实现具体的 CAN2 处理协议
- */
+/* __WEAK */
 __WEAK void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
 }
 
-/**
- *  @brief  [__WEAK] 需要在Protocol Layer中实现具体的 CAN2 处理协议
- */
+/* __WEAK */
 __WEAK void CAN3_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
 }
 
-/**
-  * @brief  CAN1滤波器初始化
-  * @param  
-  * @retval 
-  */
+/* CAN1 配置接收过滤器 */
 void CAN1_Filter_Init(void)
 {
 	FDCAN_FilterTypeDef sFilterConfig;
@@ -177,11 +139,7 @@ void CAN1_Filter_Init(void)
   HAL_FDCAN_Start(&hfdcan1);
 }
 
-/**
-  * @brief  CAN2滤波器初始化
-  * @param  
-  * @retval 
-  */
+/* CAN2 配置接收过滤器 */
 void CAN2_Filter_Init(void)
 {
 	FDCAN_FilterTypeDef sFilterConfig;
@@ -205,11 +163,7 @@ void CAN2_Filter_Init(void)
   HAL_FDCAN_Start(&hfdcan2);
 }
 
-/**
-  * @brief  CAN2滤波器初始化
-  * @param  
-  * @retval 
-  */
+/* CAN3 配置接收过滤器 */
 void CAN3_Filter_Init(void)
 {
 	FDCAN_FilterTypeDef sFilterConfig;
@@ -232,4 +186,7 @@ void CAN3_Filter_Init(void)
   HAL_FDCAN_ActivateNotification(&hfdcan3, FDCAN_IT_RX_FIFO1_NEW_MESSAGE, 0);
   HAL_FDCAN_Start(&hfdcan3);
 }
+
+
+
 

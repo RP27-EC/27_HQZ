@@ -1,3 +1,5 @@
+/* can_protocol.c - CAN 报文分发 */
+
 #include "can_protocol.h"
 #include "cap_protocol.h"
 #include "board_protocol.h"
@@ -5,9 +7,7 @@
 #include "cap.h"
 #include "board_comm_config.h"
 
-/**
- *  @brief  CAN1 接收数据
- */
+/* CAN1 接收分发 */
 void CAN1_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
 	switch (rxId)
@@ -45,9 +45,7 @@ void CAN1_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 	}
 }
 
-/**
- *  @brief  CAN2 接收数据
- */
+/* CAN2 接收分发 */
 void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
 	switch (rxId)
@@ -67,9 +65,7 @@ void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 }
 
 
-/**
- *  @brief  CAN3 接收数据
- */
+/* CAN3 接收分发 */
 void CAN3_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
 	switch (rxId)
@@ -81,3 +77,5 @@ void CAN3_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 			break;
 	}
 }
+
+

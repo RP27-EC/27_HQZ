@@ -1,3 +1,5 @@
+/* crc.c - CRC 校验 */
+
 #include "crc.h"
 #include "stdbool.h"
 // 裁判系统官方CRC校验
@@ -72,13 +74,7 @@ void Append_CRC16_Check_Sum(uint8_t * pchMessage,uint32_t dwLength);
 uint32_t Verify_CRC16_Check_Sum(uint8_t *pchMessage, uint32_t dwLength);
 uint16_t Get_CRC16_Check_Sum(uint8_t *pchMessage,uint32_t dwLength,uint16_t wCRC);
 
-/**
-  * @brief  get crc8 check num
-  * @param  pointer to the first address of the message
-  *         length of the message
-  *         CRC8 which Initialized
-  * @retval 
-  */
+/* CRC8 校验 */
 uint8_t Get_CRC8_Check_Num( uint8_t *pchMessage, uint16_t dwLength, uint8_t ucCRC8 )
 {
 		uint8_t ucIndex;
@@ -91,12 +87,7 @@ uint8_t Get_CRC8_Check_Num( uint8_t *pchMessage, uint16_t dwLength, uint8_t ucCR
 		return ucCRC8;
 }
 
-/**
-  * @brief  append crc8 check num
-  * @param  pointer to the first address of the message
-  *         length of the message and crc8 check num
-  * @retval 
-  */
+/* 追加校验字节 */
 void Append_CRC8_Check_Num( uint8_t *pchMessage, uint16_t dwLength)
 {
 		uint8_t ucCRC = 0;
@@ -232,3 +223,5 @@ void Append_CRC16_Check_Sum(uint8_t * pchMessage,uint32_t dwLength)
 		pchMessage[dwLength-2] = (uint8_t)(wCRC & 0x00ff);
 		pchMessage[dwLength-1] = (uint8_t)((wCRC >> 8)& 0x00ff);
 }
+
+

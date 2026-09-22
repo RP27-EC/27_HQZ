@@ -1,3 +1,5 @@
+/* vision.c - 视觉控制 */
+
 #include "vision.h"
 #include "infantry.h"
 #include "board_protocol.h"
@@ -23,10 +25,7 @@ static void Vision_Init(Vision_t* vision)
 	vision->heart_beat = Vision_Offline_Update;
 }
 
-/**
- * @brief  视觉模式状态更新
- * @note   
- */
+/* 视觉状态刷新 */
 static void Vision_Status_Update(Vision_t* vision)
 {
 	switch (infantry.flag.vision_flag)
@@ -61,10 +60,7 @@ static void Vision_Status_Update(Vision_t* vision)
 	}
 }
 
-/**
- * @brief  视觉失联检测
- * 
- */
+/* 视觉离线刷新 */
 static void Vision_Offline_Update(Vision_t* vision)
 {
 	vision->info.vision_heart = board.rx_meg->state_meg.vision_state;
@@ -79,10 +75,7 @@ static void Vision_Data_Update(Vision_t* vision)
 
 }
 
-/**
- * @brief   视觉命令发送
- * @note    更新到板间
- */
+/* 下发视觉控制量 */
 static void Vision_Cmd_Transmit(Vision_t* vision)
 {
 	switch (vision->mode)
@@ -125,3 +118,5 @@ void Vision_Work(Vision_t* vision)
 	Vision_Cmd_Transmit(vision);
 	
 }
+
+

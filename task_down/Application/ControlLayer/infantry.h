@@ -1,3 +1,5 @@
+/* infantry.h - 步兵整车控制 */
+
 #ifndef __INFANTRY_H
 #define __INFANTRY_H
 
@@ -93,5 +95,6 @@ extern Infantry_t  infantry;
 
 
 #endif
+
 
 

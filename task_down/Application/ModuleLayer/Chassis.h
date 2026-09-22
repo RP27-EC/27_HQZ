@@ -1,3 +1,5 @@
+/* Chassis.h - 搴曠洏涓绘帶 */
+
 #ifndef __CHASSIS_H
 #define __CHASSIS_H
 
@@ -83,10 +85,7 @@ typedef struct{
 
 }Chassis_Out_t;
 
-/**
- * @brief  底盘运动学逆解算，车速算轮速
- * @note   
- */
+/* struct */
 typedef struct{
 	bool  slip_flag;
 	bool  is_allot;
@@ -96,7 +95,7 @@ typedef struct{
 
 
 typedef struct Chassis_Struct_t{
-	Motor_RM_Group_t*   wheel;
+	rm_group_t*   wheel;
 	Chassis_Pid_Mode_e  pid_mode; 
 	Chassis_Mode_e      mode;
   Chassis_Target_t    target;
@@ -120,5 +119,7 @@ extern Chassis_t chassis;
 
 
 #endif
+
+
 
 

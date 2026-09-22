@@ -1,9 +1,5 @@
-/**
-  ******************************************************************************
-  * @file    connect_task.c
-  * @brief   上下板通信任务
-  ******************************************************************************
-  */
+/* connect_task.c - 连接任务 */
+
 #include "connect_task.h"
 #include "board_protocol.h"
 #include "board_comm_config.h"
@@ -42,3 +38,4 @@ void StartConnectTask(void const *argument)
         osDelay(BOARD_COMM_D1D2_PERIOD_MS);
     }
 }
+

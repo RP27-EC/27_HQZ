@@ -1,3 +1,5 @@
+/* BMI088Middleware.h - BMI088 SPI 读写适配 */
+
 #ifndef BMI088MIDDLEWARE_H
 #define BMI088MIDDLEWARE_H
 
@@ -25,3 +27,4 @@ extern uint8_t BMI088_read_write_byte(uint8_t reg);
 #endif
 
 #endif
+

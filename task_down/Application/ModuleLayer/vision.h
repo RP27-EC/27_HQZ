@@ -1,3 +1,5 @@
+/* vision.h - 视觉控制 */
+
 #ifndef __VISION_H
 #define __VISION_H
 
@@ -41,3 +43,4 @@ extern Vision_t vision;
 
 
 #endif 
+

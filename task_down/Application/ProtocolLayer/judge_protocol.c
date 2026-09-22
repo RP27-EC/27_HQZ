@@ -1,3 +1,5 @@
+/* judge_protocol.c - 裁判系统协议 */
+
 #include "judge_protocol.h"
 #include "string.h"
 #include "crc.h"
@@ -46,3 +48,4 @@ void USART1_rxDataHandler(uint8_t *rxBuf)
 {	
 	judge_receive(rxBuf);
 }
+

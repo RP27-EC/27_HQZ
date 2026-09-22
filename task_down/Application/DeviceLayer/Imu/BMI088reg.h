@@ -1,3 +1,5 @@
+/* BMI088reg.h - BMI088 寄存器地址 */
+
 #ifndef BMI088REG_H
 #define BMI088REG_H
 
@@ -178,3 +180,4 @@
 #define BMI088_GYRO_TRIG_BIST (0x1 << BMI088_GYRO_TRIG_BIST_SHFITS)
 
 #endif
+

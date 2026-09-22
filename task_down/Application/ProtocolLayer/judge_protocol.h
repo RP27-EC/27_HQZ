@@ -1,16 +1,18 @@
+/* judge_protocol.h - è£åˆ¤ç³»ç»Ÿåè®® */
+
 
 #ifndef __JUDGE_POTOCOL_H
 #define __JUDGE_POTOCOL_H
 
 #include "stm32h7xx_hal.h"
 
-/* Ö¡Í· */
+
 typedef struct 
 {
-	uint8_t SOF;  //Êı¾İÖ¡ÆğÊ¼×Ö½Ú£¬¹Ì¶¨ÖµÎª 0xA5
-	uint16_t data_length;  //Êı¾İÖ¡ÖĞ data µÄ³¤¶È
-	uint8_t seq;  //°üĞòºÅ
-	uint8_t CRC8;  //Ö¡Í· CRC8 Ğ£Ñé
+	uint8_t SOF;
+	uint16_t data_length;  // æ•°æ®é•¿åº¦
+	uint8_t seq;  // åºåˆ—å·
+	uint8_t CRC8;
 }judge_frame_header_t;
 
 typedef struct 
@@ -26,3 +28,4 @@ void judge_receive(uint8_t *rxBuf);
 
 
 #endif
+

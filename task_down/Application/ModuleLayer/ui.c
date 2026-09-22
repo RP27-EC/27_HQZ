@@ -1,3 +1,5 @@
+/* ui.c - UI 显示控制 */
+
 #include "ui.h"
 #include "priority_ui.h"
 #include "infantry.h"
@@ -1103,17 +1105,7 @@ void Ui_Info_Update(void)
 }
 
 
-/**
- * @brief 把某点绕某点旋转一定角度
- * 
- * @param x 存储旋转后x的地址
- * @param y 存储旋转后y的地址
- * @param raw_x 旋转前x的值
- * @param raw_y 旋转后y的值
- * @param mid_x 旋转原点x
- * @param mid_y 旋转原点y
- * @param angle 旋转的角度rad
- */
+/* 旋转图形顶点 */
 void rotate_point(__packed uint16_t *x, __packed uint16_t *y, uint16_t raw_x, uint16_t raw_y, float mid_x, float mid_y, float angle) 
 {
   float s = sin(angle);
@@ -1228,3 +1220,5 @@ static void Radar_Enemy_Status_Update(int16_t coin,int16_t* robot_ammo,uint8_t* 
 {
 	
 }
+
+

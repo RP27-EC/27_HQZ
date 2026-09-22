@@ -1,3 +1,5 @@
+/* chassis_spin.c - 底盘小陀螺 */
+
 #include "chassis_spin.h"
 
 #include <math.h>
@@ -59,10 +61,10 @@ void Chassis_Spin_UpdateMode(void)
     uint8_t selected = 0u;
 
 #if CHASSIS_SPIN_ENABLE
-    if ((rc_sensor.work_state == DEV_ONLINE) &&
-        (rc_sensor.info != NULL) &&
-        (rc_sensor.info->s1.value == RC_SW_UP) &&
-        (rc_sensor.info->s2.value == RC_SW_DOWN))
+    if ((rc_dev.work_state == DEV_ONLINE) &&
+        (rc_dev.info != NULL) &&
+        (rc_dev.info->s1.value == RC_SW_UP) &&
+        (rc_dev.info->s2.value == RC_SW_DOWN))
     {
         selected = 1u;
     }
@@ -111,7 +113,7 @@ void Chassis_Spin_Update(chassis_cmd_t *cmd)
         spin_last_selected = 1u;
     }
 
-    axis = Chassis_Spin_AxisValue(rc_sensor.info->ch0);
+    axis = Chassis_Spin_AxisValue(rc_dev.info->ch0);
     target_wz = CHASSIS_SPIN_DIRECTION *
                 (CHASSIS_SPIN_BASE_WZ + (axis * CHASSIS_SPIN_TRIM_WZ));
     target_wz = constrain(target_wz,
@@ -139,3 +141,4 @@ uint8_t Chassis_Spin_IsActive(void)
 {
     return chassis_spin.active;
 }
+

@@ -1,34 +1,4 @@
-/**
-
- ******************************************************************************
-
- * @file    QuaternionEKF.c
-
- * @author  Wang Hongxi
-
- * @version V1.2.0
-
- * @date    2022/3/8
-
- * @brief   attitude update with gyro bias estimate and chi-square test
-
- ******************************************************************************
-
- * @attention
-
- * 1st order LPF transfer function:
-
- *     1
-
- *  ¡ª¡ª¡ª¡ª¡ª¡ª¡ª
-
- *  as + 1
-
- *
-
- ******************************************************************************
-
- */
+/* bmi_EKF.c - å››å…ƒæ•° EKF å§¿æ€è§£ç®— */
 
 #include "bmi_EKF.h"
 
@@ -38,45 +8,22 @@
 
 
 
-/* ÖØÁ¦¼ÓËÙ¶È */
+
 
 #define GRAVITY_EARTH  (9.80665f)
 
-/* ¾ØÕóÊµÀı¶¨Òå */
-
-arm_matrix_instance_f32 EKFTrans;
-
-arm_matrix_instance_f32 EKFSrc;
-
-arm_matrix_instance_f32 EKFDst;
 
 
+arm_matrix_instance_f32 ekf_trans;
 
-/**
+arm_matrix_instance_f32 ekf_src;
 
- * @brief   ×ø±ê±ä»»²ÉÓÃZ-Y-XÅ·À­½ÇÃèÊö£¬¼´´ÓÍÓÂİÒÇ×ø±êÏµÏòÔÆÌ¨×ø±êÏµ±ä»»ÖĞ£¬
+arm_matrix_instance_f32 ekf_dst;
 
- *          ×ø±êÏµ°´ÕÕÈÆÍÓÂİÒÇZÖá¡¢YÖá¡¢XÖáµÄË³ĞòĞı×ª
 
- *          Ã¿Ò»´ÎĞı×ªµÄ²Î¿¼×ø±êÏµÎªµ±Ç°ÍÓÂİÒÇ×ø±êÏµ  
 
- *  @param
-
- *  @arz
-
- *      ÍÓÂİÒÇxÖáÓërollÖáÖ®¼äµÄ¼Ğ½Ç£¬µ¥Î»Îª¶È
-
- *  @ary
-
- *      ÍÓÂİÒÇxÖáÓëyawÖáÖ®¼äµÄ¼Ğ½Ç£¬µ¥Î»Îª¶È
-
- *  @arx
-
- *      ÍÓÂİÒÇyÖáÓëyawÖáÖ®¼äµÄ¼Ğ½Ç£¬µ¥Î»Îª¶È
-
- */
-
-gimbal_transform_t EKFgim_trans = {
+/* imu_frame_t */
+imu_frame_t ekf_imu_frame = {
 
     .arz = 180.0f,
 
@@ -90,11 +37,11 @@ gimbal_transform_t EKFgim_trans = {
 
 
 
-QEKF_INS_t QEKF_INS;
+ekf_att_t g_ekf;
 
 
 
-const float IMU_QuaternionEKF_F[36] = {1, 0, 0, 0, 0, 0,
+const float ekf_F_mat[36] = {1, 0, 0, 0, 0, 0,
 
                                        0, 1, 0, 0, 0, 0,
 
@@ -106,7 +53,7 @@ const float IMU_QuaternionEKF_F[36] = {1, 0, 0, 0, 0, 0,
 
                                        0, 0, 0, 0, 0, 1};
 
-float IMU_QuaternionEKF_P[36] = {100000, 0.1, 0.1, 0.1, 0.1, 0.1,
+float ekf_P_mat[36] = {100000, 0.1, 0.1, 0.1, 0.1, 0.1,
 
                                  0.1, 100000, 0.1, 0.1, 0.1, 0.1,
 
@@ -118,59 +65,46 @@ float IMU_QuaternionEKF_P[36] = {100000, 0.1, 0.1, 0.1, 0.1, 0.1,
 
                                  0.1, 0.1, 0.1, 0.1, 0.1, 100};
 
-float IMU_QuaternionEKF_K[18];
+float ekf_K_mat[18];
 
-float IMU_QuaternionEKF_H[18];
+float ekf_H_mat[18];
 
 
 
 static float invSqrt(float x);
 
-static void IMU_QuaternionEKF_Observe(KalmanFilter_t *kf);
+static void ekf_observe(KalmanFilter_t *kf);
 
-static void IMU_QuaternionEKF_F_Linearization_P_Fading(KalmanFilter_t *kf);
+static void ekf_linearize(KalmanFilter_t *kf);
 
-static void IMU_QuaternionEKF_SetH(KalmanFilter_t *kf);
+static void ekf_set_H(KalmanFilter_t *kf);
 
-static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf);
+static void ekf_update_xhat(KalmanFilter_t *kf);
 
 
 
-/**
-
- * @brief »ùÓÚÀ©Õ¹¿¨¶ûÂüÂË²¨µÄ×ËÌ¬½âËã³õÊ¼»¯
-
- * @param[in] process_noise1 ÉèÖÃËÄÔªÊıµÄ¹ı³ÌÔëÉùĞ­·½²î¾ØÕó£¬Ô½Ğ¡½âËãÊı¾İÔ½Æ½»¬£¬Ô½´óÏµÍ³¶Ô¿ìËÙ±ä»¯µÄ·´Ó¦Ô½¿ì   10
-
- * @param[in] process_noise2 ÉèÖÃÍÓÂİÒÇÁãÆ«¹À¼Æ¹ı³ÌÔëÉùĞ­·½²î¾ØÕó     0.001
-
- * @param[in] measure_noise  ÉèÖÃ¼ÓËÙ¶È¼Æ²âÁ¿ÔëÉùĞ­·½²î¾ØÕó£¬Ô½Ğ¡¶Ô¼ÓËÙ¶ÈÔ½ĞÅÈÎ£¬ÏµÍ³¶Ô¿ìËÙ±ä»¯µÄ·´Ó¦Ô½¿ì       1000000
-
- * @param[in] lambda         ÉèÖÃ½¥ÏûÒò×Ó·ÀÖ¹ÍÓÂİÒÇÁãÆ«¹À¼ÆĞ­·½²î¹ı¶ÈÊÕÁ²         0.9996
-
- */
-
-void IMU_QuaternionEKF_Init(float* init_quaternion,float process_noise1, float process_noise2, float measure_noise, float lambda)
+/* åˆå§‹åŒ– EKF å‚æ•°ä¸çŸ©é˜µ */
+void ekf_init(float* init_quaternion,float process_noise1, float process_noise2, float measure_noise, float lambda)
 
 {
 
 	  
 
-    QEKF_INS.Initialized = 1;
+    g_ekf.Initialized = 1;
 
-    QEKF_INS.Q1 = process_noise1;
+    g_ekf.Q1 = process_noise1;
 
-    QEKF_INS.Q2 = process_noise2;
+    g_ekf.Q2 = process_noise2;
 
-    QEKF_INS.R = measure_noise;
+    g_ekf.R = measure_noise;
 
-    QEKF_INS.ChiSquareTestThreshold = 1e-8;
+    g_ekf.ChiSquareTestThreshold = 1e-8;
 
-    QEKF_INS.ConvergeFlag = 0;
+    g_ekf.ConvergeFlag = 0;
 
-    QEKF_INS.ErrorCount = 0;
+    g_ekf.ErrorCount = 0;
 
-    QEKF_INS.UpdateCount = 0;
+    g_ekf.UpdateCount = 0;
 
     if (lambda > 1)
 
@@ -180,75 +114,64 @@ void IMU_QuaternionEKF_Init(float* init_quaternion,float process_noise1, float p
 
     }
 
-    QEKF_INS.lambda = lambda;
+    g_ekf.lambda = lambda;
 
 
 
-    // ³õÊ¼»¯¾ØÕóÎ¬¶ÈĞÅÏ¢
-
-    Kalman_Filter_Init(&QEKF_INS.IMU_QuaternionEKF, 6, 0, 3);
-
-    Matrix_Init(&QEKF_INS.ChiSquare, 1, 1, (float *)QEKF_INS.ChiSquare_Data);
 
 
+    kf_init(&g_ekf.IMU_QuaternionEKF, 6, 0, 3);
 
-    // ×ËÌ¬³õÊ¼»¯
+    mat_init(&g_ekf.ChiSquare, 1, 1, (float *)g_ekf.ChiSquare_Data);
+
+
+
+
 
     for(int i = 0; i < 4; i++)
 
     {
 
-        QEKF_INS.IMU_QuaternionEKF.xhat_data[i] = init_quaternion[i];
+        g_ekf.IMU_QuaternionEKF.xhat_data[i] = init_quaternion[i];
 
     }
 
 
 
-    // ×Ô¶¨Òåº¯Êı³õÊ¼»¯,ÓÃÓÚÀ©Õ¹»òÔö¼ÓkfµÄ»ù´¡¹¦ÄÜ
-
-    QEKF_INS.IMU_QuaternionEKF.User_Func0_f = IMU_QuaternionEKF_Observe;
-
-    QEKF_INS.IMU_QuaternionEKF.User_Func1_f = IMU_QuaternionEKF_F_Linearization_P_Fading;
-
-    QEKF_INS.IMU_QuaternionEKF.User_Func2_f = IMU_QuaternionEKF_SetH;
-
-    QEKF_INS.IMU_QuaternionEKF.User_Func3_f = IMU_QuaternionEKF_xhatUpdate;
 
 
+    g_ekf.IMU_QuaternionEKF.User_Func0_f = ekf_observe;
 
-    // Éè¶¨±êÖ¾Î»,ÓÃ×Ô¶¨º¯ÊıÌæ»»kf±ê×¼²½ÖèÖĞµÄSetK(¼ÆËãÔöÒæ)ÒÔ¼°xhatupdate(ºóÑé¹À¼Æ/ÈÚºÏ)
+    g_ekf.IMU_QuaternionEKF.User_Func1_f = ekf_linearize;
 
-    QEKF_INS.IMU_QuaternionEKF.SkipEq3 = TRUE;
+    g_ekf.IMU_QuaternionEKF.User_Func2_f = ekf_set_H;
 
-    QEKF_INS.IMU_QuaternionEKF.SkipEq4 = TRUE;
+    g_ekf.IMU_QuaternionEKF.User_Func3_f = ekf_update_xhat;
 
 
 
-    memcpy(QEKF_INS.IMU_QuaternionEKF.F_data, IMU_QuaternionEKF_F, sizeof(IMU_QuaternionEKF_F));
 
-    memcpy(QEKF_INS.IMU_QuaternionEKF.P_data, IMU_QuaternionEKF_P, sizeof(IMU_QuaternionEKF_P));
+
+    g_ekf.IMU_QuaternionEKF.SkipEq3 = TRUE;
+
+    g_ekf.IMU_QuaternionEKF.SkipEq4 = TRUE;
+
+
+
+    memcpy(g_ekf.IMU_QuaternionEKF.F_data, ekf_F_mat, sizeof(ekf_F_mat));
+
+    memcpy(g_ekf.IMU_QuaternionEKF.P_data, ekf_P_mat, sizeof(ekf_P_mat));
 
 }
 
 
 
-/**
-
- * @brief »ùÓÚÀ©Õ¹¿¨¶ûÂüÂË²¨¶ÔËÄÔªÊı½øĞĞ¸üĞÂ
-
- * @param[in]       ÍÓÂİÒÇÊı¾İ gx gy gz in rad/s
-
- * @param[in]       ¼ÓËÙ¶È¼ÆÊı¾İ ax ay az in m/s
-
- * @param[in]       Êı¾İ¸üĞÂÖÜÆÚ in s
-
- */
-
-void IMU_QuaternionEKF_Update(float gx, float gy, float gz, float ax, float ay, float az, float dt)
+/* EKF ä¸€æ­¥é€’æ¨ */
+void ekf_update(float gx, float gy, float gz, float ax, float ay, float az, float dt)
 
 {
 
-    // 0.5(Ohm-Ohm^bias)*deltaT,ÓÃÓÚ¸üĞÂ¹¤×÷µã´¦µÄ×´Ì¬×ªÒÆF¾ØÕó
+
 
     static float halfgxdt, halfgydt, halfgzdt;
 
@@ -272,109 +195,109 @@ void IMU_QuaternionEKF_Update(float gx, float gy, float gz, float ax, float ay, 
 
     */
 
-    QEKF_INS.dt = dt;
+    g_ekf.dt = dt;
 
 
 
-    QEKF_INS.Gyro[0] = gx - QEKF_INS.GyroBias[0];
+    g_ekf.Gyro[0] = gx - g_ekf.GyroBias[0];
 
-    QEKF_INS.Gyro[1] = gy - QEKF_INS.GyroBias[1];
+    g_ekf.Gyro[1] = gy - g_ekf.GyroBias[1];
 
-    QEKF_INS.Gyro[2] = gz - QEKF_INS.GyroBias[2];
+    g_ekf.Gyro[2] = gz - g_ekf.GyroBias[2];
 
 
 
     // set F
 
-    halfgxdt = 0.5f * QEKF_INS.Gyro[0] * dt;
+    halfgxdt = 0.5f * g_ekf.Gyro[0] * dt;
 
-    halfgydt = 0.5f * QEKF_INS.Gyro[1] * dt;
+    halfgydt = 0.5f * g_ekf.Gyro[1] * dt;
 
-    halfgzdt = 0.5f * QEKF_INS.Gyro[2] * dt;
-
-
-
-    // ´Ë²¿·ÖÉè¶¨×´Ì¬×ªÒÆ¾ØÕóFµÄ×óÉÏ½Ç²¿·Ö 4x4×Ó¾ØÕó,¼´0.5(Ohm-Ohm^bias)*deltaT,ÓÒÏÂ½ÇÓĞÒ»¸ö2x2µ¥Î»ÕóÒÑ¾­³õÊ¼»¯ºÃÁË
-
-    // ×¢ÒâÔÚpredict²½FµÄÓÒÉÏ½ÇÊÇ4x2µÄÁã¾ØÕó,Òò´ËÃ¿´ÎpredictµÄÊ±ºò¶¼»áµ÷ÓÃmemcpyÓÃµ¥Î»Õó¸²¸ÇÇ°Ò»ÂÖÏßĞÔ»¯ºóµÄ¾ØÕó
-
-    memcpy(QEKF_INS.IMU_QuaternionEKF.F_data, IMU_QuaternionEKF_F, sizeof(IMU_QuaternionEKF_F));
+    halfgzdt = 0.5f * g_ekf.Gyro[2] * dt;
 
 
 
-    QEKF_INS.IMU_QuaternionEKF.F_data[1] = -halfgxdt;
-
-    QEKF_INS.IMU_QuaternionEKF.F_data[2] = -halfgydt;
-
-    QEKF_INS.IMU_QuaternionEKF.F_data[3] = -halfgzdt;
 
 
 
-    QEKF_INS.IMU_QuaternionEKF.F_data[6] = halfgxdt;
 
-    QEKF_INS.IMU_QuaternionEKF.F_data[8] = halfgzdt;
-
-    QEKF_INS.IMU_QuaternionEKF.F_data[9] = -halfgydt;
+    memcpy(g_ekf.IMU_QuaternionEKF.F_data, ekf_F_mat, sizeof(ekf_F_mat));
 
 
 
-    QEKF_INS.IMU_QuaternionEKF.F_data[12] = halfgydt;
+    g_ekf.IMU_QuaternionEKF.F_data[1] = -halfgxdt;
 
-    QEKF_INS.IMU_QuaternionEKF.F_data[13] = -halfgzdt;
+    g_ekf.IMU_QuaternionEKF.F_data[2] = -halfgydt;
 
-    QEKF_INS.IMU_QuaternionEKF.F_data[15] = halfgxdt;
-
-
-
-    QEKF_INS.IMU_QuaternionEKF.F_data[18] = halfgzdt;
-
-    QEKF_INS.IMU_QuaternionEKF.F_data[19] = halfgydt;
-
-    QEKF_INS.IMU_QuaternionEKF.F_data[20] = -halfgxdt;
+    g_ekf.IMU_QuaternionEKF.F_data[3] = -halfgzdt;
 
 
 
-		QEKF_INS.Accel[0] = ax;
+    g_ekf.IMU_QuaternionEKF.F_data[6] = halfgxdt;
 
-		QEKF_INS.Accel[1] = ay;
+    g_ekf.IMU_QuaternionEKF.F_data[8] = halfgzdt;
 
-		QEKF_INS.Accel[2] = az;
+    g_ekf.IMU_QuaternionEKF.F_data[9] = -halfgydt;
 
-    // set z,µ¥Î»»¯ÖØÁ¦¼ÓËÙ¶ÈÏòÁ¿
 
-    accelInvNorm = invSqrt(QEKF_INS.Accel[0] * QEKF_INS.Accel[0] + QEKF_INS.Accel[1] * QEKF_INS.Accel[1] + QEKF_INS.Accel[2] * QEKF_INS.Accel[2]);
+
+    g_ekf.IMU_QuaternionEKF.F_data[12] = halfgydt;
+
+    g_ekf.IMU_QuaternionEKF.F_data[13] = -halfgzdt;
+
+    g_ekf.IMU_QuaternionEKF.F_data[15] = halfgxdt;
+
+
+
+    g_ekf.IMU_QuaternionEKF.F_data[18] = halfgzdt;
+
+    g_ekf.IMU_QuaternionEKF.F_data[19] = halfgydt;
+
+    g_ekf.IMU_QuaternionEKF.F_data[20] = -halfgxdt;
+
+
+
+		g_ekf.Accel[0] = ax;
+
+		g_ekf.Accel[1] = ay;
+
+		g_ekf.Accel[2] = az;
+
+
+
+    accelInvNorm = invSqrt(g_ekf.Accel[0] * g_ekf.Accel[0] + g_ekf.Accel[1] * g_ekf.Accel[1] + g_ekf.Accel[2] * g_ekf.Accel[2]);
 
     for (uint8_t i = 0; i < 3; ++i)
 
     {
 
-        QEKF_INS.IMU_QuaternionEKF.MeasuredVector[i] = QEKF_INS.Accel[i] * accelInvNorm; // ÓÃ¼ÓËÙ¶ÈÏòÁ¿¸üĞÂÁ¿²âÖµ
+        g_ekf.IMU_QuaternionEKF.MeasuredVector[i] = g_ekf.Accel[i] * accelInvNorm;
 
     }
 
 
 
-    // ¼ÆËãÍÓÂİÒÇÊı¾İºÍ¼ÓËÙ¶ÈÊı¾İµÄ¹éÒ»»¯Öµ£¬ÓÃÓÚÅĞ¶Ïµ±Ç°ÍÓÂİÒÇµÄÔË¶¯×´Ì¬
-
-    QEKF_INS.gyro_norm = 1.0f / invSqrt(QEKF_INS.Gyro[0] * QEKF_INS.Gyro[0] +
-
-                                        QEKF_INS.Gyro[1] * QEKF_INS.Gyro[1] +
-
-                                        QEKF_INS.Gyro[2] * QEKF_INS.Gyro[2]);
-
-    QEKF_INS.accl_norm = 1.0f / accelInvNorm;
 
 
+    g_ekf.gyro_norm = 1.0f / invSqrt(g_ekf.Gyro[0] * g_ekf.Gyro[0] +
 
-    // Èç¹û½ÇËÙ¶ÈĞ¡ÓÚãĞÖµÇÒ¼ÓËÙ¶È´¦ÓÚÉè¶¨·¶Î§ÄÚ,ÈÏÎªÔË¶¯ÎÈ¶¨,¼ÓËÙ¶È¿ÉÒÔÓÃÓÚĞŞÕı½ÇËÙ¶È
+                                        g_ekf.Gyro[1] * g_ekf.Gyro[1] +
 
-    // ÉÔºóÔÚ×îºóµÄ×ËÌ¬¸üĞÂ²¿·Ö»áÀûÓÃStableFlagÀ´È·¶¨
+                                        g_ekf.Gyro[2] * g_ekf.Gyro[2]);
 
-    if (QEKF_INS.gyro_norm < 2.0f && QEKF_INS.accl_norm > 9.8f - 0.5f && QEKF_INS.accl_norm < 9.8f + 0.5f)
+    g_ekf.accl_norm = 1.0f / accelInvNorm;
+
+
+
+
+
+
+
+    if (g_ekf.gyro_norm < 2.0f && g_ekf.accl_norm > 9.8f - 0.5f && g_ekf.accl_norm < 9.8f + 0.5f)
 
     {
 
-        QEKF_INS.StableFlag = 1;
+        g_ekf.StableFlag = 1;
 
     }
 
@@ -382,109 +305,98 @@ void IMU_QuaternionEKF_Update(float gx, float gy, float gz, float ax, float ay, 
 
     {
 
-        QEKF_INS.StableFlag = 0;
+        g_ekf.StableFlag = 0;
 
     }
 
 
 
-    // set Q R,¹ı³ÌÔëÉùºÍ¹Û²âÔëÉù¾ØÕó
-
-    QEKF_INS.IMU_QuaternionEKF.Q_data[0] = QEKF_INS.Q1 * QEKF_INS.dt;
-
-    QEKF_INS.IMU_QuaternionEKF.Q_data[7] = QEKF_INS.Q1 * QEKF_INS.dt;
-
-    QEKF_INS.IMU_QuaternionEKF.Q_data[14] = QEKF_INS.Q1 * QEKF_INS.dt;
-
-    QEKF_INS.IMU_QuaternionEKF.Q_data[21] = QEKF_INS.Q1 * QEKF_INS.dt;
-
-    QEKF_INS.IMU_QuaternionEKF.Q_data[28] = QEKF_INS.Q2 * QEKF_INS.dt;
-
-    QEKF_INS.IMU_QuaternionEKF.Q_data[35] = QEKF_INS.Q2 * QEKF_INS.dt;
-
-    QEKF_INS.IMU_QuaternionEKF.R_data[0] = QEKF_INS.R;
-
-    QEKF_INS.IMU_QuaternionEKF.R_data[4] = QEKF_INS.R;
-
-    QEKF_INS.IMU_QuaternionEKF.R_data[8] = QEKF_INS.R;
 
 
+    g_ekf.IMU_QuaternionEKF.Q_data[0] = g_ekf.Q1 * g_ekf.dt;
 
-    // µ÷ÓÃkalman_filter.c·â×°ºÃµÄº¯Êı,×¢Òâ¼¸¸öUser_Funcx_fµÄµ÷ÓÃ
+    g_ekf.IMU_QuaternionEKF.Q_data[7] = g_ekf.Q1 * g_ekf.dt;
 
-    Kalman_Filter_Update(&QEKF_INS.IMU_QuaternionEKF);
+    g_ekf.IMU_QuaternionEKF.Q_data[14] = g_ekf.Q1 * g_ekf.dt;
+
+    g_ekf.IMU_QuaternionEKF.Q_data[21] = g_ekf.Q1 * g_ekf.dt;
+
+    g_ekf.IMU_QuaternionEKF.Q_data[28] = g_ekf.Q2 * g_ekf.dt;
+
+    g_ekf.IMU_QuaternionEKF.Q_data[35] = g_ekf.Q2 * g_ekf.dt;
+
+    g_ekf.IMU_QuaternionEKF.R_data[0] = g_ekf.R;
+
+    g_ekf.IMU_QuaternionEKF.R_data[4] = g_ekf.R;
+
+    g_ekf.IMU_QuaternionEKF.R_data[8] = g_ekf.R;
 
 
 
-    // »ñÈ¡ÈÚºÏºóµÄÊı¾İ,°üÀ¨ËÄÔªÊıºÍxyÁãÆ®Öµ
 
-    QEKF_INS.q[0] = QEKF_INS.IMU_QuaternionEKF.FilteredValue[0];
 
-    QEKF_INS.q[1] = QEKF_INS.IMU_QuaternionEKF.FilteredValue[1];
-
-    QEKF_INS.q[2] = QEKF_INS.IMU_QuaternionEKF.FilteredValue[2];
-
-    QEKF_INS.q[3] = QEKF_INS.IMU_QuaternionEKF.FilteredValue[3];
-
-    QEKF_INS.GyroBias[0] = QEKF_INS.IMU_QuaternionEKF.FilteredValue[4];
-
-    QEKF_INS.GyroBias[1] = QEKF_INS.IMU_QuaternionEKF.FilteredValue[5];
-
-    QEKF_INS.GyroBias[2] = 0; // ´ó²¿·ÖÊ±ºòzÖáÍ¨Ìì,ÎŞ·¨¹Û²âyawµÄÆ¯ÒÆ
+    kf_update(&g_ekf.IMU_QuaternionEKF);
 
 
 
-    // ÀûÓÃËÄÔªÊı·´½âÅ·À­½Ç
-
-    QEKF_INS.Yaw = atan2f(2.0f * (QEKF_INS.q[0] * QEKF_INS.q[3] + QEKF_INS.q[1] * QEKF_INS.q[2]), 2.0f * (QEKF_INS.q[0] * QEKF_INS.q[0] + QEKF_INS.q[1] * QEKF_INS.q[1]) - 1.0f) * 57.295779513f;
-
-    QEKF_INS.Roll = atan2f(2.0f * (QEKF_INS.q[0] * QEKF_INS.q[1] + QEKF_INS.q[2] * QEKF_INS.q[3]), 2.0f * (QEKF_INS.q[0] * QEKF_INS.q[0] + QEKF_INS.q[3] * QEKF_INS.q[3]) - 1.0f) * 57.295779513f;
-
-    QEKF_INS.Pitch = asinf(-2.0f * (QEKF_INS.q[1] * QEKF_INS.q[3] - QEKF_INS.q[0] * QEKF_INS.q[2])) * 57.295779513f;
 
 
+    g_ekf.q[0] = g_ekf.IMU_QuaternionEKF.FilteredValue[0];
 
-    // get Yaw total, yawÊı¾İ¿ÉÄÜ»á³¬¹ı360,´¦ÀíÒ»ÏÂ·½±ãÆäËû¹¦ÄÜÊ¹ÓÃ(ÈçĞ¡ÍÓÂİ)
+    g_ekf.q[1] = g_ekf.IMU_QuaternionEKF.FilteredValue[1];
 
-    if (QEKF_INS.Yaw - QEKF_INS.YawAngleLast > 180.0f)
+    g_ekf.q[2] = g_ekf.IMU_QuaternionEKF.FilteredValue[2];
+
+    g_ekf.q[3] = g_ekf.IMU_QuaternionEKF.FilteredValue[3];
+
+    g_ekf.GyroBias[0] = g_ekf.IMU_QuaternionEKF.FilteredValue[4];
+
+    g_ekf.GyroBias[1] = g_ekf.IMU_QuaternionEKF.FilteredValue[5];
+
+    g_ekf.GyroBias[2] = 0;  // é™€èºBias
+
+
+
+
+
+    g_ekf.Yaw = atan2f(2.0f * (g_ekf.q[0] * g_ekf.q[3] + g_ekf.q[1] * g_ekf.q[2]), 2.0f * (g_ekf.q[0] * g_ekf.q[0] + g_ekf.q[1] * g_ekf.q[1]) - 1.0f) * 57.295779513f;
+
+    g_ekf.Roll = atan2f(2.0f * (g_ekf.q[0] * g_ekf.q[1] + g_ekf.q[2] * g_ekf.q[3]), 2.0f * (g_ekf.q[0] * g_ekf.q[0] + g_ekf.q[3] * g_ekf.q[3]) - 1.0f) * 57.295779513f;
+
+    g_ekf.Pitch = asinf(-2.0f * (g_ekf.q[1] * g_ekf.q[3] - g_ekf.q[0] * g_ekf.q[2])) * 57.295779513f;
+
+
+
+
+
+    if (g_ekf.Yaw - g_ekf.YawAngleLast > 180.0f)
 
     {
 
-        QEKF_INS.YawRoundCount--;
+        g_ekf.YawRoundCount--;
 
     }
 
-    else if (QEKF_INS.Yaw - QEKF_INS.YawAngleLast < -180.0f)
+    else if (g_ekf.Yaw - g_ekf.YawAngleLast < -180.0f)
 
     {
 
-        QEKF_INS.YawRoundCount++;
+        g_ekf.YawRoundCount++;
 
     }
 
-    QEKF_INS.YawTotalAngle = 360.0f * QEKF_INS.YawRoundCount + QEKF_INS.Yaw;
+    g_ekf.YawTotalAngle = 360.0f * g_ekf.YawRoundCount + g_ekf.Yaw;
 
-    QEKF_INS.YawAngleLast = QEKF_INS.Yaw;
+    g_ekf.YawAngleLast = g_ekf.Yaw;
 
-    QEKF_INS.UpdateCount++; // ³õÊ¼»¯µÍÍ¨ÂË²¨ÓÃ,¼ÆÊı²âÊÔÓÃ
+    g_ekf.UpdateCount++;
 
 }
 
 
 
-/**
-
- * @brief ÓÃÓÚ¸üĞÂÏßĞÔ»¯ºóµÄ×´Ì¬×ªÒÆ¾ØÕóFÓÒÉÏ½ÇµÄÒ»¸ö4x2·Ö¿é¾ØÕó,ÉÔºóÓÃÓÚĞ­·½²î¾ØÕóPµÄ¸üĞÂ;
-
- *        ²¢¶ÔÁãÆ¯µÄ·½²î½øĞĞÏŞÖÆ,·ÀÖ¹¹ı¶ÈÊÕÁ²²¢ÏŞ·ù·ÀÖ¹·¢É¢
-
- *
-
- * @param kf
-
- */
-
-static void IMU_QuaternionEKF_F_Linearization_P_Fading(KalmanFilter_t *kf)
+/* çŠ¶æ€è½¬ç§»çº¿æ€§åŒ–ä¸æ¸æ¶ˆ */
+static void ekf_linearize(KalmanFilter_t *kf)
 
 {
 
@@ -504,7 +416,7 @@ static void IMU_QuaternionEKF_F_Linearization_P_Fading(KalmanFilter_t *kf)
 
 
 
-    // quaternion normalize½«ËÄÔªÊı¹æ·¶»¯Îªµ¥Î»ËÄÔªÊı
+
 
     qInvNorm = invSqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
 
@@ -534,39 +446,39 @@ static void IMU_QuaternionEKF_F_Linearization_P_Fading(KalmanFilter_t *kf)
 
     // set F
 
-    kf->F_data[4] = q1 * QEKF_INS.dt / 2;
+    kf->F_data[4] = q1 * g_ekf.dt / 2;
 
-    kf->F_data[5] = q2 * QEKF_INS.dt / 2;
-
-
-
-    kf->F_data[10] = -q0 * QEKF_INS.dt / 2;
-
-    kf->F_data[11] = q3 * QEKF_INS.dt / 2;
+    kf->F_data[5] = q2 * g_ekf.dt / 2;
 
 
 
-    kf->F_data[16] = -q3 * QEKF_INS.dt / 2;
+    kf->F_data[10] = -q0 * g_ekf.dt / 2;
 
-    kf->F_data[17] = -q0 * QEKF_INS.dt / 2;
-
-
-
-    kf->F_data[22] = q2 * QEKF_INS.dt / 2;
-
-    kf->F_data[23] = -q1 * QEKF_INS.dt / 2;
+    kf->F_data[11] = q3 * g_ekf.dt / 2;
 
 
 
-    // fading filter,·ÀÖ¹ÁãÆ®²ÎÊı¹ı¶ÈÊÕÁ²
+    kf->F_data[16] = -q3 * g_ekf.dt / 2;
 
-    kf->P_data[28] /= QEKF_INS.lambda;
-
-    kf->P_data[35] /= QEKF_INS.lambda;
+    kf->F_data[17] = -q0 * g_ekf.dt / 2;
 
 
 
-    // ÏŞ·ù,·ÀÖ¹·¢É¢
+    kf->F_data[22] = q2 * g_ekf.dt / 2;
+
+    kf->F_data[23] = -q1 * g_ekf.dt / 2;
+
+
+
+
+
+    kf->P_data[28] /= g_ekf.lambda;
+
+    kf->P_data[35] /= g_ekf.lambda;
+
+
+
+
 
     if (kf->P_data[28] > 10000)
 
@@ -588,17 +500,8 @@ static void IMU_QuaternionEKF_F_Linearization_P_Fading(KalmanFilter_t *kf)
 
 
 
-/**
-
- * @brief ÔÚ¹¤×÷µã´¦¼ÆËã¹Û²âº¯Êıh(x)µÄJacobi¾ØÕóH
-
- *
-
- * @param kf
-
- */
-
-static void IMU_QuaternionEKF_SetH(KalmanFilter_t *kf)
+/* æ„é€ é‡æµ‹çŸ©é˜µ H */
+static void ekf_set_H(KalmanFilter_t *kf)
 
 {
 
@@ -664,21 +567,8 @@ static void IMU_QuaternionEKF_SetH(KalmanFilter_t *kf)
 
 
 
-/**
-
- * @brief ÀûÓÃ¹Û²âÖµºÍÏÈÑé¹À¼ÆµÃµ½×îÓÅµÄºóÑé¹À¼Æ
-
- *        ¼ÓÈëÁË¿¨·½¼ìÑéÒÔÅĞ¶ÏÈÚºÏ¼ÓËÙ¶ÈµÄÌõ¼şÊÇ·ñÂú×ã
-
- *        Í¬Ê±ÒıÈë·¢É¢±£»¤±£Ö¤¶ñÁÓ¹¤¿öÏÂµÄ±ØÒªÁ¿²â¸üĞÂ
-
- *
-
- * @param kf
-
- */
-
-static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
+/* çŠ¶æ€æ›´æ–° */
+static void ekf_update_xhat(KalmanFilter_t *kf)
 
 {
 
@@ -686,27 +576,27 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
 
 
-    kf->MatStatus = Matrix_Transpose(&kf->H, &kf->HT); // z|x => x|z
+    kf->MatStatus = mat_trans(&kf->H, &kf->HT); // z|x => x|z
 
     kf->temp_matrix.numRows = kf->H.numRows;
 
     kf->temp_matrix.numCols = kf->Pminus.numCols;
 
-    kf->MatStatus = Matrix_Multiply(&kf->H, &kf->Pminus, &kf->temp_matrix); // temp_matrix = H¡¤P'(k)
+    kf->MatStatus = mat_mul(&kf->H, &kf->Pminus, &kf->temp_matrix);  // MatçŠ¶æ€
 
     kf->temp_matrix1.numRows = kf->temp_matrix.numRows;
 
     kf->temp_matrix1.numCols = kf->HT.numCols;
 
-    kf->MatStatus = Matrix_Multiply(&kf->temp_matrix, &kf->HT, &kf->temp_matrix1); // temp_matrix1 = H¡¤P'(k)¡¤HT
+    kf->MatStatus = mat_mul(&kf->temp_matrix, &kf->HT, &kf->temp_matrix1);  // MatçŠ¶æ€
 
     kf->S.numRows = kf->R.numRows;
 
     kf->S.numCols = kf->R.numCols;
 
-    kf->MatStatus = Matrix_Add(&kf->temp_matrix1, &kf->R, &kf->S); // S = H P'(k) HT + R
+    kf->MatStatus = mat_add(&kf->temp_matrix1, &kf->R, &kf->S); // S = H P'(k) HT + R
 
-    kf->MatStatus = Matrix_Inverse(&kf->S, &kf->temp_matrix1);     // temp_matrix1 = inv(H¡¤P'(k)¡¤HT + R)
+    kf->MatStatus = mat_inv(&kf->S, &kf->temp_matrix1);  // MatçŠ¶æ€
 
 
 
@@ -724,7 +614,7 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
     kf->temp_vector.numCols = 1;
 
-    // ¼ÆËãÔ¤²âµÃµ½µÄÖØÁ¦¼ÓËÙ¶È·½Ïò(Í¨¹ı×ËÌ¬»ñÈ¡µÄ)
+
 
     kf->temp_vector_data[0] = 2 * (q1 * q3 - q0 * q2);
 
@@ -734,65 +624,65 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
 
 
-    // ¼ÆËãÔ¤²âÖµºÍ¸÷¸öÖáµÄ·½ÏòÓàÏÒ
+
 
     for (uint8_t i = 0; i < 3; ++i)
 
     {
 
-        QEKF_INS.OrientationCosine[i] = acosf(fabsf(kf->temp_vector_data[i]));
+        g_ekf.OrientationCosine[i] = acosf(fabsf(kf->temp_vector_data[i]));
 
     }
 
 
 
-    // ÀûÓÃ¼ÓËÙ¶È¼ÆÊı¾İĞŞÕı
+
 
     kf->temp_vector1.numRows = kf->z.numRows;
 
     kf->temp_vector1.numCols = 1;
 
-    kf->MatStatus = Matrix_Subtract(&kf->z, &kf->temp_vector, &kf->temp_vector1); // temp_vector1 = z(k) - h(xhat'(k))
+    kf->MatStatus = mat_sub(&kf->z, &kf->temp_vector, &kf->temp_vector1); // temp_vector1 = z(k) - h(xhat'(k))
 
 
 
-    // chi-square test,¿¨·½¼ìÑé
+
 
     kf->temp_matrix.numRows = kf->temp_vector1.numRows;
 
     kf->temp_matrix.numCols = 1;
 
-    kf->MatStatus = Matrix_Multiply(&kf->temp_matrix1, &kf->temp_vector1, &kf->temp_matrix); // temp_matrix = inv(H¡¤P'(k)¡¤HT + R)¡¤(z(k) - h(xhat'(k)))
+    kf->MatStatus = mat_mul(&kf->temp_matrix1, &kf->temp_vector1, &kf->temp_matrix);  // MatçŠ¶æ€
 
     kf->temp_vector.numRows = 1;
 
     kf->temp_vector.numCols = kf->temp_vector1.numRows;
 
-    kf->MatStatus = Matrix_Transpose(&kf->temp_vector1, &kf->temp_vector); // temp_vector = z(k) - h(xhat'(k))'
+    kf->MatStatus = mat_trans(&kf->temp_vector1, &kf->temp_vector); // temp_vector = z(k) - h(xhat'(k))'
 
-    kf->MatStatus = Matrix_Multiply(&kf->temp_vector, &kf->temp_matrix, &QEKF_INS.ChiSquare);
+    kf->MatStatus = mat_mul(&kf->temp_vector, &kf->temp_matrix, &g_ekf.ChiSquare);
 
-    // rk is small,filter converged/converging,rkºÜĞ¡£¬ËµÃ÷ÂË²¨Æ÷ÊÕÁ²
 
-    if (QEKF_INS.ChiSquare_Data[0] < 0.5f * QEKF_INS.ChiSquareTestThreshold)
+
+    if (g_ekf.ChiSquare_Data[0] < 0.5f * g_ekf.ChiSquareTestThreshold)
 
     {
 
-        QEKF_INS.ConvergeFlag = 1;
+        g_ekf.ConvergeFlag = 1;
 
     }
 
-    // rk is bigger than thre but once converged,µ±Ç°rk´óÓÚãĞÖµ£¬ÇÒÖ®Ç°ÂË²¨Æ÷´¦ÓÚÊÕÁ²
 
-    if (QEKF_INS.ChiSquare_Data[0] > QEKF_INS.ChiSquareTestThreshold && QEKF_INS.ConvergeFlag)
+
+    if (g_ekf.ChiSquare_Data[0] > g_ekf.ChiSquareTestThreshold && g_ekf.ConvergeFlag)
 
     {
 
-        if (QEKF_INS.StableFlag)
+        if (g_ekf.StableFlag)
 
         {
 
-            QEKF_INS.ErrorCount++; // ÔØÌå¾²Ö¹Ê±ÈÔÎŞ·¨Í¨¹ı¿¨·½¼ìÑé
+            g_ekf.ErrorCount++;
 
         }
 
@@ -800,21 +690,21 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
         {
 
-            QEKF_INS.ErrorCount = 0;
+            g_ekf.ErrorCount = 0;
 
         }
 
 
 
-        if (QEKF_INS.ErrorCount > 50)
+        if (g_ekf.ErrorCount > 50)
 
         {
 
-            // ÂË²¨Æ÷·¢É¢
 
-            QEKF_INS.ConvergeFlag = 0;
 
-            kf->SkipEq5 = FALSE; // step-5 is cov mat P updating,³ÖĞø¸üĞÂP¾ØÕóÊ¹ÂË²¨Æ÷ÊÕÁ²
+            g_ekf.ConvergeFlag = 0;
+
+            kf->SkipEq5 = FALSE;
 
         }
 
@@ -822,7 +712,7 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
         {
 
-            //  ²Ğ²îÎ´Í¨¹ı¿¨·½¼ìÑé ÔØÌå´æÔÚÔË¶¯¼ÓËÙ¶È£¬²âÁ¿Öµ²»¿ÉĞÅ£¬½öÔ¤²â
+
 
             //  xhat(k) = xhat'(k)
 
@@ -832,7 +722,7 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
             memcpy(kf->P_data, kf->Pminus_data, sizeof_float * kf->xhatSize * kf->xhatSize);
 
-            kf->SkipEq5 = TRUE; // part5 is P updating,Ìø¹ıP¾ØÕóµÄ¸üĞÂ
+            kf->SkipEq5 = TRUE;
 
             return;
 
@@ -840,17 +730,17 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
     }
 
-    else // if divergent or rk is not that big/acceptable,use adaptive gain,ÂË²¨Æ÷´¦ÓÚ·¢É¢»òÕßrkÖµ²»´óÓÚãĞÖµ
+    else
 
     {
 
-        // scale adaptive,rkÔ½Ğ¡ÔòÔöÒæÔ½´ó,·ñÔò¸üÏàĞÅÔ¤²âÖµ
 
-        if (QEKF_INS.ChiSquare_Data[0] > 0.1f * QEKF_INS.ChiSquareTestThreshold && QEKF_INS.ConvergeFlag)
+
+        if (g_ekf.ChiSquare_Data[0] > 0.1f * g_ekf.ChiSquareTestThreshold && g_ekf.ConvergeFlag)
 
         {
 
-            QEKF_INS.AdaptiveGainScale = (QEKF_INS.ChiSquareTestThreshold - QEKF_INS.ChiSquare_Data[0]) / (0.9f * QEKF_INS.ChiSquareTestThreshold);
+            g_ekf.AdaptiveGainScale = (g_ekf.ChiSquareTestThreshold - g_ekf.ChiSquare_Data[0]) / (0.9f * g_ekf.ChiSquareTestThreshold);
 
         }
 
@@ -858,11 +748,11 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
         {
 
-            QEKF_INS.AdaptiveGainScale = 1;
+            g_ekf.AdaptiveGainScale = 1;
 
         }
 
-        QEKF_INS.ErrorCount = 0;
+        g_ekf.ErrorCount = 0;
 
         kf->SkipEq5 = FALSE;
 
@@ -870,25 +760,25 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
 
 
-    // cal kf-gain K,¼ÆËã¿¨¶ûÂüÔöÒæ
+
 
     kf->temp_matrix.numRows = kf->Pminus.numRows;
 
     kf->temp_matrix.numCols = kf->HT.numCols;
 
-    kf->MatStatus = Matrix_Multiply(&kf->Pminus, &kf->HT, &kf->temp_matrix); // temp_matrix = P'(k)¡¤HT
+    kf->MatStatus = mat_mul(&kf->Pminus, &kf->HT, &kf->temp_matrix);  // MatçŠ¶æ€
 
-    kf->MatStatus = Matrix_Multiply(&kf->temp_matrix, &kf->temp_matrix1, &kf->K);
+    kf->MatStatus = mat_mul(&kf->temp_matrix, &kf->temp_matrix1, &kf->K);
 
 
 
-    // implement adaptive,Í¨¹ı¿¨·½¼ìÑé£¬¶¯Ì¬µ÷Õû¿¨¶ûÂüÔöÒæÈ¨ÖØ
+
 
     for (uint8_t i = 0; i < kf->K.numRows * kf->K.numCols; ++i)
 
     {
 
-        kf->K_data[i] *= QEKF_INS.AdaptiveGainScale;
+        kf->K_data[i] *= g_ekf.AdaptiveGainScale;
 
     }
 
@@ -900,7 +790,7 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
         {
 
-            kf->K_data[i * 3 + j] *= QEKF_INS.OrientationCosine[i - 4] / 1.5707963f; // 1 rad
+            kf->K_data[i * 3 + j] *= g_ekf.OrientationCosine[i - 4] / 1.5707963f; // 1 rad
 
         }
 
@@ -912,13 +802,13 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
     kf->temp_vector.numCols = 1;
 
-    kf->MatStatus = Matrix_Multiply(&kf->K, &kf->temp_vector1, &kf->temp_vector); // temp_vector = K(k)¡¤(z(k) - H¡¤xhat'(k))
+    kf->MatStatus = mat_mul(&kf->K, &kf->temp_vector1, &kf->temp_vector);  // MatçŠ¶æ€
 
 
 
-    // ÁãÆ¯ĞŞÕıÏŞ·ù,Ò»°ã²»»áÓĞ¹ı´óµÄÆ¯ÒÆ
 
-    if (QEKF_INS.ConvergeFlag)
+
+    if (g_ekf.ConvergeFlag)
 
     {
 
@@ -926,19 +816,19 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
         {
 
-            if (kf->temp_vector.pData[i] > 1e-2f * QEKF_INS.dt)
+            if (kf->temp_vector.pData[i] > 1e-2f * g_ekf.dt)
 
             {
 
-                kf->temp_vector.pData[i] = 1e-2f * QEKF_INS.dt;
+                kf->temp_vector.pData[i] = 1e-2f * g_ekf.dt;
 
             }
 
-            if (kf->temp_vector.pData[i] < -1e-2f * QEKF_INS.dt)
+            if (kf->temp_vector.pData[i] < -1e-2f * g_ekf.dt)
 
             {
 
-                kf->temp_vector.pData[i] = -1e-2f * QEKF_INS.dt;
+                kf->temp_vector.pData[i] = -1e-2f * g_ekf.dt;
 
             }
 
@@ -948,52 +838,32 @@ static void IMU_QuaternionEKF_xhatUpdate(KalmanFilter_t *kf)
 
 
 
-    // ²»ĞŞÕıyawÖáÊı¾İ
+
 
 //    kf->temp_vector.pData[3] = 0;
 
-    kf->MatStatus = Matrix_Add(&kf->xhatminus, &kf->temp_vector, &kf->xhat);
+    kf->MatStatus = mat_add(&kf->xhatminus, &kf->temp_vector, &kf->xhat);
 
 }
 
 
 
-/**
-
- * @brief EKF¹Û²â»·½Ú,ÆäÊµ¾ÍÊÇ°ÑÊı¾İ¸´ÖÆÒ»ÏÂ
-
- *
-
- * @param kf kfÀàĞÍ¶¨Òå
-
- */
-
-static void IMU_QuaternionEKF_Observe(KalmanFilter_t *kf)
+/* ä¿å­˜ P/K/H ä¾›è°ƒè¯• */
+static void ekf_observe(KalmanFilter_t *kf)
 
 {
 
-    memcpy(IMU_QuaternionEKF_P, kf->P_data, sizeof(IMU_QuaternionEKF_P));
+    memcpy(ekf_P_mat, kf->P_data, sizeof(ekf_P_mat));
 
-    memcpy(IMU_QuaternionEKF_K, kf->K_data, sizeof(IMU_QuaternionEKF_K));
+    memcpy(ekf_K_mat, kf->K_data, sizeof(ekf_K_mat));
 
-    memcpy(IMU_QuaternionEKF_H, kf->H_data, sizeof(IMU_QuaternionEKF_H));
+    memcpy(ekf_H_mat, kf->H_data, sizeof(ekf_H_mat));
 
 }
 
 
 
-/**
-
- * @brief ×Ô¶¨Òå1/sqrt(x),ËÙ¶È¸ü¿ì
-
- *
-
- * @param x x
-
- * @return float
-
- */
-
+/* å¿«é€Ÿå¹³æ–¹æ ¹å€’æ•° */
 static float invSqrt(float x)
 
 {
@@ -1016,17 +886,8 @@ static float invSqrt(float x)
 
 
 
-/**
-
-  * @brief  ÍÓÂİÒÇ×ø±ê±ä»»³õÊ¼»¯£¬Èô²»ĞèÒª±ä»»¿ÉÔÚimu_sensor.cÖĞimu_init½«Æä×¢ÊÍ
-
-  * @param  
-
-  * @retval 
-
-  */
-
-void transform_init(gimbal_transform_t *gim_trans)
+/* ç”±å®‰è£…è§’ç”Ÿæˆåæ ‡å˜æ¢çŸ©é˜µ */
+void imu_frame_init(imu_frame_t *imu_frame)
 
 {
 
@@ -1034,61 +895,48 @@ void transform_init(gimbal_transform_t *gim_trans)
 
 
 
-	/* ½Ç¶Èµ¥Î»×ª»»£¨to»¡¶È£© */
-
-	arz = gim_trans->arz * (double)0.017453;
-
-	ary = gim_trans->ary * (double)0.017453;
-
-	arx = gim_trans->arx * (double)0.017453;
 
 
+	arz = imu_frame->arz * (double)0.017453;
 
-	/* Ğı×ª¾ØÕó¸³Öµ£¨Èı¸öĞı×ª¾ØÕóµş¼Ó£© */
+	ary = imu_frame->ary * (double)0.017453;
 
-	gim_trans->trans[0] = arm_cos_f32(arz)*arm_cos_f32(ary);
+	arx = imu_frame->arx * (double)0.017453;
 
-	gim_trans->trans[1] = arm_cos_f32(arz)*arm_sin_f32(ary)*arm_sin_f32(arx) - arm_sin_f32(arz)*arm_cos_f32(arx);
 
-	gim_trans->trans[2] = arm_cos_f32(arz)*arm_sin_f32(ary)*arm_cos_f32(arx) + arm_sin_f32(arz)*arm_sin_f32(arx);
 
-	gim_trans->trans[3] = arm_sin_f32(arz)*arm_cos_f32(ary);
 
-	gim_trans->trans[4] = arm_sin_f32(arz)*arm_sin_f32(ary)*arm_sin_f32(arx) + arm_cos_f32(arz)*arm_cos_f32(arx);
 
-	gim_trans->trans[5] = arm_sin_f32(arz)*arm_sin_f32(ary)*arm_cos_f32(arx) - arm_cos_f32(arz)*arm_sin_f32(arx);
+	imu_frame->trans[0] = arm_cos_f32(arz)*arm_cos_f32(ary);
 
-	gim_trans->trans[6] = -arm_sin_f32(ary);
+	imu_frame->trans[1] = arm_cos_f32(arz)*arm_sin_f32(ary)*arm_sin_f32(arx) - arm_sin_f32(arz)*arm_cos_f32(arx);
 
-	gim_trans->trans[7] = arm_cos_f32(ary)*arm_sin_f32(arx);
+	imu_frame->trans[2] = arm_cos_f32(arz)*arm_sin_f32(ary)*arm_cos_f32(arx) + arm_sin_f32(arz)*arm_sin_f32(arx);
 
-	gim_trans->trans[8] = arm_cos_f32(ary)*arm_cos_f32(arx);
+	imu_frame->trans[3] = arm_sin_f32(arz)*arm_cos_f32(ary);
+
+	imu_frame->trans[4] = arm_sin_f32(arz)*arm_sin_f32(ary)*arm_sin_f32(arx) + arm_cos_f32(arz)*arm_cos_f32(arx);
+
+	imu_frame->trans[5] = arm_sin_f32(arz)*arm_sin_f32(ary)*arm_cos_f32(arx) - arm_cos_f32(arz)*arm_sin_f32(arx);
+
+	imu_frame->trans[6] = -arm_sin_f32(ary);
+
+	imu_frame->trans[7] = arm_cos_f32(ary)*arm_sin_f32(arx);
+
+	imu_frame->trans[8] = arm_cos_f32(ary)*arm_cos_f32(arx);
 
 	
 
-    /* 3x3±ä»»¾ØÕó³õÊ¼»¯ */
 
-	arm_mat_init_f32(&EKFTrans, 3, 3, (float *)gim_trans->trans); 
+
+	arm_mat_init_f32(&ekf_trans, 3, 3, (float *)imu_frame->trans); 
 
 }
 
 
 
-/**
-
-  * @brief  ½«ÍÓÂİÒÇ×ø±ê±ä»»ÎªÔÆÌ¨×ø±ê£¬Èô²»ĞèÒª±ä»»¿ÉÔÚimu_protocol.cÖĞimu_update½«Æä×¢ÊÍ
-
-  * @brief  ×ø±ê±ä»»²ÉÓÃZ-Y-XÅ·À­½ÇÃèÊö£¬¼´´ÓÍÓÂİÒÇ×ø±êÏµÏòÔÆÌ¨×ø±êÏµ±ä»»ÖĞ£¬×ø±êÏµ°´ÕÕÈÆÍÓÂİÒÇZÖá¡¢YÖá¡¢XÖáµÄË³ĞòĞı×ª
-
-  *					Ã¿Ò»´ÎĞı×ªµÄ²Î¿¼×ø±êÏµÎªµ±Ç°ÍÓÂİÒÇ×ø±êÏµ
-
-  * @param[in]  (int16_t) gx,  gy,  gz,  ax,  ay,  az
-
-  * @param[out] (float *) gx, gy, gz, aax, ay, az
-
-  */
-
-void Vector_Transform(float gx, float gy, float gz,\
+/* ä¼ æ„Ÿå™¨ç³»è½¬äº‘å°ç³» */
+void imu_frame_rotate(float gx, float gy, float gz,\
 
 	                  float ax, float ay, float az,\
 
@@ -1098,45 +946,45 @@ void Vector_Transform(float gx, float gy, float gz,\
 
 {
 
-    /* ÍÓÂİÒÇÊäÈëÊä³öÊı×é¶¨Òå */
+
 
     float gyro_in[3], gyro_out[3];
 
-    /* ¼ÓËÙ¶ÈÊäÈëÊä³öÊı×é¶¨Òå */
+
 
     float acc_in[3], acc_out[3];
 
 
 
-	/* ÍÓÂİÒÇ¸³Öµ */
+
 
 	gyro_in[0] = (float)gx, gyro_in[1] = (float)gy, gyro_in[2] = (float)gz;
 
-	/* ¼ÓËÙ¶È¼Æ¸³Öµ */
+
 
 	acc_in[0] = (float)ax, acc_in[1] = (float)ay, acc_in[2] = (float)az;
 
 	
 
-	/* ÍÓÂİÒÇ×ø±ê±ä»» */
 
-	arm_mat_init_f32(&EKFSrc, 1, 3, gyro_in);
 
-	arm_mat_init_f32(&EKFDst, 1, 3, gyro_out);
+	arm_mat_init_f32(&ekf_src, 1, 3, gyro_in);
 
-	arm_mat_mult_f32(&EKFSrc, &EKFTrans, &EKFDst);
+	arm_mat_init_f32(&ekf_dst, 1, 3, gyro_out);
+
+	arm_mat_mult_f32(&ekf_src, &ekf_trans, &ekf_dst);
 
 	*ggx = gyro_out[0], *ggy = gyro_out[1], *ggz = gyro_out[2];
 
 	
 
-	/* ¼ÓËÙ¶È¼Æ×ø±ê±ä»» */
 
-	arm_mat_init_f32(&EKFSrc, 1, 3, acc_in);
 
-	arm_mat_init_f32(&EKFDst, 1, 3, acc_out);
+	arm_mat_init_f32(&ekf_src, 1, 3, acc_in);
 
-	arm_mat_mult_f32(&EKFSrc, &EKFTrans, &EKFDst);
+	arm_mat_init_f32(&ekf_dst, 1, 3, acc_out);
+
+	arm_mat_mult_f32(&ekf_src, &ekf_trans, &ekf_dst);
 
 	*aax = acc_out[0], *aay = acc_out[1], *aaz = acc_out[2];
 
@@ -1144,13 +992,8 @@ void Vector_Transform(float gx, float gy, float gz,\
 
 
 
-/**
-
- * @brief  »ñÈ¡ÊÀ½ç×ø±êÏµµÄ¼ÓËÙ¶È
-
- */
-
-void BMI_Get_Acceleration(float pitch, float roll, float yaw,\
+/* æœºä½“ç³»åŠ é€Ÿåº¦è½¬ä¸–ç•Œç³» */
+void imu_world_accel(float pitch, float roll, float yaw,\
 
 						  float ax, float ay, float az,\
 
@@ -1162,7 +1005,7 @@ void BMI_Get_Acceleration(float pitch, float roll, float yaw,\
 
 	
 
-    /* ½Ç¶ÈÖÆto»¡¶ÈÖÆ */
+
 
 	pitch *= (double)0.017453;
 
@@ -1193,4 +1036,7 @@ void BMI_Get_Acceleration(float pitch, float roll, float yaw,\
 }
 
 #endif
+
+
+
 

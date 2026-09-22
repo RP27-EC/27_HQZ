@@ -1,16 +1,16 @@
+/* led.c - LED æ¤¹åžå§© */
+
 #include "led.h"
 
 
 
-/*¶¨ÒåLED*************************************************************/
+
 led_t led={
 	.state =LED_OFF,
 	.colour =LED_colour_red,
 	.blink_fre=5,
 };
-/**
- * @brief c°åled×Ü¿Ø£¬Ò»¸öÊ±¿ÌÖ»ÓÐÒ»ÖÖÑÕÉ«µÄµÆÁÁ£¬Ö»¶ÔÓ¦Ò»ÖÖ×´Ì¬£¬Ã¿´ÎÐÞ¸Ä×îºÃ¶¼ÐÞ¸ÄÑÕÉ«ºÍ×´Ì¬
- */
+/* LED é˜èˆµâ‚¬ä½¸åŸ›é‚ï¿½ */
 void led_work(led_t *led)
 {
 	if(led->blink_fre==0)
@@ -126,6 +126,9 @@ void led_work(led_t *led)
 			break;
 	}
 }
+
+
+
 
 
 

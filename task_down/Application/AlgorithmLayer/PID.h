@@ -1,3 +1,5 @@
+/* PID.h - 单环 PID */
+
 #ifndef __PID_H
 #define __PID_H
 #include "main.h"
@@ -28,3 +30,4 @@ float  all_pid_calc (pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,
 float feedforward_pid_calc(float K_ff,pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,float mea_in,float inner_kp,uint8_t err_cal_mode);
 
 #endif
+

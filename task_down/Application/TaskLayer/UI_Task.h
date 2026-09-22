@@ -1,3 +1,5 @@
+/* UI_Task.h - UI 任务 */
+
 #ifndef __UI_TASK
 #define __UI_TASK
 
@@ -8,3 +10,4 @@
 void StartUITask(void const * argument);
 
 #endif
+

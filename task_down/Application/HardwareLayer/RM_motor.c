@@ -1,16 +1,4 @@
-/**
-  ******************************************************************************
-  * @file    RM_motor.c
-  * @brief   电机控制
-  * @version 
-  * @date    
-  ******************************************************************************
-  * @attention
-  * 
-  ******************************************************************************
-  */
-
-/* Includes ------------------------------------------------------------------*/
+/* RM_motor.c - RM 电机驱动 */
 #include "rm_motor.h"
 #include "pid.h"
 #include "arm_math.h"
@@ -21,19 +9,15 @@ static int16_t CAN_45_GetMotorCurrent(uint8_t *rxData);
 static int16_t CAN_23_GetMotorTorque(uint8_t *rxData);
 static int16_t CAN_45_GetMotorTorque(uint8_t *rxData);
 static uint8_t CAN_6_GetMotorTemperature(uint8_t *rxData);
-static void Torque_to_Raw_Current(Motor_RM_t *motor);
-static void Angle_Sum_Cal(Motor_RM_t *motor);
-static void Encoder_to_Motor_Angle(Motor_RM_t *motor);
-static float RPM_to_Rads(Motor_RM_t *motor);
-static void Raw_Current_to_Torque(Motor_RM_t* motor);
-static void Encoder_Sum_Cal(Motor_RM_t *motor);
+static void Torque_to_Raw_Current(rm_motor_t *motor);
+static void Angle_Sum_Cal(rm_motor_t *motor);
+static void Encoder_to_Motor_Angle(rm_motor_t *motor);
+static float RPM_to_Rads(rm_motor_t *motor);
+static void Raw_Current_to_Torque(rm_motor_t* motor);
+static void Encoder_Sum_Cal(rm_motor_t *motor);
 /*..........................................单电机..........................................*/
-/**
-  * @brief          单电机控制输出转矩,含有CAN发送操作
-  * @param[in]      Motor_RM_t *motor     电机本体
-  * @retval         none
-  */
-static void Motor_Set_Torque(Motor_RM_t *motor)
+/* 力矩输出 */
+static void Motor_Set_Torque(rm_motor_t *motor)
 {
 	uint8_t Id = motor->born_info->rxId*2;
 	Torque_to_Raw_Current(motor);
@@ -42,12 +26,8 @@ static void Motor_Set_Torque(Motor_RM_t *motor)
 	CAN_SendData(motor->born_info->hcan, motor->born_info->stdId, motor->tx_info->tx_buff);
 }
 
-/**
-  * @brief          单电机控制,含有CAN发送操作
-  * @param[in]      Motor_RM_t *motor     电机本体
-  * @retval         none
-  */
-static void Motor_Ctrl(Motor_RM_t *motor)
+/* 串级控制计算 */
+static void Motor_Ctrl(rm_motor_t *motor)
 {
 	uint8_t Id = motor->born_info->rxId*2;
 	motor->tx_info->tx_buff[Id] = (uint8_t)(motor->tx_info->torque_current_raw >> 8);
@@ -55,23 +35,15 @@ static void Motor_Ctrl(Motor_RM_t *motor)
 	CAN_SendData(motor->born_info->hcan, motor->born_info->stdId, motor->tx_info->tx_buff);
 }
 
-/**
-  * @brief          单电机卸力
-  * @param[in]      Motor_RM_t *motor     电机本体
-  * @retval         none
-  */
-static void Single_Motor_Sleep(Motor_RM_t *motor)
+/* 单电机卸力 */
+static void Single_Motor_Sleep(rm_motor_t *motor)
 {
 	motor->tx_info->torque = 0;
 	motor->single_set_torque(motor);
 }
 
-/**
-  * @brief          单电机控制速度(不含发送函数，需要再控制扭矩才可以控制)
-  * @param[in]      Motor_RM_t *motor     
-  * @retval         none
-  */
-static void Motor_Set_Speed(Motor_RM_t *motor)
+/* 速度环输出 */
+static void Motor_Set_Speed(rm_motor_t *motor)
 {
 	pid_ctrl_t* my_speed_ctrl = motor->ctrl->speed_ctrl;
 	my_speed_ctrl->measure = motor->rx_info->encoder_speed;
@@ -81,12 +53,8 @@ static void Motor_Set_Speed(Motor_RM_t *motor)
 }
 
 
-/**
-  * @brief          单电机控制角度(不含发送函数，需要再控制扭矩才可以控制)
-  * @param[in]      Motor_RM_t *motor     
-  * @retval         none
-  */
-static void Motor_Set_Angle(Motor_RM_t *motor)
+/* 角度环输出 */
+static void Motor_Set_Angle(rm_motor_t *motor)
 {
 	pid_ctrl_t* my_angle_ctrl = motor->ctrl->angle_ctrl_outer;
 	pid_ctrl_t* my_speed_ctrl = motor->ctrl->angle_ctrl_inner;
@@ -132,14 +100,10 @@ static void Motor_Set_Angle(Motor_RM_t *motor)
 }
 
 
-/**
- * @brief  电机心跳失联检测
- * @param  motor: 电机结构体
- * @retval 无
- */
-static void rm_motor_heart_beat(Motor_RM_t *motor)
+/* 离线计数检测 */
+static void rm_motor_heart_beat(rm_motor_t *motor)
 {
-    Motor_RM_State_t *motor_state = motor->state;
+    rm_state_t *motor_state = motor->state;
     motor_state->offline_cnt++;
     if(motor_state->offline_cnt > motor_state->offline_cnt_max) 
 	{
@@ -153,12 +117,10 @@ static void rm_motor_heart_beat(Motor_RM_t *motor)
     }
 }
 
-/**
- *	@brief	解析RM标准电机的角度、速度、转矩电流与温度
- */
-static void rm_motor_update(Motor_RM_t *rm_motor, uint8_t *rxBuf)
+/* 解算反馈数据 */
+static void rm_motor_update(rm_motor_t *rm_motor, uint8_t *rxBuf)
 {
-    Motor_RM_Rx_Info_t *motor_info = rm_motor->rx_info;
+    rm_rx_t *motor_info = rm_motor->rx_info;
     
     motor_info->encoder = CAN_01_GetMotorAngle(rxBuf);
 		Encoder_Sum_Cal(rm_motor);
@@ -171,12 +133,8 @@ static void rm_motor_update(Motor_RM_t *rm_motor, uint8_t *rxBuf)
     rm_motor->state->offline_cnt = 0;
 }
 
-/**
- * @brief  电机初始化
- * @param  motor: 电机结构体
- * @retval 无
- */
-void RM_Motor_Init(Motor_RM_t *motor)
+/* 绑定接口并复位状态 */
+void rm_motor_init(rm_motor_t *motor)
 {
 	motor->single_set_torque = Motor_Set_Torque;
 	motor->single_heart_beat = rm_motor_heart_beat;
@@ -189,12 +147,8 @@ void RM_Motor_Init(Motor_RM_t *motor)
 }
 
 /*..........................................多电机..........................................*/
-/**
-  * @brief          多电机（1~4个）电机控制输出转矩(含转换),4个电机必须为同一类型；含有CAN发送操作
-  * @param[in]      Motor_RM_Group_t *group     电机组
-  * @retval         none
-  */
-static void Group_Motor_Set_Torque(Motor_RM_Group_t *group)
+/* 组内依次发送力矩 */
+static void Group_Motor_Set_Torque(rm_group_t *group)
 {	
 		int16_t torque_current = 0;
 		uint8_t Id;
@@ -216,12 +170,8 @@ static void Group_Motor_Set_Torque(Motor_RM_Group_t *group)
 		memset(group->tx_buff, 0, 8);
 }
 
-/**
-  * @brief          多电机（1~4个）电机控制输出,4个电机必须为同一类型；含有CAN发送操作
-  * @param[in]      Motor_RM_Group_t *group     电机组
-  * @retval         none
-  */
-static void Group_Motor_Ctrl(Motor_RM_Group_t *group)
+/* 组内串级控制 */
+static void Group_Motor_Ctrl(rm_group_t *group)
 {	
 		int16_t torque_current = 0;
 		uint8_t Id;
@@ -242,12 +192,8 @@ static void Group_Motor_Ctrl(Motor_RM_Group_t *group)
 		memset(group->tx_buff, 0, 8);
 }
 
-/**
-  * @brief          电机组卸力
-  * @param[in]      Motor_RM_Group_t *group     电机组
-  * @retval         none
-  */
-static void Group_Motor_Sleep(Motor_RM_Group_t *group)
+/* 组内全部卸力 */
+static void Group_Motor_Sleep(rm_group_t *group)
 {		
 		
 	for(uint8_t i = 0; i < 4; i ++)
@@ -261,12 +207,8 @@ static void Group_Motor_Sleep(Motor_RM_Group_t *group)
 }
 
 
-/**
-  * @brief          电机组心跳包
-  * @param[in]      Motor_RM_Group_t *group     电机组
-  * @retval         none
-  */
-static void Group_Motor_Heartbeat(Motor_RM_Group_t *group)
+/* 组内心跳检测 */
+static void Group_Motor_Heartbeat(rm_group_t *group)
 {
 	for(uint8_t i = 0; i < 4; i ++)
 	{
@@ -277,18 +219,14 @@ static void Group_Motor_Heartbeat(Motor_RM_Group_t *group)
 	}
 }
 
-/**
-  * @brief          电机组初始化
-  * @param[in]      Motor_Ktech_Group_t *group     电机组
-  * @retval         none
-  */
-void RM_Group_Motor_Init(Motor_RM_Group_t *group)
+/* 电机组初始化 */
+void rm_group_init(rm_group_t *group)
 {
 		for(uint8_t i = 0; i < 4; i ++)
 		{
 			if(group->motor[i] != NULL)
 			{
-				group->motor[i]->single_init = RM_Motor_Init;
+				group->motor[i]->single_init = rm_motor_init;
 				group->motor[i]->single_init(group->motor[i]);
 			}
 		}
@@ -300,9 +238,7 @@ void RM_Group_Motor_Init(Motor_RM_Group_t *group)
 }
 
 /*..........................................工具函数..........................................*/
-/**
- *	@brief	从CAN报文[0][1]中读取电机的位置反馈
- */
+/* 解析角度反馈帧 */
 static uint16_t CAN_01_GetMotorAngle(uint8_t *rxData)
 {
 	uint16_t angle;
@@ -310,9 +246,7 @@ static uint16_t CAN_01_GetMotorAngle(uint8_t *rxData)
 	return angle;
 }
 
-/**
- *	@brief	从CAN报文[2][3]中读取电机的转子转速反馈
- */
+/* 解析速度反馈帧 */
 static int16_t CAN_23_GetMotorSpeed(uint8_t *rxData)
 {
 	int16_t speed;
@@ -320,9 +254,7 @@ static int16_t CAN_23_GetMotorSpeed(uint8_t *rxData)
 	return speed;
 }
 
-/**
- *	@brief	从CAN报文[4][5]中读取电机的实际转矩电流反馈
- */
+/* 解析电流反馈帧 */
 static int16_t CAN_45_GetMotorCurrent(uint8_t *rxData)
 {
 	int16_t current;
@@ -330,9 +262,7 @@ static int16_t CAN_45_GetMotorCurrent(uint8_t *rxData)
 	return current;
 }
 
-/**
- *	@brief	从CAN报文[2][3]中读取电机的实际输出转矩
- */
+/* 解析力矩反馈帧 */
 static int16_t CAN_23_GetMotorTorque(uint8_t *rxData)
 {
 	int16_t torque;
@@ -340,9 +270,7 @@ static int16_t CAN_23_GetMotorTorque(uint8_t *rxData)
 	return torque;
 }
 
-/**
- *	@brief	从CAN报文[4][5]中读取电机的实际输出转矩
- */
+/* 解析力矩反馈帧 */
 static int16_t CAN_45_GetMotorTorque(uint8_t *rxData)
 {
 	int16_t torque;
@@ -350,9 +278,7 @@ static int16_t CAN_45_GetMotorTorque(uint8_t *rxData)
 	return torque;
 }
 
-/**
- *	@brief	从CAN报文[6]中读取电机的实际温度
- */
+/* 解析温度反馈帧 */
 static uint8_t CAN_6_GetMotorTemperature(uint8_t *rxData)
 {
 	uint8_t temp;
@@ -360,12 +286,8 @@ static uint8_t CAN_6_GetMotorTemperature(uint8_t *rxData)
 	return temp;
 }
 
-/**
-  * @brief          将电机期望输出扭矩转为原始电流数据,用于发送数据的处理
-  * @param[in]      Motor_RM_t *motor     电机本体
-  * @retval         none
-  */
-static void Torque_to_Raw_Current(Motor_RM_t *motor)
+/* 力矩转原始电流值 */
+static void Torque_to_Raw_Current(rm_motor_t *motor)
 {
 		switch(motor->born_info->type)
 		{
@@ -400,13 +322,11 @@ static void Torque_to_Raw_Current(Motor_RM_t *motor)
 }
 
 
-/**
- *	@brief	校验RM标准电机的数据(简化为计算转过的角度)
- */
-static void Encoder_Sum_Cal(Motor_RM_t *motor)
+/* 编码器累计圈数 */
+static void Encoder_Sum_Cal(rm_motor_t *motor)
 {
 	int16_t err;
-	Motor_RM_Rx_Info_t *motor_info = motor->rx_info;
+	rm_rx_t *motor_info = motor->rx_info;
 	
 	/* 未初始化 */
 	if(motor_info->motor_angle_last == 0 && motor_info->encoder_sum == 0)
@@ -438,12 +358,8 @@ static void Encoder_Sum_Cal(Motor_RM_t *motor)
 }
 
 
-/**
-  * @brief          将编码器值转化为弧度制，并计算电机角度和,分9025和8016
-  * @param[in]      Motor_RM_t *motor     电机本体
-  * @retval         none
-  */
-static void Encoder_to_Motor_Angle(Motor_RM_t *motor)
+/* 编码器角度换算 */
+static void Encoder_to_Motor_Angle(rm_motor_t *motor)
 {
 	if(motor->born_info->type == _3508_Reduction)
 	motor->rx_info->motor_angle = ((float)motor->rx_info->encoder / 8191.f) * (float)PI * 2.f / _3508_REDUCT_RATIO;
@@ -455,12 +371,8 @@ static void Encoder_to_Motor_Angle(Motor_RM_t *motor)
 	Angle_Sum_Cal(motor);
 }
 
-/**
-  * @brief          计算电机旋转角度和
-  * @param[in]      Motor_RM_t *motor     电机本体
-  * @retval         none
-  */
-static void Angle_Sum_Cal(Motor_RM_t *motor)
+/* 累计角度换算 */
+static void Angle_Sum_Cal(rm_motor_t *motor)
 {
 	float err = 0.f;
 	
@@ -509,12 +421,8 @@ static void Angle_Sum_Cal(Motor_RM_t *motor)
 	motor->rx_info->motor_angle_last = motor->rx_info->motor_angle;
 }
 
-/**
-  * @brief          转换电机旋转速度为rad/s
-  * @param[in]      int16_t rpm     r/min
-  * @retval         rad/s
-  */
-static float RPM_to_Rads(Motor_RM_t *motor)
+/* rpm 转 rad/s */
+static float RPM_to_Rads(rm_motor_t *motor)
 {
 	float ret;
 	if(motor->born_info->type == _3508_Reduction)
@@ -527,13 +435,12 @@ static float RPM_to_Rads(Motor_RM_t *motor)
 }
 
 
-/**
-  * @brief          将电机接收原始电流数据转为实际转矩,用于接收数据的处理
-  * @param[in]      Motor_Ktech_t *motor     电机本体
-  * @retval         none(目前未完善)
-  */
-static void Raw_Current_to_Torque(Motor_RM_t* motor)
+/* 原始电流转力矩 */
+static void Raw_Current_to_Torque(rm_motor_t* motor)
 {
 		motor->rx_info->torque_current = (motor->rx_info->torque_current_raw / 16384.f)*20.f;
 		motor->rx_info->torque = motor->rx_info->torque_current * _3508_TORQUE_CONSTANT;
 }
+
+
+

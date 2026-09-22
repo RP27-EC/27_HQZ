@@ -1,3 +1,5 @@
+/* struct_typedef.h - 定长整型类型定义 */
+
 #ifndef STRUCT_TYPEDEF_H
 #define STRUCT_TYPEDEF_H
 
@@ -18,4 +20,5 @@ typedef double fp64;
 
 
 #endif
+
 

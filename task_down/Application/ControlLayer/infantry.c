@@ -1,3 +1,5 @@
+/* infantry.c - 步兵整车控制 */
+
 #include "infantry.h"
 #include "board_protocol.h"
 #include "rc_protocol.h"
@@ -79,10 +81,7 @@ static void Infantry_Init(Infantry_t* infantry)
 static uint8_t last_thumbwheel_step[4];
 
 
-/**
- * @brief  步兵整车工作函数
- * @note   后续再次精简
- */
+/* 步兵主循环 */
 static void Infantry_Work(Infantry_t* infantry)
 {
 	//更新整车模式状态
@@ -95,13 +94,10 @@ static void Infantry_Work(Infantry_t* infantry)
 	vision.work(&vision);//视觉部分
 }
 
-/**
- * @brief  遥控器状态模式更新
- * @note   主要切换整车模式
- */
+/* 遥控器状态刷新 */
 static void Rc_Status_Update(Infantry_t* infantry)
 {
-	rc_sensor_info_t*  rc_info = rc_sensor.info;
+	rc_data_t*  rc_info = rc_dev.info;
 	// 左拨杆最上 + 右拨杆最下，切入键鼠控制
 	if(rc_info->s1.value == RC_SW_UP && rc_info->s2.value == RC_SW_DOWN)                //左上右下进键鼠
 	{
@@ -425,12 +421,10 @@ static void Rc_Status_Update(Infantry_t* infantry)
 
 
 
-/**
- * @brief  键鼠模式切换
- */
+/* 按键状态刷新 */
 static void Key_Status_Update(Infantry_t* infantry)
 {
-  rc_sensor_info_t*  rc_info = rc_sensor.info;
+  rc_data_t*  rc_info = rc_dev.info;
 	
 	if(rc_info->s1.value == RC_SW_UP && rc_info->s2.value == RC_SW_DOWN)
 	{
@@ -630,10 +624,7 @@ static void Key_Status_Update(Infantry_t* infantry)
 	
 }
 
-/**
- * @brief  整车标志位清零
- * @note   标志位后续会更新修改
- */
+/* 复位步兵标志 */
 static void Infantry_Flag_Clean(Infantry_t* infantry)
 {
   infantry->flag.mec_flag = true;           //机械标志位不除，默认睡眠掉电，便于初始化
@@ -779,18 +770,15 @@ Signal_Form_e Spec_Flag_Update(Flag_Class_t* flag,uint8_t heartbeat,bool is_cnt)
 	return flag->form;
 }
 
-/**
- * @brief  整车模式状态更新
- * @note   掉电阵亡断头部分未验证
- */
+/* 步兵状态刷新 */
 static void Infantry_Status_Update(Infantry_t* infantry)
 {
 	static bool last_c_off = false;
 	static bool last_g_off = false;
 	
-	rc_sensor_info_t*  rc_info = rc_sensor.info;
+	rc_data_t*  rc_info = rc_dev.info;
 	//安全保护
-	if(rc_sensor.work_state == DEV_OFFLINE)
+	if(rc_dev.work_state == DEV_OFFLINE)
 	{
 		board.tx_pkt->car_pkt.car_state = 0;
 
@@ -908,6 +896,8 @@ static void Infantry_Offline_Update(Infantry_t* infantry)
 	launch.heart_beat(&launch);
 	vision.heart_beat(&vision);
 }
+
+
 
 
 

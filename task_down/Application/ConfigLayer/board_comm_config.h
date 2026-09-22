@@ -1,3 +1,5 @@
+/* board_comm_config.h - 板间通信配置 */
+
 #ifndef __BOARD_COMM_CONFIG_H
 #define __BOARD_COMM_CONFIG_H
 
@@ -15,3 +17,4 @@
 #define BOARD_UI_ENABLE                 0u
 
 #endif
+

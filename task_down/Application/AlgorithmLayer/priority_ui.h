@@ -1,126 +1,88 @@
-/**
- * @file priority_ui.h
- * @author Isaac (1812924685@qq.com)
- * @brief Í¨¹ıÓÅÏÈ¶ÓÁĞÊµÏÖUIÓÅÏÈ¼¶µ÷¶È
- * @version 0.1
- * @date 2024-04-14
- * 
- * @copyright Copyright (c) 2024
- * 
- */
+/* priority_ui.h - UI æµ¼æ¨ºå›ç»¾Ñ†çšŸæ´ï¿½ */
+
 #ifndef _PRIORITY_UI_H
 #define _PRIORITY_UI_H
-
-/* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "stdbool.h"
 #include "string.h"
 #include "stdlib.h"
 #include "ui_protocol.h"
-
-
-/* Exported enum ------------------------------------------------------------*/
-
-/**
- * @brief UIÓÅÏÈ¼¶Ã¶¾Ù
- * 
- */
+/* enum */
 typedef enum {
-  LOW_PRIORITY = 0,  // µÍÓÅÏÈ¼¶(¶¯Ì¬UIÖĞ²»ĞèÒª¸ßË¢ĞÂÂÊµÄ)
-  MID_PRIORITY,      // ÖĞÓÅÏÈ¼¶(¶¯Ì¬UIÖĞĞèÒªÒ»¶¨Ë¢ĞÂÂÊµÄ)
-  HIGH_PRIORITY,     // ¸ßÓÅÏÈ¼¶(¶¯Ì¬UIÖĞĞèÒª¸ßË¢ĞÂÂÊµÄ)
+  LOW_PRIORITY = 0,  // æµ£åºç´­éå ¢éª‡
+  MID_PRIORITY,  // æ¶“î…ç´­éå ¢éª‡
+  HIGH_PRIORITY,  // æ¥‚æ¨¹ç´­éå ¢éª‡
 }ui_priority_e;
 
-/**
- * @brief ·¢ËÍÄ£Ê½Ã¶¾Ù
- * 
- */
+/* enum */
 typedef enum
 {
   SEND_CHAR_MODE = 0,
   SEND_GRAPHIC_MODE,
 } ui_send_mode_e;
 
-/**
- * @brief UI·¢ËÍ×´Ì¬Ã¶¾Ù
- * 
- */
+/* enum */
 typedef enum {
-    MESSAGE_SENT = 0, // ÏûÏ¢ÒÑ·¢ËÍ
-    MESSAGE_NOT_SENT, // ÏûÏ¢¸üĞÂºóÎ´·¢ËÍ
+    MESSAGE_SENT = 0,
+    MESSAGE_NOT_SENT,
 } ui_sent_state_e;
 
 typedef enum {
-  LINE = 0,  // Ö±Ïß
-  RECTANGEL, // ¾ØĞÎ
-  CIRCLE,    // Ô²
-  ELLIPSE,   // ÍÖÔ²
-  ARC,       // Ô²»¡
-  FLOAT,     // ¸¡µãÊı
-  INT,       // ÕûÊı
-  CHAR,      // ×Ö·û
+  LINE = 0,  // é©å¯¸åš
+  RECTANGEL,
+  CIRCLE,  // é¦ï¿½
+  ELLIPSE,  // å¦î…æ¸¾
+  ARC,  // å¯®ï¿½
+  FLOAT,
+  INT,
+  CHAR,  // ç€›æ¥ƒîƒ
 } ui_type_e;
 
-/**
- * @brief º¯Êı·µ»Ø×´Ì¬
- * 
- */
+/* enum */
 typedef enum 
 {
   UI_ERROR    ,
   UI_OK       ,
   UI_BUSY     ,
 } ui_status_e;
-
-/* Exported struct ------------------------------------------------------------*/
-
-/**
- * @brief UIÅäÖÃĞÅÏ¢½á¹¹Ìå
- * 
- */
+/* __packed */
 typedef __packed struct  {
-  /*******²»±äÅäÖÃ*********/
-  ui_priority_e priority;       // UIÓÅÏÈ¼¶(½ö¶¯Ì¬UIĞèÒªÅäÖÃ)
-  ui_type_e ui_type;            // UIÄÚÈİÀàĞÍ
-  char name[3];             // Í¼ĞÎÃû³Æ
 
-  /*******¿É±äÅäÖÃ*********/
+  ui_priority_e priority;  // æµ¼æ¨ºå›ç»¾ï¿½
+  ui_type_e ui_type;  // uiç»«è¯²ç€·
+  char name[3];  // éšå¶‡Ğ
 
-  /*******Í¨ÓÃÅäÖÃ********/
-  operate_tpye_e operate_type; // ²Ù×÷ÀàĞÍ
-  uint8_t layer;           // Í¼²ãÊı£¬0~9
-  graphic_color_e color;   // ÑÕÉ«
-  uint16_t width;          // ÏßÌõ¿í¶È
-  uint16_t start_x;        // Æğµã x ×ø±ê
-  uint16_t start_y;        // Æğµã y ×ø±ê
-  uint16_t end_x;          // ÖÕµã x ×ø±ê
-  uint16_t end_y;          // ÖÕµã y ×ø±ê
-  /*******ÌØÊâÅäÖÃ********/
-  uint16_t radius;      // Ô²£º°ë¾¶
-  uint16_t start_angel; // Ô²»¡£ºÆğÊ¼½Ç¶È
-  uint16_t end_angel;   // Ô²»¡£ºÖÕÖ¹½Ç¶È
-  uint16_t size;        // ÎÄ×ÖÊı×Ö£º×ÖÌå´óĞ¡
-  float float_num;      // ¸¡µãÊı: ÏÔÊ¾µÄÊı×Ö
-  uint16_t decimal;     // ¸¡µãÊı£ºĞ¡ÊıÎ»ÓĞĞ§¸öÊı
-  int32_t int_num;      // ÕûÊı: ÏÔÊ¾µÄÊı×Ö
-  char text[30];        // ×Ö·û´®£ºÏÔÊ¾µÄÎÄ×Ö
+
+
+
+  operate_tpye_e operate_type;  // operateç»«è¯²ç€·
+  uint8_t layer;  // çï¿½
+  graphic_color_e color;  // æ£°æ»†å£Š
+  uint16_t width;  // ç€¹è—‰å®³
+  uint16_t start_x;  // ç’§å³°îx
+  uint16_t start_y;  // ç’§å³°îy
+  uint16_t end_x;  // ç¼æ’´æ½«x
+  uint16_t end_y;  // ç¼æ’´æ½«y
+
+  uint16_t radius;  // é—å©‚ç·
+  uint16_t start_angel;  // ç’§å³°îangel
+  uint16_t end_angel;  // ç¼æ’´æ½«angel
+  uint16_t size;  // ç€›æ¥€å½¿
+  float float_num;  // floatéä¼´å™º
+  uint16_t decimal;
+  int32_t int_num;  // intéä¼´å™º
+  char text[30];  // é‚å›¨æ¹°
 } ui_config_t;
 
-/**
- * @brief UIĞÅÏ¢½á¹¹Ìå
- * 
- */
+/* __packed */
 typedef __packed struct  {
-  ui_sent_state_e sent_state; // ÏûÏ¢·¢ËÍ×´Ì¬±êÖ¾Î»
-  uint32_t updateTick;             // ¸üĞÂÏûÏ¢Ê±µÄÊ±¼ä´Á
-  uint32_t  priority_value;        // UIµÄÓÅÏÈ¼¶Öµ
-  ui_config_t ui_config;           // ÓÃ»§ÅäÖÃUIĞÅÏ¢
+  ui_sent_state_e sent_state;
+  uint32_t updateTick;  // updateé‘ºå‚›åª¿
+  uint32_t  priority_value;  // æµ¼æ¨ºå›ç»¾Ñƒâ‚¬ï¿½
+  ui_config_t ui_config;
 } ui_info_t;
 
-/**
- * @brief UIÁ´±í½Úµã½á¹¹Ìå
- * 
- */
+/* Node_u */
 typedef struct Node_u 
 {
   ui_info_t *ui;
@@ -128,11 +90,10 @@ typedef struct Node_u
 } Node_u;
 
 /*test*/
-
-
-/* Exported functions --------------------------------------------------------*/
 ui_status_e Init_Ui_List(ui_info_t *dynamic_ui_info, uint8_t dynamic_ui_num, ui_info_t *const_ui_info, uint8_t const_ui_num);
 void Ui_Send(void);
 ui_status_e Enqueue_Ui_For_Sending(ui_info_t *ui_info);
 #endif
+
+
 

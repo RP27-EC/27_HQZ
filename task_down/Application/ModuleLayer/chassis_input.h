@@ -1,3 +1,5 @@
+/* chassis_input.h - 底盘输入解析 */
+
 #ifndef __CHASSIS_INPUT_H
 #define __CHASSIS_INPUT_H
 
@@ -10,3 +12,4 @@ void Chassis_Input_Update(void);
 void Chassis_Input_SetSource(chassis_source_e source);
 
 #endif
+

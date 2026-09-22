@@ -1,3 +1,5 @@
+/* ui.h - UI 显示控制 */
+
 #ifndef __MY_UI_H
 #define __MY_UI_H
 
@@ -45,8 +47,8 @@ typedef enum{
 	VISION_CHAR,
 	CHAS_CIRCLE,//???????
 	CAP_FRAME,//?????
-	MOVE_L_LINE,//???��???
-	MOVE_R_LINE,//???��???
+	MOVE_L_LINE,  // MOVEL直线
+	MOVE_R_LINE,  // MOVE半径直线
 	CAP_DIVISION_1,//????????
 	CAP_DIVISION_2,
 	LEFT_LINE,
@@ -59,3 +61,4 @@ typedef enum{
 void My_Ui_Init(void);
 void Ui_Info_Update(void);
 #endif
+

@@ -1,3 +1,5 @@
+/* chassis_spin.h - 底盘小陀螺 */
+
 #ifndef __CHASSIS_SPIN_H
 #define __CHASSIS_SPIN_H
 
@@ -23,3 +25,4 @@ uint8_t Chassis_Spin_IsSelected(void);
 uint8_t Chassis_Spin_IsActive(void);
 
 #endif
+

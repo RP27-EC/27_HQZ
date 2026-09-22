@@ -1,3 +1,5 @@
+/* chassis_control.c - 底盘控制 */
+
 #include "chassis_control.h"
 
 #include <math.h>
@@ -302,3 +304,4 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
 
     chassis_ctrl.state.fault = 0u;
 }
+

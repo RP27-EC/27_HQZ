@@ -1,3 +1,5 @@
+/* Filter.h - 滤波参数 */
+
 #ifndef __FILTER_H
 #define __FILTER_H
 
@@ -12,6 +14,7 @@ void XEstimateKF_Init(KalmanFilter_t *EstimateKF);
 void XEstimateKF_Update(KalmanFilter_t *EstimateKF ,float vel,float s);
 void XEstimateKF_Clear(KalmanFilter_t *EstimateKF);
 #endif
+
 
 
 

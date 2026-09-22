@@ -1,14 +1,11 @@
+/* Chassis_Posture.h - åº•ç›˜å§¿æ€è§£ç®— */
+
 #ifndef __CHASSIS_POSTURE_H
 #define __CHASSIS_POSTURE_H
-
-/* Includes ------------------------------------------------------------------*/
 #include "imu_sensor.h"
 #include "arm_math.h"
-/* Exported macro ------------------------------------------------------------*/
 #define Degree_to_rad 0.017453f
-/* Exported types ------------------------------------------------------------*/
 
-/*µ×ÅÌÉÏ²ã»úÌå×ËÌ¬ĞÅÏ¢½á¹¹Ìå*/
 typedef struct Chassis_Posture_info_struct_t
 {
 	float pitch;
@@ -36,14 +33,14 @@ typedef struct Chassis_Posture_info_struct_t
 	float z_world;
 }Chassis_Posture_info_t;
 
-/*µ×ÅÌÉÏ²ã»úÌå½á¹¹Ìå*/
+
 typedef struct Chassis_Posture_struct_t
 {
 	Chassis_Posture_info_t *info;
 	void (*data_update)(struct Chassis_Posture_struct_t* My_Chassis_Posture);
 }Chassis_Posture_t;
-/* Exported functions --------------------------------------------------------*/
 /* Servo functions */
 extern Chassis_Posture_t Chassis_Posture;
 
 #endif
+

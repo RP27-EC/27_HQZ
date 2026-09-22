@@ -1,19 +1,5 @@
-/**
- * @file command.c
- * @author your name (you@domain.com)
- * @brief ÃüÁî°ü
- * @version 0.1
- * @date 2023-11-25
- *
- * @copyright Copyright (c) 2023
- *
- */
-
-/* Includes ------------------------------------------------------------------*/
+/* Command.c - æŒ‡ä»¤æœåŠ¡ */
 #include "command.h"
-
-/* Private function prototypes -----------------------------------------------*/
-
 void User_Status_Update(command_t *command);
 void Cmd_Switch_Run(command_t *command);
 void Cmd_Switch_Finish(command_t *command);
@@ -21,14 +7,7 @@ void Cmd_Value_Update(command_t *command);
 void Cmd_HeartBeat(command_t *command);
 void Cmd_Class_Update(command_t *command, bool condition);
 void Cmd_Clean(command_t *command);
-
-/* Function  body --------------------------------------------------------*/
-
-/**
- * @brief ÃüÁî³õÊ¼»¯
- *
- * @param command
- */
+/* æŒ‡ä»¤åˆ†ç±»åˆå§‹åŒ– */
 void Cmd_Class_Init(command_t *command)
 {
   command->user_value = false;
@@ -46,28 +25,24 @@ void Cmd_Class_Init(command_t *command)
   command->clean = Cmd_Clean;
   command->heartbeat = Cmd_HeartBeat;
 
-  command->init_flag = INIT_C; // ÃüÁî³õÊ¼»¯Íê³É
+  command->init_flag = INIT_C;  // åˆå§‹åŒ–æ ‡å¿—
 }
-/**
- * @brief ÓÃ»§ÃüÁî×´Ì¬¸üÐÂ
- *
- * @param command
- */
+/* User_Status_Update */
 void User_Status_Update(command_t *command)
 {
-  /* ÓÃ»§ÃüÁî×´Ì¬¸üÐÂ */
+
   static uint32_t last_lock_tick;
 
   if (command->user_value == true && command->user_value_last == false)
   {
-    // ·ÀÖ¹Ë«·¢ÃüÁî
+
     if (command->Trigger_lock.Trigger_lock_on == 1)
     {
       if (HAL_GetTick() - last_lock_tick > command->Trigger_lock.lock_time)
       {
 
         command->user_status = SWITCH_HIGHT_U;
-        // last_lock_tick=HAL_GetTick();//Á¬µã³õ´Î´¥·¢
+
       }
     }
 
@@ -75,7 +50,7 @@ void User_Status_Update(command_t *command)
     {
       command->user_status = SWITCH_HIGHT_U;
     }
-    last_lock_tick = HAL_GetTick(); // Á¬µãÄ©Î²´¥·¢
+    last_lock_tick = HAL_GetTick();  // lastlockèŠ‚æ‹
   }
   else if (command->user_value == false && command->user_value_last == true)
   {
@@ -85,47 +60,39 @@ void User_Status_Update(command_t *command)
   {
     command->user_status = KEEP_U;
   }
-  /* µ±Ç°ÃüÁîÖµÎªÇ°Ò»´ÎÃüÁîÖµ */
+
   command->user_value_last = command->user_value;
 }
 
-/**
- * @brief ÃüÁîÖ´ÐÐÊ±¼ä¸üÐÂ
- *
- * @param command
- */
+/* æŒ‡ä»¤æœåŠ¡å¿ƒè·³ */
 void Cmd_HeartBeat(command_t *command)
 {
-  /* ÃüÁîÖ´ÐÐÊ±¼ä¸üÐÂ */
-  if (command->cmd_status == RUNING_C) // ÃüÁîÕýÔÚÖ´ÐÐ
+
+  if (command->cmd_status == RUNING_C)  // å‘½ä»¤çŠ¶æ€
   {
-    if (command->run_time_max != OUT_TIME_OFF) // Ã»ÓÐ¹Ø±Õ³¬Ê±ÍË³ö
+    if (command->run_time_max != OUT_TIME_OFF)  // è¾“å‡ºæ—¶é—´OFF
     {
       command->run_time++;
     }
   }
-  else // ÃüÁî²»ÔÚÖ´ÐÐ
+  else
   {
     command->run_time = 0;
   }
 
-  /*³¬Ê±ÍË³ö*/
+
   if (command->run_time > command->run_time_max)
   {
     Cmd_Clean(command);
   }
-  /*ÃüÁîÖµ¸üÐÂ*/
+
    Cmd_Value_Update(command);
 }
 
-/**
- * @brief ÃüÁîÖµ¸üÐÂ
- *
- * @param command
- */
+/* åˆ·æ–°æŒ‡ä»¤æ•°å€¼ */
 void Cmd_Value_Update(command_t *command)
 {
-  /* ÃüÁîÖµ¸üÐÂ */
+
   switch (command->cmd_type)
   {
   case RISE_TRIGER_C:
@@ -181,12 +148,7 @@ void Cmd_Value_Update(command_t *command)
   }
 }
 
-/**
- * @brief ÃüÁîÀà¸üÐÂ ÃüÁîÓÐ³õÊ¼»¯²Å»á¸üÐÂ
- *
- * @param command
- * @param condition ¸ßµçÆ½Ìõ¼þ
- */
+/* æŒ‡ä»¤åˆ†ç±»åˆ·æ–° */
 void Cmd_Class_Update(command_t *command, bool condition)
 {
   if (command->init_flag == INIT_C)
@@ -201,17 +163,13 @@ void Cmd_Class_Update(command_t *command, bool condition)
     }
   }
 
-  /*ÓÃ»§ÃüÁî×´Ì¬¸üÐÂ*/
+
   User_Status_Update(command);
-  /*ÃüÁîÖµ¸üÐÂ*/
+
  // Cmd_Value_Update(command);
 }
 
-/**
- * @brief ÃüÁî±êÖ¾Î»ÇåÁã
- *
- * @param command
- */
+/* æ¸…ç©ºæŒ‡ä»¤é˜Ÿåˆ— */
 void Cmd_Clean(command_t *command)
 {
   command->user_value = false;
@@ -224,22 +182,16 @@ void Cmd_Clean(command_t *command)
   command->run_time = 0;
 }
 
-/**
- * @brief ÃüÁîÇÐ»»ÎªÕýÔÚÖ´ÐÐ
- *
- * @param command
- */
+/* æŒ‡ä»¤åˆ‡æ¢æ‰§è¡Œ */
 void Cmd_Switch_Run(command_t *command)
 {
   command->cmd_status = RUNING_C;
 }
 
-/**
- * @brief ÃüÁîÇÐ»»ÎªÖ´ÐÐÍê³É
- *
- * @param command
- */
+/* æŒ‡ä»¤åˆ‡æ¢å®Œæˆ */
 void Cmd_Switch_Finish(command_t *command)
 {
   command->cmd_status = FINISH_C;
 }
+
+

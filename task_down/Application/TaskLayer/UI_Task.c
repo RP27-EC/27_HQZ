@@ -1,9 +1,5 @@
-/**
-  ******************************************************************************
-  * @file    UI_task.c
-  * @brief   UI更新任务
-  ******************************************************************************
-  */
+/* UI_Task.c - UI 任务 */
+
 #include "Ui_Task.h"
 //UI任务
 void StartUITask(void const * argument)
@@ -16,4 +12,5 @@ void StartUITask(void const * argument)
 	}
 }
  
+
 

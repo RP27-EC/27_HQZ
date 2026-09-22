@@ -1,3 +1,5 @@
+/* Chassis_Posture.c - åº•ç›˜å§¿æ€è§£ç®— */
+
 #include "Chassis_Posture.h"
 
 static void Chassis_Posture_Update(Chassis_Posture_t* My_Chassis_Posture);
@@ -15,25 +17,26 @@ static void Chassis_Posture_Update(Chassis_Posture_t* My_Chassis_Posture)
 {
 	Chassis_Posture_info_t* info = My_Chassis_Posture->info;
 	
-	info->pitch = imu_sensor.info->base_info.pitch * Degree_to_rad + pitch_offset*Degree_to_rad ;
+	info->pitch = imu_dev.info->base_info.pitch * Degree_to_rad + pitch_offset*Degree_to_rad ;
 
-	info->roll = - imu_sensor.info->base_info.roll * Degree_to_rad ;
+	info->roll = - imu_dev.info->base_info.roll * Degree_to_rad ;
 
-	info->yaw = imu_sensor.info->base_info.yaw* Degree_to_rad;
+	info->yaw = imu_dev.info->base_info.yaw* Degree_to_rad;
 	
-	//½ÇËÙ¶È¸üÐÂ
-	info->roll_v = - imu_sensor.info->base_info.rate_roll * Degree_to_rad;
-	info->pitch_v = imu_sensor.info->base_info.rate_pitch * Degree_to_rad;
-	info->yaw_v = imu_sensor.info->base_info.rate_yaw 	 * Degree_to_rad;
+
+	info->roll_v = - imu_dev.info->base_info.rate_roll * Degree_to_rad;
+	info->pitch_v = imu_dev.info->base_info.rate_pitch * Degree_to_rad;
+	info->yaw_v = imu_dev.info->base_info.rate_yaw 	 * Degree_to_rad;
 	
-	//¼ÓËÙ¶È¸üÐÂ
-	info->a_x = imu_sensor.info->raw_info.acc_x;
-	info->a_y = - imu_sensor.info->raw_info.acc_y;
-	info->a_z = imu_sensor.info->raw_info.acc_z;
+
+	info->a_x = imu_dev.info->raw_info.acc_x;
+	info->a_y = - imu_dev.info->raw_info.acc_y;
+	info->a_z = imu_dev.info->raw_info.acc_z;
 	
-	//ÊÀ½ç¼ÓËÙ¶È¸üÐÂ
-	info->x_world = -imu_sensor.info->base_info.accx;
-	info->y_world = - imu_sensor.info->base_info.accy;
-	info->z_world = - imu_sensor.info->base_info.accz + 9.81f;
+
+	info->x_world = -imu_dev.info->base_info.accx;
+	info->y_world = - imu_dev.info->base_info.accy;
+	info->z_world = - imu_dev.info->base_info.accz + 9.81f;
 	
 }
+

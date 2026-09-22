@@ -1,3 +1,5 @@
+/* Command_Instance.c - æŒ‡ä»¤å®ä¾‹ */
+
 
 #include "Command_Instance.h"
 #include "Board_protocol.h"
@@ -52,9 +54,7 @@ command_t command[COMMAND_LIST] =
 
 };
 
-/**
- * @brief ÃüÁî³õÊ¼»¯£¬µ÷ÓÃÒ»´Î
- */
+/* æŒ‡ä»¤æœåŠ¡åˆå§‹åŒ– */
 void Cmd_Init(void)
 {
 	for(uint8_t i = 0; i < COMMAND_LIST; i++)
@@ -62,9 +62,7 @@ void Cmd_Init(void)
 		command[i].init(&command[i]);
 	}
 }
-/**
- * @brief ÃüÁîĞÄÌø Ñ­»·µ÷ÓÃ
- */
+/* æŒ‡ä»¤æœåŠ¡å¿ƒè·³ */
 void Cmd_Heartbeat(void)
 {
 	for(uint8_t i = 0; i < COMMAND_LIST; i++)
@@ -72,13 +70,11 @@ void Cmd_Heartbeat(void)
 		command[i].heartbeat(&command[i]);
 	}
 }
-/**
- * @brief ÃüÁî¸üĞÂ Ñ­»·µ÷ÓÃ
- */
+/* æŒ‡ä»¤é˜Ÿåˆ—æ›´æ–° */
 void Command_Update(void)
 {
 	static uint32_t RC_ONLINE_TICK;
-	rc_sensor_info_t*  rc_info=Balance.rc->sensor->info;
+	rc_data_t*  rc_info=Balance.rc->sensor->info;
 	
 	if(Balance.rc->sensor->work_state==DEV_ONLINE)
 	{
@@ -94,9 +90,9 @@ void Command_Update(void)
 	static uint8_t fly_step;
 	
 	
-	if(RC_ONLINE_TICK>=200)//ÆÁ±Î¿ª¿ØÃüÁî
+	if(RC_ONLINE_TICK>=200)
 	{
-		/*ÃüÁî¸üĞÂÌîÕâÀï*/
+
 		if(Balance.ctrl == RC_CTRL)
 		{
 //			command[JUMP].update(&command[JUMP],rc_info->s1 == RC_SW_UP && rc_info->s2 ==  RC_SW_UP 
@@ -163,6 +159,8 @@ void Command_Update(void)
 	
 	
 }
+
+
 
 
 

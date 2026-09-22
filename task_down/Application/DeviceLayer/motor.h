@@ -1,3 +1,5 @@
+/* motor.h - 电机对象管理 */
+
 #ifndef __MOTOR_H
 #define __MOTOR_H
 
@@ -22,10 +24,8 @@ typedef enum{
 #define   ID_WHEEL_RF    0x203
 #define   ID_WHEEL_RB    0x204
 
-extern Motor_RM_t wheel_motor[WHEEL_CNT];
-extern Motor_RM_Group_t wheel_group;
-
-/* Exported functions --------------------------------------------------------*/
+extern rm_motor_t wheel_motor[WHEEL_CNT];
+extern rm_group_t wheel_group;
 void rm_motor_list_init(void);
 void rm_motor_list_heart_beat(void);
 void kt_motor_list_init(void);
@@ -34,4 +34,5 @@ void dm_motor_list_init(void);
 uint8_t rm_motor_list_workstate(void);
 
 #endif
+
 

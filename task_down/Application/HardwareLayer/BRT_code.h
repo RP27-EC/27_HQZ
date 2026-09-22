@@ -1,44 +1,32 @@
-/**
-  ******************************************************************************
-  * @file    BRT_code.h
-  * @brief   BRT单圈绝对值编码器驱动
-  ******************************************************************************
-  * @attention
-  * 
-  * 
-  ******************************************************************************
-  */
-	
+/* BRT_code.h - 澶栬鎵╁睍妯″潡椹卞姩 */
+
 #ifndef __BRT_CODE_H
 #define __BRT_CODE_H
-/* Includes ------------------------------------------------------------------*/
 #include "rp_config.h"
 #include "drv_can.h"
 
-/* Exported typedef ----------------------------------------------------------*/
-/*编码器指令集*/
 typedef enum Code_BRT_Command
 {
-	Read_encoder = 0x01,//读取编码器值
-	Set_Id,//设置编码器ID
-	Set_Baud,//设置CAN通信波特率
-	Set_Code_Mode,//设置编码器模式
-	Set_Receive_Time,//设置回传时间
-	Set_Zero_Pole,//设置零点
-	Set_Dire,//设置方向
-	Read_sum_encoder,//读取多圈值
-	Read_Turn,//读取虚拟圈数
-	Read_speed,//读取编码器角速度值
-	Set_Sample_Time,//设置采样时间
-	Set_Mid_Pole,//设置中点
-	Set_Num_Pole,//设置当前位置值
+	Read_encoder = 0x01,
+	Set_Id,  // SetID
+	Set_Baud,
+	Set_Code_Mode,  // Set浠ｇ爜妯″紡
+	Set_Receive_Time,  // SetReceive鏃堕棿
+	Set_Zero_Pole,  // Set闆禤ole
+	Set_Dire,
+	Read_sum_encoder,
+	Read_Turn,
+	Read_speed,  // Read閫熷害
+	Set_Sample_Time,  // SetSample鏃堕棿
+	Set_Mid_Pole,  // Set涓璓ole
+	Set_Num_Pole,  // Set鏁伴噺Pole
 	BRT_Command_Num,
 }Code_BRT_Command_e;
 
 
 typedef struct Code_BRT_Born_Info_struct_t
 {
-		uint32_t stdId;//标识ID
+		uint32_t stdId;  // stdID
 	
     FDCAN_HandleTypeDef *hcan;
 }Code_BRT_Born_Info_t;
@@ -67,7 +55,7 @@ typedef struct Code_BRT_Rx_Info_struct_t
 
 typedef struct Code_BRT_Tx_Info_struct_t
 {
-	uint8_t command_flag[BRT_Command_Num];//0:未发送指令  1：指令已发送  2：指令成功接收  3：指令接收失败
+	uint8_t command_flag[BRT_Command_Num];  // command鏍囧織
 	
 	uint8_t tx_buff[8];
 	
@@ -131,3 +119,4 @@ typedef struct Code_BRT_struct_t
 void BRT_Code_Init(Code_BRT_t* code);
 
 #endif
+

@@ -1,3 +1,5 @@
+/* config_chassis.h - 底盘模块配置 */
+
 #ifndef __CONFIG_CHASSIS_H
 #define __CONFIG_CHASSIS_H
 
@@ -19,4 +21,5 @@
 #define INFANTRY_WEIGHT
 
 #endif
+
 

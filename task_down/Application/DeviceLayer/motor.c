@@ -1,5 +1,3 @@
-
-/* Includes ------------------------------------------------------------------*/
 #include "motor.h"
 
 extern CAN_HandleTypeDef hcan1;
@@ -115,7 +113,7 @@ pid_ctrl_t wheel_angle_out_pid[WHEEL_CNT] = {
 };
 
 
-Motor_RM_Born_Info_t wheel_born_info[WHEEL_CNT] = {
+rm_cfg_t wheel_born_info[WHEEL_CNT] = {
 	[WHEEL_LF] = {
 		.order_correction = 0,
 		.rxId = 0,
@@ -152,10 +150,10 @@ Motor_RM_Born_Info_t wheel_born_info[WHEEL_CNT] = {
 };
 
 
-Motor_RM_Rx_Info_t   wheel_rx_info[WHEEL_CNT];
-Motor_RM_Tx_Info_t   wheel_tx_info[WHEEL_CNT];
-Motor_RM_State_t     wheel_state[WHEEL_CNT];
-Motor_RM_Ctrl_Info_t wheel_ctrl_info[WHEEL_CNT] = {
+rm_rx_t   wheel_rx_info[WHEEL_CNT];
+rm_tx_t   wheel_tx_info[WHEEL_CNT];
+rm_state_t     wheel_state[WHEEL_CNT];
+rm_ctrl_t wheel_ctrl_info[WHEEL_CNT] = {
 	[WHEEL_LF] = {
 	  .angle_ctrl_inner = &wheel_angle_inn_pid[WHEEL_LF],
 		.angle_ctrl_outer = &wheel_angle_out_pid[WHEEL_LF],
@@ -180,14 +178,14 @@ Motor_RM_Ctrl_Info_t wheel_ctrl_info[WHEEL_CNT] = {
 };
 
 
-Motor_RM_t wheel_motor[WHEEL_CNT] = {
+rm_motor_t wheel_motor[WHEEL_CNT] = {
 	[WHEEL_LF] = {
 	 .born_info = &wheel_born_info[WHEEL_LF],
 	 .rx_info = &wheel_rx_info[WHEEL_LF],
 	 .tx_info = &wheel_tx_info[WHEEL_LF],
 	 .state = &wheel_state[WHEEL_LF],
 	 .ctrl = &wheel_ctrl_info[WHEEL_LF],
-	 .single_init = RM_Motor_Init,	
+	 .single_init = rm_motor_init,	
 	},
 	[WHEEL_LB] = {
 	 .born_info = &wheel_born_info[WHEEL_LB],
@@ -195,7 +193,7 @@ Motor_RM_t wheel_motor[WHEEL_CNT] = {
 	 .tx_info = &wheel_tx_info[WHEEL_LB],
 	 .state = &wheel_state[WHEEL_LB],
 	 .ctrl = &wheel_ctrl_info[WHEEL_LB],
-	 .single_init = RM_Motor_Init,	
+	 .single_init = rm_motor_init,	
 	},
 	[WHEEL_RF] = {
 	 .born_info = &wheel_born_info[WHEEL_RF],
@@ -203,7 +201,7 @@ Motor_RM_t wheel_motor[WHEEL_CNT] = {
 	 .tx_info = &wheel_tx_info[WHEEL_RF],
 	 .state = &wheel_state[WHEEL_RF],
 	 .ctrl = &wheel_ctrl_info[WHEEL_RF],
-	 .single_init = RM_Motor_Init,	
+	 .single_init = rm_motor_init,	
 	},
 	[WHEEL_RB] = {
 	 .born_info = &wheel_born_info[WHEEL_RB],
@@ -211,28 +209,24 @@ Motor_RM_t wheel_motor[WHEEL_CNT] = {
 	 .tx_info = &wheel_tx_info[WHEEL_RB],
 	 .state = &wheel_state[WHEEL_RB],
 	 .ctrl = &wheel_ctrl_info[WHEEL_RB],
-	 .single_init = RM_Motor_Init,	
+	 .single_init = rm_motor_init,	
 	},
 	
 
 };
 
 
-Motor_RM_Group_t wheel_group = {
+rm_group_t wheel_group = {
 	.motor[WHEEL_LF] = &wheel_motor[WHEEL_LF],
 	.motor[WHEEL_LB] = &wheel_motor[WHEEL_LB],
 	.motor[WHEEL_RF] = &wheel_motor[WHEEL_RF],
 	.motor[WHEEL_RB] = &wheel_motor[WHEEL_RB],
 	.stdId = 0x200,
   .hcan = &hfdcan1,
-  .group_init = RM_Group_Motor_Init,
+  .group_init = rm_group_init,
 
 
 };
-
-
-
-/* Exported functions --------------------------------------------------------*/
 void rm_motor_list_init()
 {
 	/*电机信息初始化*/
@@ -260,5 +254,7 @@ void rm_motor_list_heart_beat()
 {
   wheel_group.group_heartbeat(&wheel_group);
 }
+
+
 
 

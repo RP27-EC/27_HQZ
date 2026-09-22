@@ -1,3 +1,5 @@
+/* chassis_control.h - 底盘控制 */
+
 #ifndef __CHASSIS_CONTROL_H
 #define __CHASSIS_CONTROL_H
 
@@ -44,7 +46,7 @@ typedef struct
 
 typedef struct
 {
-    Motor_RM_Group_t *wheel;
+    rm_group_t *wheel;
     chassis_control_state_t state;
 } chassis_control_t;
 
@@ -56,3 +58,4 @@ void Chassis_Control_Stop(void);
 void Chassis_Control_Update(const chassis_cmd_t *cmd);
 
 #endif
+

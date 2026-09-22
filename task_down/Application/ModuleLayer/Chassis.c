@@ -1,3 +1,5 @@
+/* Chassis.c - 底盘主控 */
+
 #include "chassis.h"
 #include "gimbal.h"
 #include "infantry.h"
@@ -61,10 +63,7 @@ static void Chassis_Init(Chassis_t* chassis)
 	chassis->heart_beat = Chassis_Offline_Update;
 }
 
-/**
- * @brief 底盘模式状态更新
- * @note   狗洞要特殊处理
- */
+/* 底盘状态刷新 */
 static void Chassis_Status_Update(Chassis_t* chassis)
 {
 	switch (infantry.mode)
@@ -119,14 +118,11 @@ static void Chassis_Status_Update(Chassis_t* chassis)
 	
 }
 
-/**
- * @brief  键鼠W,S,A,D输入
- * @note   未验证
- */
+/* 键鼠底盘输入 */
 static void Chassis_Key_Input(Chassis_t* chassis)
 {
 	Chassis_Key_Info_t* key = &chassis->key;
-	rc_sensor_info_t* rc = rc_sensor.info;
+	rc_data_t* rc = rc_dev.info;
 
 	
 	if((rc->W.status == press_to_release && rc->S.status == release) || (rc->W.status == release && rc->S.status == press_to_release) || (rc->W.status == press_to_release && rc->S.status == press_to_release))
@@ -188,25 +184,25 @@ static void Chassis_Target_Update(Chassis_t* chassis)
 	
 	float last_front_cnt,last_left_cnt,now_front_cnt,now_left_cnt;
 	
-//	now_front_cnt = step_limit_filter(rc_sensor.info->W.cnt - rc_sensor.info->S.cnt, last_front_cnt, 400);
-//	now_left_cnt = step_limit_filter(rc_sensor.info->A.cnt - rc_sensor.info->D.cnt, last_left_cnt, 400);
+//	now_front_cnt = step_limit_filter(rc_dev.info->W.cnt - rc_dev.info->S.cnt, last_front_cnt, 400);
+//	now_left_cnt = step_limit_filter(rc_dev.info->A.cnt - rc_dev.info->D.cnt, last_left_cnt, 400);
 //	
 	
-	now_front_cnt = rc_sensor.info->W.cnt - rc_sensor.info->S.cnt;
-	now_left_cnt = rc_sensor.info->A.cnt - rc_sensor.info->D.cnt;
+	now_front_cnt = rc_dev.info->W.cnt - rc_dev.info->S.cnt;
+	now_left_cnt = rc_dev.info->A.cnt - rc_dev.info->D.cnt;
 	
  
 	if(infantry.ctrl == RC_CTRL)
 	{
-		front_speed = -rc_sensor.info->ch3/660.f * FRONT_MAX_SPEED;
-    left_speed = rc_sensor.info->ch2/660.f * LEFT_MAX_SPEED;
-	  cycle_speed = rc_sensor.info->ch0/660.f * CYCLE_MAX_SPEED;
+		front_speed = -rc_dev.info->ch3/660.f * FRONT_MAX_SPEED;
+    left_speed = rc_dev.info->ch2/660.f * LEFT_MAX_SPEED;
+	  cycle_speed = rc_dev.info->ch0/660.f * CYCLE_MAX_SPEED;
 	
 	}
 	else{
 	  front_speed = -1*(float)now_front_cnt/ KEY_W_CNT_MAX* FRONT_MAX_SPEED;
 	  left_speed = -(float)now_left_cnt/ KEY_A_CNT_MAX* LEFT_MAX_SPEED;
-	  cycle_speed = rc_sensor.info->mouse_vx;
+	  cycle_speed = rc_dev.info->mouse_vx;
 		cycle_speed = constrain(cycle_speed,-CYCLE_MAX_SPEED,CYCLE_MAX_SPEED);
 	}
 	
@@ -223,7 +219,7 @@ static void Chassis_Target_Update(Chassis_t* chassis)
 		  chassis->target.left_speed = 0;
 	    chassis->target.cycle_speed = 0;
 		
-		  straight_yaw = imu_sensor.info->base_info.yaw;
+		  straight_yaw = imu_dev.info->base_info.yaw;
 	
 	    break;
 		
@@ -246,11 +242,11 @@ static void Chassis_Target_Update(Chassis_t* chassis)
 			//走偏矫正
 //		  if(abs(chassis->target.front_speed) >=10 && abs(chassis->target.cycle_speed) <= 0.1)
 //			{
-//				chassis->target.cycle_speed = -1*motor_half_cycle(straight_yaw - imu_sensor.info->base_info.yaw,360.f);
+//				chassis->target.cycle_speed = -1*motor_half_cycle(straight_yaw - imu_dev.info->base_info.yaw,360.f);
 //				chassis->target.cycle_speed = constrain(chassis->target.cycle_speed,-20.f,20.f);
 //			}
 //			else{
-//				straight_yaw = imu_sensor.info->base_info.yaw;
+//				straight_yaw = imu_dev.info->base_info.yaw;
 //			}
 		
 	
@@ -291,7 +287,7 @@ static void Chassis_Target_Update(Chassis_t* chassis)
       chassis->target.front_speed = front_speed * cos(gimbal.info.yaw_mec_err_raw) + left_speed * sin(gimbal.info.yaw_mec_err_raw);
 		  chassis->target.left_speed = left_speed * cos(gimbal.info.yaw_mec_err_raw) - front_speed * sin(gimbal.info.yaw_mec_err_raw);
      
-			straight_yaw = imu_sensor.info->base_info.yaw;
+			straight_yaw = imu_dev.info->base_info.yaw;
 		
 			break;
 		
@@ -304,10 +300,7 @@ static void Chassis_Target_Update(Chassis_t* chassis)
 	
 }
 
-/**
- * @brief  底盘运动学逆解算，车速算轮速
- * @note   速度是弧度，当前策略是尽量保旋转速度而削减平动速度
- */
+/* 逆运动学求解 */
 static void Chassis_Inverse_Calculate(Chassis_t* chassis)
 {
 	float front = chassis->target.front_speed;
@@ -351,10 +344,7 @@ static void Chassis_Inverse_Calculate(Chassis_t* chassis)
 	
 }
 
-/**
- * @brief  底盘运动学正解算，轮速算车速
- * @note   速度是弧度，便于求实际整车速度
- */
+/* 正运动学求解 */
 static void Chassis_Positive_Calculate(Chassis_t* chassis)
 {
 	float speed_rf = chassis->wheel->motor[WHEEL_RF]->rx_info->speed;
@@ -378,10 +368,7 @@ static void Chassis_Positive_Calculate(Chassis_t* chassis)
 }
 
 
-/**
- * @brief  底盘掉线失联检查
- * @note   四个轮子都掉电才算失联
- */
+/* 底盘离线状态刷新 */
 static void Chassis_Offline_Update(Chassis_t* chassis)
 {
 	uint8_t offline_cnt = 0;
@@ -413,10 +400,7 @@ static void Chassis_Offline_Update(Chassis_t* chassis)
 }
 
 
-/**
- * @brief  底盘失联处理
- * @note   全部睡觉
- */
+/* 底盘失联处理 */
 static void Chassis_Offline_Process(Chassis_t* chassis)
 {
 	for(uint8_t i = 0;i< WHEEL_CNT;i++)
@@ -426,10 +410,7 @@ static void Chassis_Offline_Process(Chassis_t* chassis)
 	
 }
 
-/**
- * @brief  底盘前馈计算
- * @note   主要是斜坡的重力前馈，不想加，除非做到抱起来不转，且需要加死区
- */
+/* 底盘角速度前馈 */
 static void Chassis_Feedforward_Calculate(Chassis_t* chassis)
 {
 	float direct = 1.f;
@@ -444,8 +425,8 @@ static void Chassis_Feedforward_Calculate(Chassis_t* chassis)
 		
 	
 	float car_x_f,car_y_f;
-	car_x_f = CHASSIS_WEIGHT * GRAVITATIONAL_CONSTANT * sin(-imu_sensor.info->base_info.pitch);
-	car_y_f = CHASSIS_WEIGHT * GRAVITATIONAL_CONSTANT * sin(imu_sensor.info->base_info.roll);
+	car_x_f = CHASSIS_WEIGHT * GRAVITATIONAL_CONSTANT * sin(-imu_dev.info->base_info.pitch);
+	car_y_f = CHASSIS_WEIGHT * GRAVITATIONAL_CONSTANT * sin(imu_dev.info->base_info.roll);
 	
   chassis->out.wheel_feed_out[WHEEL_LF] = direct * (- car_x_f + car_y_f) / 4 * WHEEL_RADIUS;
 	chassis->out.wheel_feed_out[WHEEL_LB] = direct * (- car_x_f - car_y_f) / 4 * WHEEL_RADIUS;
@@ -529,12 +510,7 @@ static void Chassis_Pid_Calculate(Chassis_t* chassis)
 
 
 
-/**
-  * @name    Chassis_Power_Limit
-  * @brief   底盘功率限制(经典祖传算法)
-  * @note    被我改了
-  * @author  WRX
-**/
+/* power_fail */
 uint32_t  power_fail = 0;
 static void Chassis_Power_Limit(Chassis_t * chassis)
 {
@@ -607,11 +583,7 @@ static void Chassis_Power_Limit(Chassis_t * chassis)
 }
 
 
-/**
-  * @brief   将功率用电流和转速表达，二阶泰勒展开
-  * @param   电流  转速
-  * @result  功率
-**/
+/* result */
 float result = 0;
 float tx_result = 0;
 static float Calculate_Predicted_Power(float* coefficient,float i, float w) {
@@ -633,12 +605,7 @@ static float Calculate_Predicted_Power(float* coefficient,float i, float w) {
 //    return result;  
 	 return k0 + k1 * i + k2 * w + k3 * i * w + k4 * i*i + k5 * w*w;  
 }
-/**
-  * @Name    Calculate_Current_Out
-  * @brief   解算出电流输出
-  * @param   目标功率  转速  原始电流
-  * @result  电流
-**/
+/* error_test */
 uint32_t error_test;
 static float Calculate_Current_Out(float* coefficient,float target_power, float w, int16_t raw_current)
 {
@@ -726,12 +693,7 @@ static float Current_To_Torque(int16_t current_encoder)
 }
 
 
-/**
-  * @Name    New_Chassis_Power_Limit
-  * @brief   给底盘电机输出进行功率限制赋值,由于pid计算出的扭矩与功率计所需电流单位不一致，函数中存在转化
-             在原新功率算法基础上改动过
-  * @param   chassis
-**/
+/* limit */
 float limit=60;
 uint8_t buf[5];
 float power[4];
@@ -869,10 +831,7 @@ static void New_Chassis_Power_Limit(Chassis_t *chassis)
 }
 
 
-/**
-  * @brief   中值滤波 + 趋势预测的功率估算
-  * @note    更适合缓冲能量跳变的情况，未验证
-  */
+/* 高级功率估算 */
 float Power_Estimate_Advanced(void)
 {
     uint16_t buffer = judge.pkt->buffer_energy;
@@ -938,11 +897,7 @@ float Power_Estimate_Advanced(void)
 }
 
 
-///**
-//  * @Name    Caluculate_All_Predicted_Power
-//  * @brief   计算出所有的预测功率通过指针传出到全局变量，方便debug
-//  * @param   底盘结构体  电机的功率  电机总功率  预测总功率和裁判系统收到的功率的差值
-//**/
+///* 接口说明 */
 //static void Caluculate_All_Predicted_Power(Chassis_t *chassis,float *each_power,float *power_all,float *power_error)
 //{
 //	int16_t limit_output_current[4];
@@ -974,10 +929,7 @@ float Power_Estimate_Advanced(void)
 
 
 int test_count;
-/**
- * @brief  底盘报文发送
- * @note   关底盘和关功率在此最后处理
- */
+/* 下发底盘控制量 */
 static void Chassis_Cmd_Transmit(Chassis_t* chassis)
 {
 	static int count = 0,last_chassis_state = 0;
@@ -1041,10 +993,7 @@ static void Chassis_Cmd_Transmit(Chassis_t* chassis)
 float each_power[4];
 float power_all;
 float power_error;
-/**
- * @brief  底盘工作函数
- * @note   
- */
+/* 底盘主循环 */
 static void Chassis_Work(Chassis_t* chassis)
 {
 	Chassis_Offline_Update(chassis);
@@ -1147,6 +1096,9 @@ static int8_t random_step_calculate(uint8_t cmd, uint32_t seed) {
 
     g_step = cands[0]; g_base += cands[0]; return cands[0];
 }
+
+
+
 
 
 

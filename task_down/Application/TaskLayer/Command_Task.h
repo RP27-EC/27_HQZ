@@ -1,3 +1,5 @@
+/* Command_Task.h - 指令任务 */
+
 #ifndef __COMMAND_TASK
 #define __COMMAND_TASK
 
@@ -9,3 +11,4 @@
 void StartCommandTask(void const * argument);
 
 #endif
+

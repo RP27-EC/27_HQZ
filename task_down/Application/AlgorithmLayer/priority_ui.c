@@ -1,30 +1,20 @@
-/**
- * @file priority_ui.c
- * @author Isaac (1812924685@qq.com)
- * @brief Í¨¹ıÓÅÏÈ¶ÓÁĞÊµÏÖUIÓÅÏÈ¼¶µ÷¶È
- * @version 1.1.1
- * @date 2024-04-14
- * 
- * @copyright Copyright (c) 2024
- * 
- */
-/* Includes ------------------------------------------------------------------*/
+/* priority_ui.c - UI ä¼˜å…ˆçº§è°ƒåº¦ */
 #include "priority_ui.h"
 #include <stdio.h>
 #include "rc_sensor.h"
-/*ÓÃ»§ÅäÖÃÇø******************************************************************************************/
-/*¹¦ÄÜ---------------------------------------------------*/
-#define AUTO_UI_NAME_ENABLE  // ×Ô¶¯ÃüÃû
-/*²ÎÊı---------------------------------------------------*/
-#define HIGH_PRIORITY_WEIGHT 1000 // ¸ßÓÅÏÈ¼¶È¨ÖØ
-#define MID_PRIORITY_WEIGHT  500  // ÖĞÓÅÏÈ¼¶È¨ÖØ
-#define LOW_PRIORITY_WEIGHT  0    // µÍÓÅÏÈ¼¶È¨ÖØ
+ 
+ 
+#define AUTO_UI_NAME_ENABLE
+ 
+#define HIGH_PRIORITY_WEIGHT 1000
+#define MID_PRIORITY_WEIGHT  500
+#define LOW_PRIORITY_WEIGHT  0
 
-#define HIGH_CHAR_PRIORITY_LEVEL 7  // ¸ßÓÅÏÈ¼¶×Ö·ûÇÀÕ¼Í¼ĞÎUIµÄµÈ¼¶
-#define MID_CHAR_PRIORITY_LEVEL  5  // ÖĞÓÅÏÈ¼¶×Ö·ûÇÀÕ¼Í¼ĞÎUIµÄµÈ¼¶
+#define HIGH_CHAR_PRIORITY_LEVEL 7
+#define MID_CHAR_PRIORITY_LEVEL  5
 
-#define SEND_INTERVAL        100 // ·¢ËÍ¼ä¸ôÊ±¼ä(MS) [²ÃÅĞÏµÍ³ÉÏÏŞÊÇ10HZ]
-#define PER_INIT_UI_TIMES    1   // Ã¿´Î³õÊ¼»¯µÄUI´ÎÊı
+#define SEND_INTERVAL        100
+#define PER_INIT_UI_TIMES    1
 
 #define UI_GRAPHIC_MAX_PER_FRAME 7
 
@@ -38,12 +28,7 @@ static void Ui_Commit_Pending(void);
 static void Ui_Rollback_Pending(void);
 static uint8_t Send_Graphic_Buffer( const ext_client_custom_graphic_seven_t *buffer,  uint8_t graphic_num);
 
-/**
- * @brief ÓÃ»§¶¨Òå³õÊ¼»¯UIµÄÌõ¼ş(ËùÓĞ·¢ADD)
- * 
- * @return true ¿ªÊ¼³õÊ¼»¯
- * @return false Õı³£·¢ËÍ
- */
+/* Init_Ui_Condition */
 bool Init_Ui_Condition(void)
 {
     static bool first_init_finished = false;
@@ -54,33 +39,30 @@ bool Init_Ui_Condition(void)
     uint8_t rc_online_rising_edge = 0;
     uint8_t s1_changed = 0;
 
-    /*
-     * ÉÏµçºó¿É¿¿´¥·¢Ò»´ÎÈ«Á¿ ADD¡£
-     * ²»ÒªÊ¹ÓÃ HAL_GetTick() == 100£¬ÒòÎªÈÎÎñ²»Ò»¶¨Ç¡ºÃÔÚ 100 ms Ö´ĞĞ¡£
-     */
+     
     if (!first_init_finished && HAL_GetTick() >= 100)
     {
         first_init_finished = true;
 
-        rc_status_last = rc_sensor.work_state;
-        if (rc_sensor.info != NULL)
+        rc_status_last = rc_dev.work_state;
+        if (rc_dev.info != NULL)
         {
-            s1_value_last = rc_sensor.info->s1.value;
+            s1_value_last = rc_dev.info->s1.value;
         }
 
         return true;
     }
 
-    /* Ò£¿ØÆ÷ÓÉÀëÏß±äÎªÔÚÏß */
-    if (rc_sensor.work_state == DEV_ONLINE &&
+     
+    if (rc_dev.work_state == DEV_ONLINE &&
         rc_status_last == DEV_OFFLINE)
     {
         rc_online_rising_edge = 1;
         last_rc_offline_time = 0;
     }
 
-    /* Ò£¿ØÆ÷ÀëÏßÊ±£¬Ã¿ 10 ÃëÖØĞÂ ADD Ò»´Î */
-    if (rc_sensor.work_state == DEV_OFFLINE)
+     
+    if (rc_dev.work_state == DEV_OFFLINE)
     {
         if (last_rc_offline_time == 0)
         {
@@ -90,7 +72,7 @@ bool Init_Ui_Condition(void)
         {
             last_rc_offline_time = HAL_GetTick();
 
-            rc_status_last = rc_sensor.work_state;
+            rc_status_last = rc_dev.work_state;
             return true;
         }
     }
@@ -99,48 +81,43 @@ bool Init_Ui_Condition(void)
         last_rc_offline_time = 0;
     }
 
-    /* ·ÀÖ¹ rc_sensor.info Îª¿Õ */
-    if (rc_sensor.info != NULL)
+     
+    if (rc_dev.info != NULL)
     {
-        if (s1_value_last != rc_sensor.info->s1.value)
+        if (s1_value_last != rc_dev.info->s1.value)
         {
             s1_changed = 1;
         }
 
-        s1_value_last = rc_sensor.info->s1.value;
+        s1_value_last = rc_dev.info->s1.value;
     }
 
-    rc_status_last = rc_sensor.work_state;
+    rc_status_last = rc_dev.work_state;
 
     return rc_online_rising_edge || s1_changed;
 }
 
-/*Ä¿Â¼******************************************************************************************/
+ 
 
-// ÅÅÁĞÏà¹Øº¯Êı
-    /*¼ÆËãÏûÏ¢µÄÓÅÏÈ¼¶*/uint32_t Calculate_Priority(ui_info_t *msg);                                     
-    /*ºÏ²¢Á½¸öÓĞĞòÁ´±í*/Node_u *SortedMerge(Node_u *a, Node_u *b);     
-    /*½«Á´±í·Ö³ÉÁ½°ë*/void FrontBackSplit(Node_u *source, Node_u **frontRef, Node_u **backRef);
-    /*Ê¹ÓÃ·ÖÖÎËã·¨À´¶ÔÁ´±í½øĞĞÅÅĞò*/void mergeSort(Node_u **headRef);    
-    /*½«Á´±íÖĞÓÅÏÈ¼¶¸ßµÄui½á¹¹Ìå´æ´¢µ½Ò»¸öÊı×éÖĞ*/ui_status_e Store_High_Priority_UI(Node_u* dynamic_list_head,Node_u* const_list_head,ui_info_t* graphic_priority_buffer, ui_info_t* character_priority_buffer, uint8_t* ui_graphic_buffer_num,ui_send_mode_e *ui_send_mode);
+     uint32_t Calculate_Priority(ui_info_t *msg);                                     
+     Node_u *SortedMerge(Node_u *a, Node_u *b);     
+     void FrontBackSplit(Node_u *source, Node_u **frontRef, Node_u **backRef);
+     void mergeSort(Node_u **headRef);    
+     ui_status_e Store_High_Priority_UI(Node_u* dynamic_list_head,Node_u* const_list_head,ui_info_t* graphic_priority_buffer, ui_info_t* character_priority_buffer, uint8_t* ui_graphic_buffer_num,ui_send_mode_e *ui_send_mode);
 
 
-// ³õÊ¼»¯Á´±íº¯Êı
-    /*³õÊ¼»¯ÓÅÏÈ¶ÓÁĞ*/ui_status_e Init_Priority_LinkedList(Node_u** headRef, ui_info_t *ui_input, uint8_t num); 
-    /*³õÊ¼»¯Á½¸öÁ´±í*/ui_status_e Init_Type_LinkedLists(Node_u** graphic_link, Node_u** char_link, ui_info_t *dynamic_ui_info, ui_info_t *const_ui_info, uint8_t dynamic_num, uint8_t const_num); 
+     ui_status_e Init_Priority_LinkedList(Node_u** headRef, ui_info_t *ui_input, uint8_t num); 
+     ui_status_e Init_Type_LinkedLists(Node_u** graphic_link, Node_u** char_link, ui_info_t *dynamic_ui_info, ui_info_t *const_ui_info, uint8_t dynamic_num, uint8_t const_num); 
 
-// ÅäÖÃ·¢ËÍ½á¹¹Ìåº¯Êı
-    /*ÅäÖÃ×Ö·ûĞÅÏ¢½ø·¢ËÍ½á¹¹Ìå*/ext_client_custom_character_t Process_Char_Info_To_Buffer(ui_info_t ui_info, uint8_t add_operate_enable); 
-    /*ÅäÖÃÍ¼ĞÎĞÅÏ¢½ø·¢ËÍ½á¹¹Ìå*/ext_client_custom_graphic_seven_t Process_Graphic_To_Buffer(ui_info_t *ui_info, uint8_t ui_info_size, uint8_t add_operate_enable);
+     ext_client_custom_character_t Process_Char_Info_To_Buffer(ui_info_t ui_info, uint8_t add_operate_enable); 
+     ext_client_custom_graphic_seven_t Process_Graphic_To_Buffer(ui_info_t *ui_info, uint8_t ui_info_size, uint8_t add_operate_enable);
 
-// UI·¢ËÍº¯Êı
-    /*UIÕı³£·¢ËÍ*/ui_status_e Ui_Send_Normal();
-    /*UIÇ¿ĞĞ·¢ËÍADD*/ui_status_e Ui_Send_Add();
+     ui_status_e Ui_Send_Normal();
+     ui_status_e Ui_Send_Add();
 
-// ÓÃ»§º¯Êı
-    /*³õÊ¼»¯UIÁ´±í*/ui_status_e Init_Ui_List(ui_info_t *dynamic_ui_info, uint8_t dynamic_ui_num, ui_info_t *const_ui_info, uint8_t const_ui_num);
-    /*UI·¢ËÍº¯Êı*/void Ui_Send();
-    /*Ìí¼Ó¶ÔÓ¦UIµ½´ı·¢ËÍ*/ ui_status_e Enqueue_Ui_For_Sending(ui_info_t *ui_info);
+     ui_status_e Init_Ui_List(ui_info_t *dynamic_ui_info, uint8_t dynamic_ui_num, ui_info_t *const_ui_info, uint8_t const_ui_num);
+     void Ui_Send();
+      ui_status_e Enqueue_Ui_For_Sending(ui_info_t *ui_info);
 
   
 
@@ -148,22 +125,15 @@ bool Init_Ui_Condition(void)
 
 
 
-/*µ×²ãº¯Êı*************************************************************************************************************/
+ 
 
-/**
- * @brief ¼ÆËãÏûÏ¢µÄÓÅÏÈ¼¶
- * 
- * @param msg 
- * @note Î´¸üĞÂµÍÓÅÏÈ¼¶×èÈû1000msµÈÓÚÎ´±»×èÈû¸ßÓÅÏÈ¼¶
- * @return priority_value 
- */
+/* Calculate_Priority */
 uint32_t Calculate_Priority(ui_info_t *msg) 
 {
   uint32_t priority_value = 0;
   uint32_t currentTick = HAL_GetTick();
-  uint32_t age = currentTick - msg->updateTick;//ÏûÏ¢µÄÄêÁä
+  uint32_t age = currentTick - msg->updateTick;
 
-  // ¸ù¾İÏûÏ¢µÄÓÅÏÈ¼¶¼ÆËãÓÅÏÈ¼¶Öµ
   if(msg->ui_config.priority == HIGH_PRIORITY)
   {
 	 
@@ -178,7 +148,6 @@ uint32_t Calculate_Priority(ui_info_t *msg)
     priority_value = LOW_PRIORITY_WEIGHT;
   }
 
-  // Î´·¢ËÍµÄÏûÏ¢¼ÓÉÏµÈ´ıÊ±¼ä¼ÓÈ¨
   if(msg->sent_state == MESSAGE_NOT_SENT)
   {
     priority_value += age ;
@@ -186,13 +155,7 @@ uint32_t Calculate_Priority(ui_info_t *msg)
 
   return priority_value;
 }
-/**
- * @brief 
- * @note µ±Á½¸öÁ´±íÖĞÈÎÒâÒ»¸öÎª¿ÕÊ± µİ¹éÍ£Ö¹£¬Ö±½Ó·µ»ØÁíÒ»¸öÁ´±íµÄÊ£Óà²¿·Ö
- * @param a 
- * @param b 
- * @return Node* 
- */
+/* æ¥å£è¯´æ˜ */
 Node_u* SortedMerge(Node_u* a, Node_u* b)
 {
   Node_u* res = NULL;
@@ -205,7 +168,6 @@ Node_u* SortedMerge(Node_u* a, Node_u* b)
   a->ui->priority_value = Calculate_Priority(a->ui);
   b->ui->priority_value = Calculate_Priority(b->ui);
 
-//ÓÅÏÈÅĞ¶ÏÏûÏ¢ÊÇ·ñ·¢ËÍ(Î´·¢ËÍµÄÏûÏ¢ÓÅÏÈ¼¶×î¸ß)
   if (a->ui->sent_state == MESSAGE_NOT_SENT && b->ui->sent_state == MESSAGE_SENT)
   {
     res = a;
@@ -216,7 +178,6 @@ Node_u* SortedMerge(Node_u* a, Node_u* b)
     res = b;
     res->next = SortedMerge(a, b->next);
   }
-//·¢ËÍ×´Ì¬ÏàÍ¬£¬ÅĞ¶ÏÓÅÏÈ¼¶
   else if (a->ui->priority_value >= b->ui->priority_value) 
   {
     res = a;
@@ -231,13 +192,7 @@ Node_u* SortedMerge(Node_u* a, Node_u* b)
   return res;
 }
 
-/**
- * @brief ÓÃÓÚ½«Ò»¸öÁ´±í·Ö³ÉÁ½°ë,ÔÚmergeSortÖĞµ÷ÓÃ
- * 
- * @param source ±íÍ·µØÖ·
- * @param frontRef ÓÃÓÚ´¢´æÇ°°ë¶ÎµÄ¿ªÊ¼µØÖ·
- * @param backRef ÓÃÓÚ´¢´æºó°ë¶ÎµÄ¿ªÊ¼µØÖ·
- */
+/* FrontBackSplit */
 void FrontBackSplit(Node_u* source, Node_u** frontRef, Node_u** backRef)
 {
    Node_u* fast;
@@ -245,9 +200,6 @@ void FrontBackSplit(Node_u* source, Node_u** frontRef, Node_u** backRef)
    slow = source;
    fast = source->next;
  
-   // Ê¹ÓÃ¿ìÂıÖ¸Õë·¨À´ÕÒµ½Á´±íµÄÖĞµã
-   // ¿ìÖ¸ÕëÃ¿´ÎÒÆ¶¯Á½¸ö½Úµã£¬ÂıÖ¸ÕëÃ¿´ÎÒÆ¶¯Ò»¸ö½Úµã
-   // µ±¿ìÖ¸Õëµ½´ïÁ´±íµÄÄ©Î²Ê±£¬ÂıÖ¸Õë¾ÍÔÚÁ´±íµÄÖĞµã
    while (fast != NULL) {
       fast = fast->next;
       if (fast != NULL) {
@@ -256,117 +208,84 @@ void FrontBackSplit(Node_u* source, Node_u** frontRef, Node_u** backRef)
       }
    }
  
-   // ½«Á´±í·Ö³ÉÁ½°ë
-   // Ç°°ë²¿·ÖµÄÍ·½ÚµãÊÇsource£¬ºó°ë²¿·ÖµÄÍ·½ÚµãÊÇslow->next
    *frontRef = source;
    *backRef = slow->next;
    slow->next = NULL;
 }
 
-/**
- * @brief Ê¹ÓÃ·ÖÖÎËã·¨À´¶ÔÁ´±í½øĞĞÅÅĞò
- * @note  ¸ù¾İµİ¹éµÄÌØĞÔ£¬Ö»ÓĞ·ÖÁÑµ½Ò»¸ö½Úµã»òÕßÁ´±íÎª¿ÕÊ±²Å¿ªÊ¼ÅÅĞòºÍºÏ²¢
- * @param headRef 
- */
+/* mergeSort */
 void mergeSort(Node_u** headRef)
 {
    Node_u* head = *headRef;
    Node_u* a;
    Node_u* b;
  
-   // Èç¹ûÁ´±íÎª¿Õ£¬»òÕßÁ´±íÖ»ÓĞÒ»¸ö½Úµã£¬ÄÇÃ´Á´±íÒÑ¾­ÊÇÅÅĞòµÄ£¬Ö±½Ó·µ»Ø
    if ((head == NULL) || (head->next == NULL)) {
       return;
    }
  
-   // Ê¹ÓÃFrontBackSplitº¯Êı½«Á´±í·Ö³ÉÁ½°ë
    FrontBackSplit(head, &a, &b);
  
-   // ·ÖÁÑºó¸øÃ¿Ò»°ëÔÙ·ÖÁÑ£¬²¢ÏÂÒ»¸öÅÅĞòºÍºÏ²¢µÄÖ¸Áî£¬µÈµİ¹é»ØÀ´µÄÊ±ºò¾ÍÖ´ĞĞÖ¸Áî
    mergeSort(&a);
    mergeSort(&b);
  
-   // SortedMergeÄÚ²¿ÏÈÅÅĞòºóºÏ²¢£¬·µ»ØºÏ²¢ºóµÄ±íÍ·
    *headRef = SortedMerge(a, b);
 }
 
-/**
- * @brief 
- * 
- * @param headRef Á´±íÍ·Ö¸ÕëµÄµØÖ·
- * @param ui_input Òª´æ½øÈ¥µÄUIĞÅÏ¢
- * @param num ui_infoÊı×é³ÉÔ±¸öÊı
- */
+/* æ¥å£è¯´æ˜ */
 ui_status_e Init_Priority_LinkedList(Node_u** headRef, ui_info_t *ui_input, uint8_t num)
 {
-  // Èç¹ûheadRefÎª¿Õ£¬Ö±½Ó·µ»Ø
   if (headRef == NULL)
   {
-    return UI_ERROR; // Ã»ÓĞÉùÃ÷Á´±íÍ·Ö¸Õë
+    return UI_ERROR;
   }
   
   Node_u* newNode = NULL;
   Node_u* cursor = *headRef;
   ui_info_t *ui_ptr = ui_input;
-  // ´´½¨Ò»¸öÁã½á¹¹Ìå
   ui_info_t zero_struct;
   memset(&zero_struct, 0, sizeof(ui_info_t));
-  // ±éÀúui_inputÊı×éµÄÆäÓàÔªËØ£¬²¢½«Ã¿¸öÔªËØÌí¼Óµ½Á´±íÖĞ
   for (uint8_t i = 0; i < num; i++) 
   {
-    if (memcmp(ui_ptr, &zero_struct, sizeof(ui_info_t)) != 0)//·ÀÖ¹Ä³Ğ©Éµ±Æ×¢ÊÍµôÁË£¬½á¹¹Ìå²»È«¶¼ÊÇÓĞ¶«Î÷
+    if (memcmp(ui_ptr, &zero_struct, sizeof(ui_info_t)) != 0)
     {
-      // ´´½¨Ò»¸öĞÂµÄ½Úµã
       newNode = (Node_u*)malloc(sizeof(Node_u));
       if (newNode == NULL)
       {
-        return UI_ERROR; // heapÌ«Ğ¡£¬ÉêÇë²»ÁËÄÚ´æ
+        return UI_ERROR;
       }
       newNode->ui = ui_ptr;
       newNode->next = NULL;
 
-      if (*headRef == NULL)//Èç¹ûÁ´±íÎª¿Õ£¬½«ĞÂ½ÚµãÉèÖÃÎªÁ´±íµÄÍ·½Úµã
+      if (*headRef == NULL)
       {
         *headRef = newNode;
       }
       else
       {
-        // ½«ĞÂ½ÚµãÌí¼Óµ½Á´±íµÄÄ©Î²
         cursor->next = newNode;
       }
       cursor = newNode;
     }
-    // Ôö¼ÓÖ¸ÕëÒÔ·ÃÎÊÏÂÒ»¸öÔªËØ
     ui_ptr++;
   }
   return UI_OK;
 }
 
-/**
- * @brief ³õÊ¼»¯Á½¸öÁ´±í£¬½«dynamic_ui_infoºÍconst_ui_infoÁ½¸öÊı×éÖĞ²»ÊÇCHARÀàĞÍµÄUI´æ½øÆäÖĞÒ»¸öÁ´±í£¬ÆäËûÀàĞÍµÄUI´æ½øÁíÒ»¸öÁ´±í
- * 
- * @param graphic_link ´æ·ÅÍ¼ÏñÁ´±íÍ·Ö¸ÕëµÄµØÖ·
- * @param char_link ´æ·Å×Ö·ûÁ´±íÍ·Ö¸ÕëµÄµØÖ·
- * @param dynamic_ui_info ¶¯Ì¬UIĞÅÏ¢Êı×é
- * @param const_ui_info ¾²Ì¬UIĞÅÏ¢Êı×é
- * @param dynamic_num ¶¯Ì¬UIĞÅÏ¢Êı×é³ÉÔ±¸öÊı
- * @param const_num ¾²Ì¬UIĞÅÏ¢Êı×é³ÉÔ±¸öÊı
- */
+/* æ¥å£è¯´æ˜ */
 ui_status_e Init_Type_LinkedLists(Node_u** graphic_link, Node_u** char_link, ui_info_t *dynamic_ui_info, ui_info_t *const_ui_info, uint8_t dynamic_num, uint8_t const_num)
 {
   if (graphic_link == NULL || char_link == NULL)
   {
-    return UI_ERROR; // Ã»ÓĞÉùÃ÷Á´±íÍ·Ö¸Õë
+    return UI_ERROR;
   }
 
   Node_u* graphic_link_cursor = NULL;
   Node_u* char_link_cursor = NULL;
   
-  // ´´½¨Ò»¸öÁã½á¹¹Ìå
   ui_info_t zero_struct;
   memset(&zero_struct, 0, sizeof(ui_info_t));
 
-  // ±éÀúdynamic_ui_infoÊı×é£¬½«²»ÊÇCHARÀàĞÍµÄUIÌí¼Óµ½µÚÒ»¸öÁ´±íÖĞ£¬ÆäËûÀàĞÍµÄUIÌí¼Óµ½µÚ¶ş¸öÁ´±íÖĞ
   ui_info_t *dynamic_ptr = dynamic_ui_info;
   for (uint8_t i = 0; i < dynamic_num; i++) 
   {
@@ -375,48 +294,44 @@ ui_status_e Init_Type_LinkedLists(Node_u** graphic_link, Node_u** char_link, ui_
       dynamic_ptr++;
       continue;
     }
-    //·ÖÅäÄÚ´æ´æÈëµ±Ç°µÄUIĞÅÏ¢
     Node_u* newNode = (Node_u*)malloc(sizeof(Node_u));
     if (newNode == NULL)
     {
-      return UI_ERROR; // heapÌ«Ğ¡£¬ÉêÇë²»ÁËÄÚ´æ
+      return UI_ERROR;
     }
     newNode->ui = dynamic_ptr;
     newNode->next = NULL;
-    //¸øµ±Ç°UIÃüÃû
     #ifdef AUTO_UI_NAME_ENABLE
       char *name = dynamic_ptr->ui_config.name;
       sprintf(name, "%d", i);
     #endif
-    //ÅĞ¶Ïµ±Ç°UIÊÇ·ñÎªCHARÀàĞÍ
     if (dynamic_ptr->ui_config.ui_type != CHAR && dynamic_ptr->ui_config.operate_type != DELETE ) 
     {
-      if (*graphic_link == NULL)//Èç¹ûÁ´±íÎª¿Õ£¬½«ĞÂ½ÚµãÉèÖÃÎªÁ´±íµÄÍ·½Úµã
+      if (*graphic_link == NULL)
       {
         *graphic_link = newNode;
       } 
-      else //Èç¹ûÁ´±í²»Îª¿Õ£¬½«ĞÂ½ÚµãÌí¼Óµ½Á´±íµÄÄ©Î²
+      else
       {
         graphic_link_cursor->next = newNode;
       }
-      graphic_link_cursor = newNode;//¹â±êÖ¸ÏòĞÂ½Úµã
+      graphic_link_cursor = newNode;
     } 
-    else if (dynamic_ptr->ui_config.operate_type != DELETE)//Èç¹ûµ±Ç°UIÎªCHARÀàĞÍ
+    else if (dynamic_ptr->ui_config.operate_type != DELETE)
     {
-      if (*char_link == NULL) //Èç¹ûÁ´±íÎª¿Õ£¬½«ĞÂ½ÚµãÉèÖÃÎªÁ´±íµÄÍ·½Úµã
+      if (*char_link == NULL)
       {
-        *char_link = newNode; //½«ĞÂ½ÚµãÉèÖÃÎªÁ´±íµÄÍ·½Úµã
+        *char_link = newNode;
       } 
-      else //Èç¹ûÁ´±í²»Îª¿Õ£¬½«ĞÂ½ÚµãÌí¼Óµ½Á´±íµÄÄ©Î²
+      else
       {
         char_link_cursor->next = newNode;
       }
-      char_link_cursor = newNode; //¹â±êÖ¸ÏòĞÂ½Úµã
+      char_link_cursor = newNode;
     }
     dynamic_ptr++;
   }
 
-  // ±éÀúconst_ui_infoÊı×é£¬½«²»ÊÇCHARÀàĞÍµÄUIÌí¼Óµ½µÚÒ»¸öÁ´±íÖĞ£¬ÆäËûÀàĞÍµÄUIÌí¼Óµ½µÚ¶ş¸öÁ´±íÖĞ
   ui_info_t *const_ptr = const_ui_info;
   for (uint8_t i = 0; i < const_num; i++) 
   {
@@ -425,39 +340,36 @@ ui_status_e Init_Type_LinkedLists(Node_u** graphic_link, Node_u** char_link, ui_
       const_ptr++;
       continue;
     }
-    //·ÖÅäÄÚ´æ´æÈëµ±Ç°µÄUIĞÅÏ¢
     Node_u* newNode = (Node_u*)malloc(sizeof(Node_u));
     if (newNode == NULL)
     {
-      return UI_ERROR;// heapÌ«Ğ¡£¬ÉêÇë²»ÁËÄÚ´æ
+      return UI_ERROR;
     }
     newNode->ui = const_ptr;
     newNode->next = NULL;
-    //¸øµ±Ç°UIÃüÃû
     #ifdef AUTO_UI_NAME_ENABLE
       char *name = const_ptr->ui_config.name;
       sprintf(name, "%d", i + dynamic_num + 1);
     #endif
-    //ÅĞ¶Ïµ±Ç°UIÊÇ·ñÎªCHARÀàĞÍ
     if (const_ptr->ui_config.ui_type != CHAR && const_ptr->ui_config.operate_type != DELETE) 
     {
-      if (*graphic_link == NULL)//Èç¹ûÁ´±íÎª¿Õ£¬½«ĞÂ½ÚµãÉèÖÃÎªÁ´±íµÄÍ·½Úµã
+      if (*graphic_link == NULL)
       {
         *graphic_link = newNode;
       } 
-      else //Èç¹ûÁ´±í²»Îª¿Õ£¬½«ĞÂ½ÚµãÌí¼Óµ½Á´±íµÄÄ©Î²
+      else
       {
         graphic_link_cursor->next = newNode;
       }
       graphic_link_cursor = newNode;
     } 
-    else if(const_ptr->ui_config.operate_type != DELETE)//Èç¹ûµ±Ç°UIÎªCHARÀàĞÍ
+    else if(const_ptr->ui_config.operate_type != DELETE)
     {
-      if (*char_link == NULL) //Èç¹ûÁ´±íÎª¿Õ£¬½«ĞÂ½ÚµãÉèÖÃÎªÁ´±íµÄÍ·½Úµã
+      if (*char_link == NULL)
       {
         *char_link = newNode;
       }
-      else //Èç¹ûÁ´±í²»Îª¿Õ£¬½«ĞÂ½ÚµãÌí¼Óµ½Á´±íµÄÄ©Î²
+      else
       {
         char_link_cursor->next = newNode;
       }
@@ -469,18 +381,7 @@ ui_status_e Init_Type_LinkedLists(Node_u** graphic_link, Node_u** char_link, ui_
 }
 
 
-/**
- * @brief ½«Á´±íÖĞÓÅÏÈ¼¶¸ßµÄui½á¹¹Ìå´æ´¢µ½Ò»¸öÊı×éÖĞ£¬
- *        ÔÚµ÷ÓÃ´Ëº¯ÊıÇ°Ó¦¸ÃÏÈµ÷ÓÃmergeSortº¯Êı¶ÔÁ´±í½øĞĞÅÅĞò
- *
- * @param dynamic_list_head ¶¯Ì¬UIÁ´±íµÄÍ·½Úµã
- * @param const_list_head ²»±äUIÁ´±íµÄÍ·½Úµã
- * @param graphic_buffer ´æ´¢ui½á¹¹ÌåµÄÊı×é
- * @param character_buffer ´æ´¢×Ö·ûui½á¹¹ÌåµÄÊı×é
- * @param ui_graphic_buffer_num Í¼ĞÎUI»º´æ¸öÊı
- * @param ui_send_mode ·¢ËÍÄ£Ê½ 
- * @return ui_status_e UI_ERROR£ºÁ´±íÎª¿Õ,Ã»ÓĞ³õÊ¼»¯Á´±í
- */
+/* æ¥å£è¯´æ˜ */
 ui_status_e Store_High_Priority_UI(
     Node_u *dynamic_list_head,
     Node_u *const_list_head,
@@ -514,12 +415,7 @@ ui_status_e Store_High_Priority_UI(
 
     Node_u *cursor = dynamic_list_head;
 
-    /*
-     * Á´±íÒÑ¾­°´¡°Î´·¢ËÍÓÅÏÈ¡¢priority_value ¸ßÓÅÏÈ¡±ÅÅĞò¡£
-     *
-     * ÏÈ¼ì²éÅÅÔÚ×îÇ°ÃæµÄ´ı·¢ËÍÔªËØ£º
-     * Èç¹ûËüÊÇ×Ö·û£¬Ôò±¾ÂÖÖ»·¢ËÍÒ»¸ö×Ö·û¡£
-     */
+     
     while (cursor != NULL)
     {
         if (cursor->ui != NULL &&
@@ -534,19 +430,14 @@ ui_status_e Store_High_Priority_UI(
                 return UI_OK;
             }
 
-            /*
-             * µÚÒ»¸ö´ı·¢ËÍÔªËØÊÇÍ¼ĞÎ£¬
-             * Ìø³ö×Ö·û¼ì²é£¬¿ªÊ¼ÊÕ¼¯Í¼ĞÎ¡£
-             */
+             
             break;
         }
 
         cursor = cursor->next;
     }
 
-    /*
-     * ÊÕ¼¯×î¶à 7 ¸ö´ı·¢ËÍÍ¼ĞÎ¡£
-     */
+     
     cursor = dynamic_list_head;
 
     while (cursor != NULL &&
@@ -575,9 +466,7 @@ ui_status_e Store_High_Priority_UI(
         return UI_OK;
     }
 
-    /*
-     * Ã»ÓĞ¶¯Ì¬Í¼ĞÎ£¬µ«¿ÉÄÜÈÔ´æÔÚ´ı·¢ËÍ×Ö·û¡£
-     */
+     
     cursor = dynamic_list_head;
 
     while (cursor != NULL)
@@ -596,20 +485,12 @@ ui_status_e Store_High_Priority_UI(
         cursor = cursor->next;
     }
 
-    /*
-     * µ±Ç°Ã»ÓĞÈÎºÎ´ı·¢ËÍ¶¯Ì¬ UI¡£
-     */
+     
     return UI_BUSY;
 }
 
 
-/**
- * @brief ÅäÖÃ×Ö·ûĞÅÏ¢½ø·¢ËÍ½á¹¹Ìå
- * 
- * @param ui_info UIĞÅÏ¢½á¹¹Ìå
- * @param add_operate_enable 1£ºÇ¿ĞĞADD 0£º°´ÕÕUIÅäÖÃµÄoperate_type
- * @return ext_client_custom_character_t ÅäÖÃºÃµÄ·¢ËÍ½á¹¹Ìå
- */
+/* add_operate_enable */
 ext_client_custom_character_t Process_Char_Info_To_Buffer(
     ui_info_t ui_info,
     uint8_t add_operate_enable)
@@ -622,7 +503,7 @@ ext_client_custom_character_t Process_Char_Info_To_Buffer(
            sizeof(text_buffer));
 
     while (length < sizeof(text_buffer) &&
-           text_buffer[length] != '\0')
+           text_buffer[length] != '\00')
     {
         length++;
     }
@@ -651,13 +532,7 @@ ext_client_custom_character_t Process_Char_Info_To_Buffer(
     return res;
 }
 
-/**
- * @brief ÅäÖÃÍ¼ĞÎĞÅÏ¢½ø·¢ËÍ½á¹¹Ìå
- * 
- * @param ui_info UIĞÅÏ¢½á¹¹Ìå
- * @param add_operate_enable 1£ºÇ¿ĞĞADD 0£º°´ÕÕUIÅäÖÃµÄoperate_type
- * @return ext_client_custom_graphic_seven_t ÅäÖÃºÃµÄ·¢ËÍ½á¹¹Ìå
- */
+/* æ¥å£è¯´æ˜ */
 ext_client_custom_graphic_seven_t Process_Graphic_To_Buffer(ui_info_t *ui_info, uint8_t ui_info_size, uint8_t add_operate_enable)
 {
   ext_client_custom_graphic_seven_t res = {0};
@@ -674,7 +549,6 @@ ext_client_custom_graphic_seven_t Process_Graphic_To_Buffer(ui_info_t *ui_info, 
 
   for (uint8_t i = 0; i < ui_info_size; i++)
   {
-    //ÅäÖÃ²Ù×÷ÀàĞÍ
     operate_tpye_e operate_tpye;
     if (add_operate_enable == 0)
     {
@@ -684,7 +558,6 @@ ext_client_custom_graphic_seven_t Process_Graphic_To_Buffer(ui_info_t *ui_info, 
     {
       operate_tpye = ADD;
     }
-    //»ñÈ¡UIÅäÖÃĞÅÏ¢
     char *name = ui_ptr->ui_config.name;
     uint8_t layer = ui_ptr->ui_config.layer;
     uint8_t color = ui_ptr->ui_config.color;
@@ -700,87 +573,86 @@ ext_client_custom_graphic_seven_t Process_Graphic_To_Buffer(ui_info_t *ui_info, 
     float float_num = ui_ptr->ui_config.float_num; 
     uint16_t decimal = ui_ptr->ui_config.decimal;
     int32_t int_num = ui_ptr->ui_config.int_num;      
-    //ÅĞ¶ÏUIÀàĞÍÅäÖÃĞÅÏ¢
     switch (ui_ptr->ui_config.ui_type)
     {
     case LINE:
-      res.grapic_data_struct[i] = draw_line(name,  //Í¼ĞÎÃû
-                                            operate_tpye,  //Í¼ĞÎ²Ù×÷
-                                            layer,  //Í¼²ãÊı£¬0~9
-                                            color,  //ÑÕÉ«
-                                            width,  //ÏßÌõ¿í¶È
-                                            start_x,  //Æğµã x ×ø±ê
-                                            start_y,  //Æğµã y ×ø±ê
-                                            end_x,  //ÖÕµã x ×ø±ê
-                                            end_y);  //ÖÕµã y ×ø±ê
+      res.grapic_data_struct[i] = draw_line(name,
+                                            operate_tpye,
+                                            layer,
+                                            color,
+                                            width,
+                                            start_x,
+                                            start_y,
+                                            end_x,
+                                            end_y);
       break;
     case CIRCLE:
-      res.grapic_data_struct[i] = draw_circle(name,  //Í¼ĞÎÃû
-                                              operate_tpye,  //Í¼ĞÎ²Ù×÷
-                                              layer,  //Í¼²ãÊı£¬0~9
-                                              color,  //ÑÕÉ«
-                                              width,  //ÏßÌõ¿í¶È
-                                              start_x,  //Ô²ĞÄ x ×ø±ê
-                                              start_y,  //Ô²ĞÄ y ×ø±ê
-                                              radius);  //°ë¾¶
+      res.grapic_data_struct[i] = draw_circle(name,
+                                              operate_tpye,
+                                              layer,
+                                              color,
+                                              width,
+                                              start_x,
+                                              start_y,
+                                              radius);
       break;
     case RECTANGEL:
-      res.grapic_data_struct[i] = draw_rectangle(name,  //Í¼ĞÎÃû
-                                                 operate_tpye,  //Í¼ĞÎ²Ù×÷
-                                                 layer,  //Í¼²ãÊı£¬0~9
-                                                 color,  //ÑÕÉ«
-                                                 width,  //ÏßÌõ¿í¶È
-                                                 start_x,  //×óÉÏ½Ç x ×ø±ê
-                                                 start_y,  //×óÉÏ½Ç y ×ø±ê
-                                                 end_x,  //ÓÒÏÂ½Ç x ×ø±ê
-                                                 end_y);  //ÓÒÏÂ½Ç y ×ø±ê
+      res.grapic_data_struct[i] = draw_rectangle(name,
+                                                 operate_tpye,
+                                                 layer,
+                                                 color,
+                                                 width,
+                                                 start_x,
+                                                 start_y,
+                                                 end_x,
+                                                 end_y);
       break;
     case ELLIPSE:
-      res.grapic_data_struct[i] = draw_ellipse(name,  //Í¼ĞÎÃû
-                                               operate_tpye,  //Í¼ĞÎ²Ù×÷
-                                               layer,  //Í¼²ãÊı£¬0~9
-                                               color,  //ÑÕÉ«
-                                               width,  //ÏßÌõ¿í¶È
-                                               start_x,  //Ô²ĞÄ x ×ø±ê
-                                               start_y,  //Ô²ĞÄ y ×ø±ê
-                                               end_x,  //x °ëÖá³¤¶È
-                                               end_y);  //y °ëÖá³¤¶È
+      res.grapic_data_struct[i] = draw_ellipse(name,
+                                               operate_tpye,
+                                               layer,
+                                               color,
+                                               width,
+                                               start_x,
+                                               start_y,
+                                               end_x,
+                                               end_y);
       break;
     case ARC:
-      res.grapic_data_struct[i] = draw_arc(name,  //Í¼ĞÎÃû
-                                           operate_tpye,  //Í¼ĞÎ²Ù×÷
-                                           layer,  //Í¼²ãÊı£¬0~9
-                                           color,  //ÑÕÉ«
-                                           start_angel,  //ÆğÊ¼½Ç¶È
-                                           end_angel,  //ÖÕÖ¹½Ç¶È
-                                           width,  //ÏßÌõ¿í¶È
-                                           start_x,  //Ô²ĞÄ x ×ø±ê
-                                           start_y,  //Ô²ĞÄ y ×ø±ê
-                                           end_x,  //x °ëÖá³¤¶È
-                                           end_y);  //y °ëÖá³¤¶È
+      res.grapic_data_struct[i] = draw_arc(name,
+                                           operate_tpye,
+                                           layer,
+                                           color,
+                                           start_angel,
+                                           end_angel,
+                                           width,
+                                           start_x,
+                                           start_y,
+                                           end_x,
+                                           end_y);
       break;
     case FLOAT:
-      res.grapic_data_struct[i] = draw_float(name,  //Í¼ĞÎÃû
-                                             operate_tpye,  //Í¼ĞÎ²Ù×÷
-                                             layer,  //Í¼²ãÊı£¬0~9
-                                             color,  //ÑÕÉ«
-                                             size,  //×ÖÌå´óĞ¡
-                                             decimal,  //¸¡µãÊı
-                                             width,  //ÏßÌõ¿í¶È
-                                             start_x,  //Æğµã x ×ø±ê
-                                             start_y, //Æğµã y ×ø±ê
-                                             (int32_t) (float_num *1000));//³ËÒÔ 1000 ºó£¬ÒÔ 32 Î»ÕûĞÍÊı£¬int32_t  
+      res.grapic_data_struct[i] = draw_float(name,
+                                             operate_tpye,
+                                             layer,
+                                             color,
+                                             size,
+                                             decimal,
+                                             width,
+                                             start_x,
+                                             start_y,
+                                             (int32_t) (float_num *1000));
       break;
     case INT:
-      res.grapic_data_struct[i] = draw_int(name,  //Í¼ĞÎÃû
-                                           operate_tpye,  //Í¼ĞÎ²Ù×÷
-                                           layer,  //Í¼²ãÊı£¬0~9
-                                           color,  //ÑÕÉ«
-                                           size,  //×ÖÌå´óĞ¡
-                                           width,  //ÏßÌõ¿í¶È
-                                           start_x,  //Æğµã x ×ø±ê
-                                           start_y,  //Æğµã y ×ø±ê
-                                           int_num);  //ÕûÊı
+      res.grapic_data_struct[i] = draw_int(name,
+                                           operate_tpye,
+                                           layer,
+                                           color,
+                                           size,
+                                           width,
+                                           start_x,
+                                           start_y,
+                                           int_num);
       break;
     default:
       break;
@@ -831,10 +703,7 @@ static uint8_t Send_Graphic_Buffer(
         return client_send_five_graphic(tx);
     }
 
-    /*
-     * 6 ¸ö»ò 7 ¸öÍ¼ĞÎÊ¹ÓÃÆßÍ¼ĞÎÖ¡¡£
-     * buffer ÒÑ¾­ÇåÁã£¬Î´Ê¹ÓÃµÄÎ»ÖÃ operate_type Îª NONE¡£
-     */
+     
     return client_send_seven_graphic(*buffer);
 }
 
@@ -850,26 +719,19 @@ static uint8_t Send_Graphic_Buffer(
 
 
 
-/*UI¹¦ÄÜº¯Êı**************************************************************************************************************/
-Node_u *dynamic_list_head = NULL; // ¶¯Ì¬UIÁ´±íÍ·
-Node_u *const_list_head   = NULL; // ²»±äUIÁ´±íÍ·
-Node_u *graphic_list_head = NULL; // Í¼ĞÎUIÁ´±íÍ·
-Node_u *char_list_head    = NULL; // ×Ö·ûUIÁ´±íÍ·
+ 
+Node_u *dynamic_list_head = NULL;
+Node_u *const_list_head   = NULL;
+Node_u *graphic_list_head = NULL;
+Node_u *char_list_head    = NULL;
 
-ui_info_t graphic_priority_buffer[7]; // ÓÅÏÈ¼¶×î¸ßµÄ7¸öÍ¼ĞÎ
-ui_info_t character_priority_buffer;  // ÓÅÏÈ¼¶×î¸ßµÄ×Ö·û
+ui_info_t graphic_priority_buffer[7];
+ui_info_t character_priority_buffer;
 
-ui_send_mode_e ui_send_mode; // ·¢ËÍÄ£Ê½
-uint8_t ui_graphic_buffer_num = 0;   // Í¼ĞÎUI»º´æ¸öÊı
+ui_send_mode_e ui_send_mode;
+uint8_t ui_graphic_buffer_num = 0;
 
-/**
- * @brief ³õÊ¼»¯UIÁ´±í ÔÚÍâ²¿µ÷ÓÃ Ò»¶¨ÒªÔÚUi_SendÖ®Ç°µ÷ÓÃ
- * 
- * @param dynamic_ui_info 
- * @param dynamic_ui_num 
- * @param const_ui_info 
- * @param const_ui_num 
- */
+/* dynamic_ui_num */
 ui_status_e Init_Ui_List(
     ui_info_t *dynamic_ui_info,
     uint8_t dynamic_ui_num,
@@ -916,10 +778,7 @@ ui_status_e Init_Ui_List(
     return UI_OK;
 }
 
-/**
- * @brief Õı³£·¢ËÍUI
- * 
- */
+/* æ¥å£è¯´æ˜ */
 ui_status_e Ui_Send_Normal(void)
 {
     ext_client_custom_graphic_seven_t graphic_tx_buffer = {0};
@@ -927,9 +786,7 @@ ui_status_e Ui_Send_Normal(void)
 
     uint8_t send_result = HAL_ERROR;
 
-    /*
-     * ¸ù¾İ·¢ËÍ×´Ì¬ºÍÓÅÏÈ¼¶ÖØĞÂÅÅĞò¡£
-     */
+     
     mergeSort(&dynamic_list_head);
 
     ui_status_e store_result =
@@ -941,9 +798,7 @@ ui_status_e Ui_Send_Normal(void)
             &ui_graphic_buffer_num,
             &ui_send_mode);
 
-    /*
-     * µ±Ç°Ã»ÓĞ´ı·¢ËÍÏûÏ¢£¬²»ÊÇ´íÎó¡£
-     */
+     
     if (store_result == UI_BUSY)
     {
         Ui_Clear_Pending();
@@ -991,20 +846,14 @@ ui_status_e Ui_Send_Normal(void)
         return UI_ERROR;
     }
 
-    /*
-     * HAL_OK ±íÊ¾ DMA ÒÑ¾­³É¹¦Æô¶¯¡£
-     * ´ËÊ±²Å°Ñ±¾ÂÖ UI ±ê¼ÇÎª MESSAGE_SENT¡£
-     */
+     
     if (send_result == HAL_OK)
     {
         Ui_Commit_Pending();
         return UI_OK;
     }
 
-    /*
-     * HAL_BUSY / HAL_ERROR£º
-     * ±£³Ö MESSAGE_NOT_SENT£¬ÏÂÒ»ÖÜÆÚÖØÊÔ¡£
-     */
+     
     Ui_Rollback_Pending();
 
     if (send_result == HAL_BUSY)
@@ -1015,10 +864,7 @@ ui_status_e Ui_Send_Normal(void)
     return UI_ERROR;
 }
 
-/**
- * @brief UIÇ¿ĞĞ·¢ËÍADD        
- * @return ui_status_e 0£ºerror 1:·¢ËÍÍêÁË 2:Ã»·¢ËÍÍê
- */
+/* uint8_t */
 ui_status_e Ui_Send_Add(void)
 {
     static uint8_t is_send_char_finish_flag = false;
@@ -1051,9 +897,7 @@ ui_status_e Ui_Send_Add(void)
         char_list_cursor = char_list_head;
     }
 
-    /*
-     * ÏÈ³õÊ¼»¯×Ö·û UI¡£
-     */
+     
     if (char_list_cursor != NULL &&
         !is_send_char_finish_flag)
     {
@@ -1088,9 +932,7 @@ ui_status_e Ui_Send_Add(void)
         return UI_BUSY;
     }
 
-    /*
-     * ÔÙ³õÊ¼»¯Í¼ĞÎ UI¡£
-     */
+     
     if (graphic_list_cursor != NULL &&
         !is_send_graphic_finish_flag)
     {
@@ -1131,10 +973,7 @@ ui_status_e Ui_Send_Add(void)
                 &graphic_tx_buffer,
                 count);
 
-        /*
-         * ·¢ËÍÊ§°ÜÊ±²»ÒÆ¶¯ÕıÊ½¹â±ê¡£
-         * ÏÂÒ»ÂÖ¼ÌĞø·¢ËÍÍ¬Ò»×é¡£
-         */
+         
         if (send_result == HAL_BUSY)
         {
             return UI_BUSY;
@@ -1160,9 +999,7 @@ ui_status_e Ui_Send_Add(void)
     if (is_send_char_finish_flag &&
         is_send_graphic_finish_flag)
     {
-        /*
-         * ±¾´ÎÈ«Á¿ ADD Íê³É£¬¸´Î»×´Ì¬¡£
-         */
+         
         char_list_cursor = NULL;
         graphic_list_cursor = NULL;
 
@@ -1175,20 +1012,17 @@ ui_status_e Ui_Send_Add(void)
     return UI_ERROR;
 }
 
-/**
- * @brief ·¢ËÍUI ÔÚÍâ²¿µ÷ÓÃ
- * 
- */
+/* Ui_Send */
 void Ui_Send()
 {
-  /*ÅĞ¶ÏÊÇ·ñµ½ÁË·¢ËÍÊ±¼ä****************************/
+   
   uint32_t currentTick = HAL_GetTick();
   static uint32_t lastTick = 0;
   if (currentTick - lastTick < SEND_INTERVAL)
   {
     return;
   }
-  /*ÊÕµ½³õÊ¼»¯Ö¸ÁîÇĞ»»±êÖ¾Î»**********************/
+   
   static uint8_t is_initing_ui = 0;
   if (Init_Ui_Condition())
   {
@@ -1197,32 +1031,28 @@ void Ui_Send()
       is_initing_ui = 1;
     }
   }
-  /*ÅĞ¶ÏÊÇ·ñÕıÔÚ³õÊ¼»¯****************************/
+   
   static uint8_t init_times = 0;
-  if (is_initing_ui == 1)//ÕıÔÚ³õÊ¼»¯UI
+  if (is_initing_ui == 1)
   {
     if (Ui_Send_Add() == UI_OK)
     {
-      init_times++; // ³õÊ¼»¯ÍêÒ»´Î£¬´ÎÊı¼ÓÒ»
+      init_times++;
     }
-    if (init_times >= PER_INIT_UI_TIMES)//³õÊ¼»¯ÍêPER_INIT_UI_TIMES´Î
+    if (init_times >= PER_INIT_UI_TIMES)
     {
-      is_initing_ui = 0;//³õÊ¼»¯Íê±Ï
+      is_initing_ui = 0;
       init_times = 0;
     }
   }
-	else/*Õı³£·¢ËÍUI*/
+	else 
 	{		
     Ui_Send_Normal();
 	}
 	lastTick = HAL_GetTick();
 }
 
-/**
- * @brief ¸üĞÂÍêUIĞÅÏ¢ºóµ÷ÓÃ´Ëº¯Êı½«UIÉèÎª×¼±¸·¢ËÍ×´Ì¬
- * 
- * @param ui_info 
- */
+/* æ¥å£è¯´æ˜ */
 ui_status_e Enqueue_Ui_For_Sending(ui_info_t *ui_info)
 {
   if (ui_info == NULL)
@@ -1230,7 +1060,7 @@ ui_status_e Enqueue_Ui_For_Sending(ui_info_t *ui_info)
     return UI_ERROR;
   }
 
-  if (ui_info->sent_state == MESSAGE_SENT)//·¢¹ıÏÈ¸üĞÂÊ±¼ä£¬Î´ÏÈÖ®Ç°Ò»Ö±Ä³·¢ÓÖ¸üĞÂ¾Í»áÒ»Ö±·¢ßí³öÈ¥
+  if (ui_info->sent_state == MESSAGE_SENT)
   {
     ui_info->updateTick = HAL_GetTick();
   }
@@ -1268,10 +1098,7 @@ static void Ui_Commit_Pending(void)
 
 static void Ui_Rollback_Pending(void)
 {
-    /*
-     * Ñ¡ÖĞµÄ UI Ô­±¾¾ÍÊÇ MESSAGE_NOT_SENT£¬
-     * ·¢ËÍÊ§°ÜÊ±±£³Ö´ı·¢ËÍ×´Ì¬¼´¿É¡£
-     */
+     
     for (uint8_t i = 0; i < pending_graphic_num; i++)
     {
         if (pending_graphic_ui[i] != NULL)
@@ -1287,3 +1114,4 @@ static void Ui_Rollback_Pending(void)
 
     Ui_Clear_Pending();
 }
+

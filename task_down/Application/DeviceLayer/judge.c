@@ -1,4 +1,3 @@
-/* Includes ------------------------------------------------------------------*/
 #include "judge.h"
 #include "judge_protocol.h"
 #include "Board_protocol.h"
@@ -21,11 +20,7 @@ Judge_t judge =
 };
 
 
-/**
-  * @brief  裁判系统初始化
-  * @param  My_Judge_t * my_judge
-  * @retval None
-  */
+/* 裁判系统初始化 */
 void Judge_Init(Judge_t* judge)
 {
 	judge->status->offline_cnt = judge->status->offline_cnt_max;
@@ -36,11 +31,7 @@ void Judge_Init(Judge_t* judge)
 	judge->heartbeat = Judge_Heart_Beat;
 }
 
-/**
-  * @brief  裁判系统实时任务，检测离线与状态更新
-  * @param  My_Judge_t * my_judge
-  * @retval None
-  */
+/* 裁判系统心跳 */
 void Judge_Heart_Beat(Judge_t* judge)
 {
 	judge->status->offline_cnt++;
@@ -260,10 +251,7 @@ void Judge_Data_Update(uint16_t id, uint8_t *rxBuf)
 }
 
 
-/**
-* @brief 统计弹速
-*
-*/
+/* bullet_data_t */
 bullet_data_t shoot_statistics = {
 	.shooting_flag = 0,
 
@@ -381,12 +369,7 @@ void Speed_Statistic(void)
 }
 
 
-/**
- * @brief 打弹命令执行时间计算
- * 
- * @param flag 0；命令开始执行  1：接收到弹速
- */
-
+/* 射击指令执行计时 */
 void Shooting_Cmd_Excute_Tick_Calculating(uint8_t flag)
 {
 	static uint32_t cmd_start_tick = 0;
@@ -453,4 +436,7 @@ void Shooting_Cmd_Excute_Tick_Calculating(uint8_t flag)
 		
 	}
 }
+
+
+
 

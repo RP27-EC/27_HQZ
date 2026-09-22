@@ -1,3 +1,5 @@
+/* gimbal.h - 云台控制 */
+
 #ifndef __GIMBAL_H
 #define __GIMBAL_H
 
@@ -105,4 +107,5 @@ extern  Gimbal_t   gimbal;
 
 
 #endif
+
 

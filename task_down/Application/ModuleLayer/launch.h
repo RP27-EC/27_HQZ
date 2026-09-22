@@ -1,3 +1,5 @@
+/* launch.h - 发射机构控制 */
+
 #ifndef __LAUNCH_H
 #define __LAUNCH_H
 
@@ -42,4 +44,5 @@ typedef struct Launch_Struct_t{
 
 extern  Launch_t  launch;
 #endif
+
 

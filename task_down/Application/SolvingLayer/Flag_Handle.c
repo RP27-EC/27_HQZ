@@ -1,11 +1,9 @@
+/* Flag_Handle.c - çŠ¶æ€æ ‡å¿—å¤„ç† */
+
 #include "Flag_Handle.h"
 void Gimbal_Rescue_Process(void);
-/*±êÖ¾Î»´¦ÀíÏà¹Øº¯Êý¾ù°üº¬ÔÚ´ËÎÄ¼þ*/
-/**
-  * @brief  ÌøÔ¾ÍÈ³¤Ä¿±êÖµ´¦Àí
-  * @param  None
-  * @retval None
-  */
+
+/* è·³è·ƒç›®æ ‡å¤„ç† */
 void Jump_Target_Process(Chassis_t* My_Chassis)
 {
   static uint8_t step = 0;
@@ -94,11 +92,7 @@ void Jump_Target_Process(Chassis_t* My_Chassis)
 }
 
 
-/**
-  * @brief  µ×ÅÌ×Ô¾ÈÅÐ¶Ï
-  * @param  None
-  * @retval None
-  */
+/* æ•‘æ´åˆ¤å®š */
 void Rescue_Check(void)
 {
 	static uint16_t cnt = 0;
@@ -239,11 +233,7 @@ pid_ctrl_t Resuce_Roll_Ctrl =
     .out_max = 200.f,//
 };
 uint8_t test_Flag = 0;
-/**
-  * @brief  ×Ô¾È´¦Àí
-  * @param  None
-  * @retval None
-  */
+/* æ‰§è¡Œæ•‘æ´åŠ¨ä½œ */
 void Rescue_Process(void)
 {
 	Four_Bar_Link_t* R_Link_Var = &Chassis.Link[R_Link];
@@ -251,9 +241,9 @@ void Rescue_Process(void)
 	static uint8_t cnt = 0;
 	float R_phi0 = Chassis.Link[R_Link].info->angle->vir_phi0_ + Chassis.Posture->info->pitch/Degree_to_rad;
 	float L_phi0 = Chassis.Link[L_Link].info->angle->vir_phi0_ + Chassis.Posture->info->pitch/Degree_to_rad;
-	Chassis.target->leg_length = TAR_LEG_LENGTH_INITIAL;//ÍÈ³¤Ä¿±êÖµ¸ÄÎª³õÊ¼Öµ
+	Chassis.target->leg_length = TAR_LEG_LENGTH_INITIAL;  // legé•¿åº¦
 	
-	Chassis.target->yaw = Chassis.Leg->info->phi;//Æ«º½½ÇÄ¿±êÖµµÈÓÚ²âÁ¿Öµ
+	Chassis.target->yaw = Chassis.Leg->info->phi;  // åèˆª
 	
 	Chassis.target->roll = 0;
 	
@@ -389,7 +379,7 @@ void Rescue_Process(void)
 			Chassis.Leg->T_info->T_mat_storage[Tw_R] = 0;
 		}
 	}
-	/*×Ô¾ÈµÚÒ»²½£¬ÍÈÏÈ×ÅµØ*/
+
 	else if(Balance.command->chassis->Rescue_step == 2)
 	{
 		if(Balance.command->gimbal->Rescue_Flag == false)
@@ -458,7 +448,7 @@ void Rescue_Process(void)
 			cnt = 0;
 		}
 	}
-	/*×Ô¾ÈµÚ¶þ²½£¬÷Å¹Ø½Ú·¢Á¦»ØÕý»úÌå*/
+
 	else if(Balance.command->chassis->Rescue_step == 3)
 	{
 		Resuce_Pitch_Ctrl.target = 0;
@@ -473,7 +463,7 @@ void Rescue_Process(void)
 		Chassis.Leg->T_info->T_mat_storage[Tw_R] = 0;
 		Chassis.Leg->T_info->T_mat_storage[Tw_L] = 0;
 	}
-	/*×Ô¾ÈµÚÈý²½£¬ÍÈ×ªµ½ÓëµØÃæ½Ó´¥*/
+
 	else if(Balance.command->chassis->Rescue_step == 4)
 	{
 		if(Chassis.Leg->r_leg->rescue_flag == true)
@@ -545,7 +535,7 @@ void Rescue_Process(void)
 			cnt = 0;
 		}
 	}
-	/*×Ô¾ÈµÚËÄ²½£¬ÊÕÍÈ»ØÕý³µÉí*/
+
 	else if(Balance.command->chassis->Rescue_step == 5)
 	{
 		if(Chassis.Leg->l_leg->rescue_flag == true)
@@ -585,10 +575,10 @@ void Rescue_Process(void)
 		
 	}
 //	
-//µ¹ÊýµÚ¶þ²½
+
 		
 		
-//×îºóÒ»²½£¨[Sd_R]²»ÐèÒªÖÃ0£©
+
 ////		Chassis.Leg->T_info->T_mat_storage[Sd_R] = 0;
 //		Chassis.Link[R_Link].info->force->Fbl = 0;
 //		Chassis.Leg->T_info->T_mat_storage[Tw_R] = 1;
@@ -598,11 +588,7 @@ void Rescue_Process(void)
 }
 
 
-/**
-  * @brief  ÔÆÌ¨×Ô¾È´¦Àí
-  * @param  None
-  * @retval None
-  */
+/* äº‘å°æ•‘æ´åŠ¨ä½œ */
 void Gimbal_Rescue_Process(void)
 {
 	Four_Bar_Link_t* R_Link_Var = &Chassis.Link[R_Link];
@@ -665,11 +651,7 @@ void Gimbal_Rescue_Process(void)
 	}
 }
 
-/**
-  * @brief  ×²Ï¥ÉÏÌ¨½×£¬×´Ì¬¼ì²â
-  * @param  None
-  * @retval None
-  */
+/* è·ªåœ°æ’žå‡»åˆ¤å®š */
 void Knee_Strike_Check(Chassis_t* My_Chassis)
 {
 	Four_Bar_Link_t* My_L_Link = &My_Chassis->Link[L_Link];
@@ -765,11 +747,7 @@ void Knee_Strike_Check(Chassis_t* My_Chassis)
 }
 
 
-/**
-  * @brief  ×²Ï¥ÉÏÌ¨½×£¬ÍÈ³¤Ä¿±êÖµ´¦Àí
-  * @param  None
-  * @retval None
-  */
+/* é€‰ç›®æ ‡è…¿ */
 void Knee_Strike_Target_Leg(Chassis_t* My_Chassis)
 {
 	switch(Balance.command->chassis->Knee_Strike_step)
@@ -812,11 +790,7 @@ pid_ctrl_t My_Link_Phi2_Pid[Link_Num] =
     .out_max = 200.f,//
 	},
 };
-/**
-  * @brief  ×²Ï¥ÉÏÌ¨½×£¬Á¦¾Ø´¦Àí
-  * @param  None
-  * @retval None
-  */
+/* è·ªåœ°æ’žå‡»å“åº” */
 void Knee_Strike_React(Chassis_t* My_Chassis)
 {
 	Four_Bar_Link_t* My_L_Link = &My_Chassis->Link[L_Link];
@@ -828,7 +802,7 @@ void Knee_Strike_React(Chassis_t* My_Chassis)
 
 		break;
 		case 1:
-		/*×óÍÈ*/
+
 		My_Link_Phi2_Pid[L_Link].measure = My_L_Link->info->angle->phi2 + My_Chassis->Posture->info->pitch;
 		My_Link_Phi2_Pid[L_Link].target = 1.3f;
 		pid_err_cal(&My_Link_Phi2_Pid[L_Link]);
@@ -836,7 +810,7 @@ void Knee_Strike_React(Chassis_t* My_Chassis)
 		My_L_Link->info->F_Sd_Output_Torque = -My_Link_Phi2_Pid[L_Link].out;
 		My_L_Link->info->B_Sd_Output_Torque = -7.f;
 		
-		/*ÓÒÍÈ*/
+
 		My_Link_Phi2_Pid[R_Link].measure = My_R_Link->info->angle->phi2 + My_Chassis->Posture->info->pitch;
 		My_Link_Phi2_Pid[R_Link].target = 1.3f;
 		pid_err_cal(&My_Link_Phi2_Pid[R_Link]);
@@ -855,3 +829,5 @@ void Knee_Strike_React(Chassis_t* My_Chassis)
 		break;
 	}
 }
+
+

@@ -1,3 +1,5 @@
+/* board_protocol.h - 板间通信协议 */
+
 #ifndef __BOARD_PROTOCOL_H
 #define __BOARD_PROTOCOL_H
 
@@ -24,11 +26,11 @@
 #define  ID_MEG_05     0xC5
 
 typedef struct{
-  uint8_t  car_state;       //0閺勵垰宓忛崝娑崇礉1閺勵垶浠撮幒褝绱�2閺勵垶鏁Η锟�
-//	uint8_t  gimbal_state;    //0閺勵垰宓忛崝娑崇礉1閺勵垱婀侀崝锟�
-//	uint8_t  launch_state;    //0閺勵垰鍙ч崣鎴濈殸閺堢儤鐎敍锟�1閺勵垰绱戦崣鎴濈殸閺堢儤鐎�
-  uint8_t  gimbal_mode;        //0閺勵垱婧€濮婂府绱�1閺勵垶妾ч摶锟�
-	uint8_t  vision_mode;     //0閺冪姾顫嬬憴澶嬆佸蹇ョ礉1閺勵垱娅橀柅姘冲殰閻嫸绱�2閺勵垰鐨粭锔肩礉3閺勵垰銇囩粭锔肩礉4閺勵垰澧犻崫顭掔礉5閺勵垵瀚抽梿锟�
+  uint8_t  car_state;
+
+
+  uint8_t  gimbal_mode;  // gimbal模式
+	uint8_t  vision_mode;  // vision模式
 
 	uint8_t  game_start;
 	uint8_t  my_color;
@@ -57,7 +59,7 @@ typedef struct{
 }Board_Gimbal_Target_Pkt_t;
 
 typedef struct{
-	uint8_t  launch_state;    //0閺勵垰鍙ч崣鎴濈殸閺堢儤鐎敍锟�1閺勵垰绱戦崣鎴濈殸閺堢儤鐎�
+	uint8_t  launch_state;
   uint8_t  shoot_mode;
 	uint8_t  shoot_level;
 
@@ -67,14 +69,14 @@ typedef struct{
 
 typedef struct{
 	uint8_t blood[8];    
-  //閼婚亶娉�
-  //瀹搞儳鈻�
-  //閸濄劌鍙�
-  //濮濄儱鍙�
-  //閺冪姳姹夐張锟�
-  //闂嗙柉鎻�
-	//閸╁搫婀�
-	//閸撳秴鎽�
+
+
+
+
+
+
+
+
 }Board_Blood_Pkt_t;
 
 
@@ -181,5 +183,6 @@ void Board_Rx_Meg_02(Board_t* board,uint8_t* rxbuf);
 
 
 #endif
+
 
 

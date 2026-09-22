@@ -1,3 +1,5 @@
+/* board_protocol.c - 板间通信协议 */
+
 #include "board_protocol.h"
 #include "judge.h"
 #include "rc_sensor.h"
@@ -205,13 +207,13 @@ void Board_Tx_Pkt_05(Board_t* board)
     int16_t pitch_raw;
     uint8_t valid = 0u;
 
-    if (rc_sensor.work_state == DEV_ONLINE)
+    if (rc_dev.work_state == DEV_ONLINE)
     {
         valid = 1u;
 #if CHASSIS_BRINGUP_ENABLE
         if (Chassis_Follow_IsSelected() != 0u)
         {
-            yaw_rate = Board_Remote_Axis_To_Rate(rc_sensor.info->ch0,
+            yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
                                                  BOARD_D5_YAW_RATE_MAX_DEG_S);
         }
         else if (Chassis_Spin_IsSelected() != 0u)
@@ -223,15 +225,15 @@ void Board_Tx_Pkt_05(Board_t* board)
 #if CHASSIS_OWNS_RC_YAW
             yaw_rate = 0.0f;
 #else
-            yaw_rate = Board_Remote_Axis_To_Rate(rc_sensor.info->ch0,
+            yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
                                                  BOARD_D5_YAW_RATE_MAX_DEG_S);
 #endif
         }
 #else
-        yaw_rate = Board_Remote_Axis_To_Rate(rc_sensor.info->ch0,
+        yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
                                              BOARD_D5_YAW_RATE_MAX_DEG_S);
 #endif
-        pitch_rate = Board_Remote_Axis_To_Rate(rc_sensor.info->ch1,
+        pitch_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch1,
                                                BOARD_D5_PITCH_RATE_MAX_DEG_S);
     }
 
@@ -293,6 +295,7 @@ void Board_Rx_Meg_02(Board_t* board,uint8_t* rxbuf)
 
 	board->status->offline_cnt = 0;
 }
+
 
 
 

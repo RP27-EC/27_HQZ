@@ -1,3 +1,5 @@
+/* chassis_config.h - 底盘参数配置 */
+
 #ifndef __CHASSIS_CONFIG_H
 #define __CHASSIS_CONFIG_H
 
@@ -76,3 +78,4 @@
 #define CHASSIS_GRAVITY_MPS2            9.81f
 
 #endif
+

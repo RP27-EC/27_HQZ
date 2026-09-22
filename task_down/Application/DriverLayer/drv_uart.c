@@ -1,19 +1,4 @@
-/**
- ******************************************************************************
- * @file        drv_uart.c
- * @author      RobotPilots@2020
- * @brief       UART Driver Package(Based on HAL).
- ******************************************************************************
- * @attention
- * 
- * Copyright 2020 RobotPilots
- * 
- * @Version     V1.0
- * @date        15-August-2020
- ******************************************************************************
- */
- 
-/* Includes ------------------------------------------------------------------*/
+/* drv_uart.c - 串口驱动 */
 #include "drv_uart.h"
 #include "string.h"
 #include "judge_protocol.h"
@@ -26,8 +11,6 @@ extern UART_HandleTypeDef huart7;
 extern UART_HandleTypeDef huart8;
 extern UART_HandleTypeDef huart9;
 extern UART_HandleTypeDef huart10;
-
-/* Private macro -------------------------------------------------------------*/
 #define USART5_RX_DATA_FRAME_LEN	(18u)	// 串口2数据帧长度
 #define USART5_RX_BUF_LEN			(USART5_RX_DATA_FRAME_LEN)	// 串口2接收缓冲区长度
 
@@ -35,8 +18,6 @@ extern UART_HandleTypeDef huart10;
 //#define USART5_RX_BUF_LEN	  600	//200
 #define BUFF_SIZE 512
 uint8_t rx_buff[BUFF_SIZE];
-
-/* Private function prototypes -----------------------------------------------*/
 __WEAK void USART10_rxDataHandler(uint8_t *rxBuf);
 __WEAK void USART9_rxDataHandler(uint8_t *rxBuf);
 __WEAK void USART8_rxDataHandler(uint8_t *rxBuf);
@@ -56,9 +37,6 @@ static HAL_StatusTypeDef DMAEx_MultiBufferStart_NoIT(DMA_HandleTypeDef *hdma, \
                                                     uint32_t DstAddress, \
                                                     uint32_t SecondMemAddress, \
                                                     uint32_t DataLength);
-
-/* Private typedef -----------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
 __attribute__((section (".AXI_SRAM"))) uint8_t usart1_dma_rxbuf[USART1_RX_BUF_LEN];
 __attribute__((section (".AXI_SRAM"))) uint8_t usart10_dma_rxbuf[USART10_RX_BUF_LEN];
 __attribute__((section (".AXI_SRAM"))) uint8_t usart7_dma_rxbuf[USART7_RX_BUF_LEN];
@@ -69,10 +47,6 @@ __attribute__((section (".AXI_SRAM"))) uint8_t usart5_dma_rxbuf[USART5_RX_BUF_LE
 #else
 __attribute__((section (".AXI_SRAM"))) uint8_t usart5_dma_rxbuf[2][USART5_RX_BUF_LEN];
 #endif
-
-/* Exported variables --------------------------------------------------------*/
-
-
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef * huart, uint16_t Size)
 {
 	if(huart->Instance == UART5)
@@ -182,9 +156,7 @@ void USART5_Init(void)
 #endif
 }
 
-/**
- *	@brief	USART1 Initialization
- */
+/* USART1 初始化 */
 void USART1_Init(void)
 {
 	__HAL_UART_ENABLE_IT(&huart1, UART_IT_IDLE);
@@ -194,9 +166,7 @@ void USART1_Init(void)
 	
 }
 
-/**
- *	@brief	USART10 Initialization
- */
+/* USART10 初始化 */
 void USART10_Init(void)
 {
 	__HAL_UART_ENABLE_IT(&huart10, UART_IT_IDLE);
@@ -206,9 +176,7 @@ void USART10_Init(void)
 	
 }
 
-/**
- *	@brief	USART10 Initialization
- */
+/* USART7 初始化 */
 void USART7_Init(void)
 {
 	__HAL_UART_ENABLE_IT(&huart7, UART_IT_IDLE);
@@ -218,9 +186,7 @@ void USART7_Init(void)
 	
 }
 
-/**
- *	@brief	USART8 Initialization
- */
+/* USART8 初始化 */
 void USART8_Init(void)
 {
 	__HAL_UART_ENABLE_IT(&huart8, UART_IT_IDLE);
@@ -230,9 +196,7 @@ void USART8_Init(void)
 	
 }
 
-/**
- *	@brief	USART9 Initialization
- */
+/* USART9 初始化 */
 void USART9_Init(void)
 {
 	__HAL_UART_ENABLE_IT(&huart9, UART_IT_IDLE);
@@ -241,13 +205,7 @@ void USART9_Init(void)
 	HAL_UART_Receive_DMA(&huart9, usart9_dma_rxbuf, USART9_RX_BUF_LEN);	
 	
 }
-
-/* Private functions ---------------------------------------------------------*/
-/**
-  * @brief   clear idle it flag after uart receive a frame data
-  * @param   uart IRQHandler id
-  * @usage   call in DRV_UART_IRQHandler() function
-  */
+/* 串口空闲中断回调 */
 static void uart_rx_idle_callback(UART_HandleTypeDef* huart)
 {
 	__HAL_UART_CLEAR_IDLEFLAG(huart);
@@ -380,11 +338,7 @@ static HAL_StatusTypeDef DMA_Start(DMA_HandleTypeDef *hdma, \
 	} 
 	return status; 	
 }
-/**
-  * @brief   callback this function when uart interrupt 
-  * @param   uart IRQHandler id
-  * @usage   call in uart handler function USARTx_IRQHandler()
-  */
+/* 串口中断统一入口 */
 void DRV_UART_IRQHandler(UART_HandleTypeDef *huart)
 {
     // 判断是否为空闲中断
@@ -407,44 +361,35 @@ void WL_UART_printf(char *format, ...)
 }
 
 /* rxData Handler [Weak] functions -------------------------------------------*/
-/**
- *	@brief	[__WEAK] 需要在Potocol Layer中实现具体的 USART1 处理协议
- */
+/* __WEAK */
 __WEAK void USART1_rxDataHandler(uint8_t *rxBuf)
 {	
 }
 
-/**
- *	@brief	[__WEAK] 需要在Potocol Layer中实现具体的 USART7 处理协议
- */
+/* __WEAK */
 __WEAK void USART7_rxDataHandler(uint8_t *rxBuf)
 {	
 }
 
-/**
- *	@brief	[__WEAK] 需要在Potocol Layer中实现具体的 USART5 处理协议
- */
+/* __WEAK */
 __WEAK void USART5_rxDataHandler(uint8_t *rxBuf)
 {	
 }
 
-/**
- *	@brief	[__WEAK] 需要在Potocol Layer中实现具体的 USART10 处理协议
- */
+/* __WEAK */
 __WEAK void USART10_rxDataHandler(uint8_t *rxBuf)
 {	
 }
 
-/**
- *	@brief	[__WEAK] 需要在Potocol Layer中实现具体的 USART8 处理协议
- */
+/* __WEAK */
 __WEAK void USART8_rxDataHandler(uint8_t *rxBuf)
 {	
 }
 
-/**
- *	@brief	[__WEAK] 需要在Potocol Layer中实现具体的 USART9 处理协议
- */
+/* __WEAK */
 __WEAK void USART9_rxDataHandler(uint8_t *rxBuf)
 {	
 }
+
+
+

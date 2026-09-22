@@ -1,11 +1,10 @@
+/* led.h - LED 椹卞姩 */
+
 #ifndef _LED_H
 #define _LED_H
 
 #include "stm32f4xx_hal.h"
 #include "gpio.h"
-
-
-/* Private macro -------------------------------------------------------------*/
 #define  LED_PORT   	 GPIOH
 #define  LED_BLUE_PIN    GPIO_PIN_10
 #define  LED_GREEN_PIN   GPIO_PIN_11
@@ -22,10 +21,6 @@
 #define  LED_BLUE_Toggle 	HAL_GPIO_TogglePin(GPIOH, GPIO_PIN_10)
 #define  LED_GREEN_Toggle 	HAL_GPIO_TogglePin(GPIOH, GPIO_PIN_11)
 #define  LED_RED_Toggle 	HAL_GPIO_TogglePin(GPIOH, GPIO_PIN_12)
-
-
-/* Private function prototypes -----------------------------------------------*/
-/* Private typedef -----------------------------------------------------------*/
 typedef enum
 {
     LED_OFF = 0,
@@ -44,16 +39,13 @@ typedef struct led
 {
   led_state_e state;
   led_colour_e colour;
-  float 	   blink_fre; //每秒亮多少次
+  float 	   blink_fre;
 	
 } led_t;
-
-
-/* Exported function --------------------------------------------------------*/
 void led_work(led_t *led);
-/* Exported variables --------------------------------------------------------*/
 extern led_t led;
 
 
 #endif
+
 

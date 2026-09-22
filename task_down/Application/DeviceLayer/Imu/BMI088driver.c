@@ -1,3 +1,5 @@
+/* BMI088driver.c - BMI088 寄存器驱动 */
+
 #include "BMI088driver.h"
 #include "BMI088reg.h"
 #include "BMI088Middleware.h"
@@ -270,3 +272,4 @@ static void BMI088_read_muli_reg(uint8_t reg, uint8_t *buf, uint8_t len)
 #elif defined(BMI088_USE_IIC)
 
 #endif
+

@@ -1,3 +1,5 @@
+/* gimbal.c - 云台控制 */
+
 #include "gimbal.h"
 #include "vision.h"
 #include "infantry.h"
@@ -47,10 +49,7 @@ static void Gimbal_Init(Gimbal_t* gimbal)
 	gimbal->heart_beat = Gimbal_Offline_Update;
 }
 
-/**
- * @brief  云台状态模式更新
- * @note   
- */
+/* 云台状态刷新 */
 static void Gimbal_Status_Update(Gimbal_t* gimbal)
 {
 	switch (infantry.mode)
@@ -100,16 +99,13 @@ static void Gimbal_Status_Update(Gimbal_t* gimbal)
 	
 }
 
-/**
- * @brief  云台数据更新
- * @note   来自板间
- */
+/* 云台数据刷新 */
 static void Gimbal_Data_Update(Gimbal_t* gimbal)
 {
   gimbal->info.yaw_mec = board.rx_meg->gimbal_meg.yaw_mec;
 
 	#if GIMBAL_SWITCH == 0
-	  gimbal->info.yaw_imu = imu_sensor.info->base_info.yaw;
+	  gimbal->info.yaw_imu = imu_dev.info->base_info.yaw;
 	#else
 	  gimbal->info.yaw_imu = board.rx_meg->gimbal_meg.yaw_imu;
 	#endif
@@ -126,10 +122,7 @@ static void Gimbal_Data_Update(Gimbal_t* gimbal)
 	
 
 static uint16_t reset_tick = 0;
-/**
- * @brief  云台初始化工作过程
- * @note   机械模式归位中值，头抬升到位
- */
+/* 云台自检流程 */
 static void Gimbal_Init_Process(Gimbal_t* gimbal)
 {
 	gimbal->target.yaw_mec_tar = YAW_MEC_ZERO_ANGLE;
@@ -232,11 +225,11 @@ static void  Gimbal_Slave_Update(Gimbal_t* gimbal)
 			
 		  if(infantry.ctrl == RC_CTRL)
 		  {
-			  gimbal->target.pitch_mec_tar += rc_sensor.info->ch1/660.f * gimbal->config.rc_pitch_mec_step;
+			  gimbal->target.pitch_mec_tar += rc_dev.info->ch1/660.f * gimbal->config.rc_pitch_mec_step;
 		  }
 		  else if(infantry.ctrl == KEY_CTRL)
 		  {
-			  gimbal->target.pitch_mec_tar += rc_sensor.info->mouse_y * gimbal->config.key_pitch_mec_step;
+			  gimbal->target.pitch_mec_tar += rc_dev.info->mouse_y * gimbal->config.key_pitch_mec_step;
 		  }
 		
 		}
@@ -280,14 +273,14 @@ static void  Gimbal_Boss_Update(Gimbal_t* gimbal)
 	{
 	  if(infantry.ctrl == RC_CTRL)
     {
-		  gimbal->target.yaw_imu_tar -= rc_sensor.info->ch0/660.f * gimbal->config.rc_yaw_imu_step;
-		  gimbal->target.pitch_imu_tar += rc_sensor.info->ch1/660.f * gimbal->config.rc_pitch_imu_step;
+		  gimbal->target.yaw_imu_tar -= rc_dev.info->ch0/660.f * gimbal->config.rc_yaw_imu_step;
+		  gimbal->target.pitch_imu_tar += rc_dev.info->ch1/660.f * gimbal->config.rc_pitch_imu_step;
 			
 	  }
 	  else if(infantry.ctrl == KEY_CTRL)
 	  {
-		  gimbal->target.yaw_imu_tar -= rc_sensor.info->mouse_x * gimbal->config.key_yaw_imu_step;
-		  gimbal->target.pitch_imu_tar += rc_sensor.info->mouse_y * gimbal->config.key_pitch_imu_step;
+		  gimbal->target.yaw_imu_tar -= rc_dev.info->mouse_x * gimbal->config.key_yaw_imu_step;
+		  gimbal->target.pitch_imu_tar += rc_dev.info->mouse_y * gimbal->config.key_pitch_imu_step;
 			
 	  }
 
@@ -325,10 +318,7 @@ static void  Gimbal_Boss_Update(Gimbal_t* gimbal)
 }
 
 
-/**
- * @brief  云台失联检测
- * @note   
- */
+/* 云台离线状态刷新 */
 static void Gimbal_Offline_Update(Gimbal_t* gimbal)
 {
 	gimbal->state.yaw_heart = board.rx_meg->state_meg.yaw_motor_state;
@@ -337,10 +327,7 @@ static void Gimbal_Offline_Update(Gimbal_t* gimbal)
 	
 }
 
-/**
- * @brief  云台失联处理
- * @note   
- */
+/* 云台失联处理 */
 static void Gimbal_Offline_Process(Gimbal_t* gimbal)
 {
 	gimbal->gimbal_reset_flag = false;
@@ -354,10 +341,7 @@ static void Gimbal_Offline_Process(Gimbal_t* gimbal)
 
 }
 
-/**
- * @brief  云台命令发送
- * @note   更新到板间
- */
+/* 下发云台控制量 */
 static void Gimbal_Cmd_Transmit(Gimbal_t* gimbal)
 {
   board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = gimbal->target.yaw_mec_tar;
@@ -438,4 +422,6 @@ static void Gimbal_Work(Gimbal_t* gimbal)
 	Gimbal_Cmd_Transmit(gimbal);
 
 }
+
+
 

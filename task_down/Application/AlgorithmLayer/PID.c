@@ -1,51 +1,33 @@
+/* PID.c - é—æ› å¹† PID */
+
 #include "pid.h"
 #include "rp_math.h"
-/**
- *  @name   single_pid_ctrl
- */
+/* é—æ› å¹† PID ç’ï¼„ç•» */
 void single_pid_ctrl(pid_ctrl_t *pid)
 {
-    // ±£´æÎó²îÖµ(ĞèÒªÔÚÍâÃæ×ÔĞĞ¼ÆËãÎó²î)
+
 	//pid->err = pid->target-pid->measure;
 	  pid->integral += pid->err;  
     pid->integral = constrain(pid->integral, -pid->integral_max, +pid->integral_max);
-    // p i d Êä³öÏî¼ÆËã
+
     pid->pout = pid->kp * pid->err;
     pid->iout = pid->ki * pid->integral;
 	  pid->dout = pid->kd * (pid->err - pid->last_err);
 	  pid->last_dout=pid->dout;
-    // ÀÛ¼ÓpidÊä³öÖµ
+
     pid->out = pid->pout + pid->iout + pid->dout;
     pid->out = constrain(pid->out, -pid->out_max, pid->out_max);
-    // ¼ÇÂ¼ÉÏ´ÎÎó²îÖµ
+
     pid->last_err = pid->err;
 }
 
 
-/**
- *	@brief	pid×Ü¿ØÖÆ ²ÎÊı£ºÍâ»· ÄÚ»·  Íâ»·»òÄÚ»·Ä¿±êÖµ Íâ»·¹Û²âÖµ ÄÚ»·¹Û²âÖµ  ÄÚ»·¹Û²âÖµkp£¬Ò»°ãÌî¸ºµÄ err´¦Àí·½Ê½
- *          err_cal_mode£ºerr´¦Àí·½Ê½ °ëÈ¦»¹ÊÇËÄ·ÖÖ®Ò»È¦ 0£¬1£¬2 ËÙ¶È»·Ê¹ÓÃ0 yawÖáÊ¹ÓÃ1 
-						ÍÓÂİÒÇ½Ç¶È»· 3
- *         ÄÚ»·²»ÄÜÎªNULL
- *	@note   Ê¹ÓÃÊ¾Àı£º
-			pid_ctrl_t *out	  = ;
-			pid_ctrl_t *inn	  = ;
-			float target   	  = ;
-			float mea_out       = ;
-			float mea_in        = ;
-			float inner_kp      = ;
-			uint8_t err_cal_mode= ;
-			=all_pid_calc (out,inn,target,mea_out,mea_in,inner_kp,err_cal_mode);
- *  @author HERMIT_PURPLE
- *
- *  @return ·µ»Ø¼ÆËã½á¹û
- */
-
+/* all_pid_calc */
 float  all_pid_calc (pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,float mea_in,float inner_kp,uint8_t err_cal_mode)
 {
-	if(inn == NULL)return 0;  //Ã»ÓĞÄÚ»·£¬Îª0
+	if(inn == NULL)return 0;
 	
-	 else if(out == NULL&&inn!=NULL)  //Ö»ÓĞËÙ¶È»·
+	 else if(out == NULL&&inn!=NULL)  // æˆæ’³åš­
 	{
 		inn->target=target;
 		inn->measure=mea_in;
@@ -54,12 +36,12 @@ float  all_pid_calc (pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,
 		return inn->out;
 	}
 	
-	else if(out != NULL&&inn!=NULL)  //Ë«»·PID
+	else if(out != NULL&&inn!=NULL)
 	{
 		
 		out->target=target;
 		out->measure=mea_out;
-		out->err=out->target-out->measure; //¼ÆËã½Ç¶È»·Îó²î£¬ºóÃæÔÙ½øĞĞÎó²î´¦Àí
+		out->err=out->target-out->measure;  // ç’‡îˆšæ¨Š
 		switch(err_cal_mode)
 		{
 			
@@ -90,26 +72,21 @@ float  all_pid_calc (pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,
 				break;
 		}
 		
-		single_pid_ctrl(out);  //¼ÆËã³ö´¦Àí¹ıÎó²îµÄ½Ç¶È»·µÄÖµ
-		inn->target=out->out; //½Ç¶È»·Êä³ö×÷ÎªËÙ¶È»·Ä¿±êÖµ
-		inn->measure=mea_in*inner_kp;//ÄÚ»·ÊäÈëkp£¬¿ÉÒÔµ÷ÕûÕı¸ººÍ´óĞ¡
-		inn->err=inn->target+inn->measure;  //ËÙ¶È»·Îó²î¼ÆËã
+		single_pid_ctrl(out);  // æˆæ’³åš­
+		inn->target=out->out;  // é©î†½çˆ£
+		inn->measure=mea_in*inner_kp;
+		inn->err=inn->target+inn->measure;  // ç’‡îˆšæ¨Š
 		single_pid_ctrl(inn);
-		return inn->out;  //Êä³öÄÚ»·¼ÆËãÖµ
+		return inn->out;  // æˆæ’³åš­
 	}
-	else  //Ö»ÓĞ½Ç¶È»·
+	else
 	{
 		return 0;
 	}
 }
 
 
-/**
- *	@brief   Ç°À¡pid¼ÆËã,Ê¹ÓÃÊ¾Àı²Î¿¼pid×Ü¿Ø
- *  @author HERMIT_PURPLE
- *  @return ·µ»Ø¼ÆËã½á¹û
- */
-
+/* é“å¶‰î›­+PID ç’ï¼„ç•» */
 float feedforward_pid_calc(float K_ff,pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,float mea_in,float inner_kp,uint8_t err_cal_mode)
 {
 	float target_now;
@@ -119,6 +96,9 @@ float feedforward_pid_calc(float K_ff,pid_ctrl_t *out,pid_ctrl_t *inn,float targ
 	target_last=target_now;
 	return output;
 }
+
+
+
 
 
 

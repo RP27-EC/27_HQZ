@@ -1,13 +1,5 @@
-/**
-  ******************************************************************************
-  * @file           : cap_protocol.c\h
-	* @author         : czf
-	* @date           : 2022-4-22 15:41:14
-  * @brief          : 
-	* @history        : 
-  ******************************************************************************
-  */
-	
+/* cap_protocol.c - 超电通信协议 */
+
 #include "cap_protocol.h"
 
 #include "string.h"
@@ -97,3 +89,4 @@ int16_t float_to_int16(float b, float b_max, float b_min, int16_t a_max, int16_t
     
     return (int16_t)a;
 }
+

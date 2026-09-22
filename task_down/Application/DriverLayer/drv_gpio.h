@@ -1,18 +1,15 @@
+/* drv_gpio.h - GPIO 寮曡剼瀹氫箟 */
+
 
 #ifndef __GPIO_DRV_H
 #define __GPIO_DRV_H
-
-
-/* Includes ------------------------------------------------------------------*/
 #include "stm32h7xx_hal.h"
 #include "main.h"
 
-/* Exported macro ------------------------------------------------------------*/
-//IO口操作宏定义
 #define BITBAND(addr, bitnum) ((addr & 0xF0000000)+0x2000000+((addr &0xFFFFF)<<5)+(bitnum<<2)) 
 #define MEM_ADDR(addr)  *((volatile unsigned long  *)(addr)) 
 #define BIT_ADDR(addr, bitnum)   MEM_ADDR(BITBAND(addr, bitnum)) 
-//IO口地址映射
+
 #define GPIOA_ODR_Addr    (GPIOA_BASE+20) //0x40020014
 #define GPIOB_ODR_Addr    (GPIOB_BASE+20) //0x40020414 
 #define GPIOC_ODR_Addr    (GPIOC_BASE+20) //0x40020814 
@@ -33,38 +30,34 @@
 #define GPIOH_IDR_Addr    (GPIOH_BASE+16) //0x40021C10 
 #define GPIOI_IDR_Addr    (GPIOI_BASE+16) //0x40022010 
  
-//IO口操作,只对单一的IO口!
-//确保n的值小于16!
-#define PAout(n)   BIT_ADDR(GPIOA_ODR_Addr,n)  //输出 
-#define PAin(n)    BIT_ADDR(GPIOA_IDR_Addr,n)  //输入 
 
-#define PBout(n)   BIT_ADDR(GPIOB_ODR_Addr,n)  //输出 
-#define PBin(n)    BIT_ADDR(GPIOB_IDR_Addr,n)  //输入 
 
-#define PCout(n)   BIT_ADDR(GPIOC_ODR_Addr,n)  //输出 
-#define PCin(n)    BIT_ADDR(GPIOC_IDR_Addr,n)  //输入 
+#define PAout(n)   BIT_ADDR(GPIOA_ODR_Addr,n)
+#define PAin(n)    BIT_ADDR(GPIOA_IDR_Addr,n)
 
-#define PDout(n)   BIT_ADDR(GPIOD_ODR_Addr,n)  //输出 
-#define PDin(n)    BIT_ADDR(GPIOD_IDR_Addr,n)  //输入 
+#define PBout(n)   BIT_ADDR(GPIOB_ODR_Addr,n)
+#define PBin(n)    BIT_ADDR(GPIOB_IDR_Addr,n)
 
-#define PEout(n)   BIT_ADDR(GPIOE_ODR_Addr,n)  //输出 
-#define PEin(n)    BIT_ADDR(GPIOE_IDR_Addr,n)  //输入
+#define PCout(n)   BIT_ADDR(GPIOC_ODR_Addr,n)
+#define PCin(n)    BIT_ADDR(GPIOC_IDR_Addr,n)
 
-#define PFout(n)   BIT_ADDR(GPIOF_ODR_Addr,n)  //输出 
-#define PFin(n)    BIT_ADDR(GPIOF_IDR_Addr,n)  //输入
+#define PDout(n)   BIT_ADDR(GPIOD_ODR_Addr,n)
+#define PDin(n)    BIT_ADDR(GPIOD_IDR_Addr,n)
 
-#define PGout(n)   BIT_ADDR(GPIOG_ODR_Addr,n)  //输出 
-#define PGin(n)    BIT_ADDR(GPIOG_IDR_Addr,n)  //输入
+#define PEout(n)   BIT_ADDR(GPIOE_ODR_Addr,n)
+#define PEin(n)    BIT_ADDR(GPIOE_IDR_Addr,n)
 
-#define PHout(n)   BIT_ADDR(GPIOH_ODR_Addr,n)  //输出 
-#define PHin(n)    BIT_ADDR(GPIOH_IDR_Addr,n)  //输入
+#define PFout(n)   BIT_ADDR(GPIOF_ODR_Addr,n)
+#define PFin(n)    BIT_ADDR(GPIOF_IDR_Addr,n)
 
-#define PIout(n)   BIT_ADDR(GPIOI_ODR_Addr,n)  //输出 
-#define PIin(n)    BIT_ADDR(GPIOI_IDR_Addr,n)  //输入
+#define PGout(n)   BIT_ADDR(GPIOG_ODR_Addr,n)
+#define PGin(n)    BIT_ADDR(GPIOG_IDR_Addr,n)
 
-/* Exported types ------------------------------------------------------------*/
+#define PHout(n)   BIT_ADDR(GPIOH_ODR_Addr,n)
+#define PHin(n)    BIT_ADDR(GPIOH_IDR_Addr,n)
 
-/* Exported functions --------------------------------------------------------*/
+#define PIout(n)   BIT_ADDR(GPIOI_ODR_Addr,n)
+#define PIin(n)    BIT_ADDR(GPIOI_IDR_Addr,n)
 // Led
 //#define LED_RED_ON()		(HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_RESET))
 //#define LED_RED_OFF()		(HAL_GPIO_WritePin(LED_RED_GPIO_Port, LED_RED_Pin, GPIO_PIN_SET))
@@ -99,3 +92,4 @@
 //#define BMI_CS_Pin GPIO_PIN_12
 //#define BMI_CS_GPIO_Port GPIOB
 #endif
+

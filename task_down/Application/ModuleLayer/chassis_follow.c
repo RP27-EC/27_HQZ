@@ -1,3 +1,5 @@
+/* chassis_follow.c - 底盘跟随 */
+
 #include "chassis_follow.h"
 
 #include <math.h>
@@ -101,9 +103,9 @@ void Chassis_Follow_UpdateMode(void)
     uint8_t rc_ready;
     uint8_t selected = 0u;
 
-    rc_ready = ((rc_sensor.work_state == DEV_ONLINE) && (rc_sensor.info != NULL)) ? 1u : 0u;
+    rc_ready = ((rc_dev.work_state == DEV_ONLINE) && (rc_dev.info != NULL)) ? 1u : 0u;
 
-    if ((rc_ready == 0u) || (rc_sensor.info->s1.value != RC_SW_UP))
+    if ((rc_ready == 0u) || (rc_dev.info->s1.value != RC_SW_UP))
     {
         chassis_follow.fault_latched = 0u;
         chassis_follow.turn_direction = 0;
@@ -112,8 +114,8 @@ void Chassis_Follow_UpdateMode(void)
 
 #if CHASSIS_GIMBAL_FOLLOW_ENABLE
     if ((rc_ready != 0u) &&
-        (rc_sensor.info->s1.value == RC_SW_UP) &&
-        (rc_sensor.info->s2.value == RC_SW_UP))
+        (rc_dev.info->s1.value == RC_SW_UP) &&
+        (rc_dev.info->s2.value == RC_SW_UP))
     {
         selected = 1u;
     }
@@ -320,3 +322,4 @@ uint8_t Chassis_Follow_HasFault(void)
 {
     return chassis_follow.fault_latched;
 }
+

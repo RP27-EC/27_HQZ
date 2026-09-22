@@ -1,3 +1,5 @@
+/* chassis_input.c - 底盘输入解析 */
+
 #include "chassis_input.h"
 
 #include "rc_sensor.h"
@@ -53,14 +55,14 @@ void Chassis_Input_Update(void)
 
 #if CHASSIS_RC_INPUT_ENABLE
     /* 未使能时底盘保持停止。 */
-    if ((rc_sensor.work_state == DEV_ONLINE) &&
-        (rc_sensor.info != NULL) &&
-        (rc_sensor.info->s1.value == RC_SW_UP))
+    if ((rc_dev.work_state == DEV_ONLINE) &&
+        (rc_dev.info != NULL) &&
+        (rc_dev.info->s1.value == RC_SW_UP))
     {
-        cmd.vx = -Chassis_RcAxisValue(rc_sensor.info->ch3) * CHASSIS_MAX_VX;
-        cmd.vy = Chassis_RcAxisValue(rc_sensor.info->ch2) * CHASSIS_MAX_VY;
+        cmd.vx = -Chassis_RcAxisValue(rc_dev.info->ch3) * CHASSIS_MAX_VX;
+        cmd.vy = Chassis_RcAxisValue(rc_dev.info->ch2) * CHASSIS_MAX_VY;
 #if CHASSIS_OWNS_RC_YAW
-        cmd.wz = Chassis_RcAxisValue(rc_sensor.info->ch0) * CHASSIS_MAX_WZ;
+        cmd.wz = Chassis_RcAxisValue(rc_dev.info->ch0) * CHASSIS_MAX_WZ;
 #else
         cmd.wz = 0.0f;
 #endif
@@ -75,3 +77,4 @@ void Chassis_Input_Update(void)
 
     chassis_input_cmd = cmd;
 }
+

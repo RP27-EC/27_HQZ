@@ -1,13 +1,5 @@
-/**
-  ******************************************************************************
-  * @file           : cap.c\h
-	* @author         : czf
-	* @date           : 2022.4.28
-  * @brief          : 
-	* @history        : 
-  ******************************************************************************
-  */
-	
+/* cap.c - 超级电容设备 */
+
 #include "cap.h"
 #include "drv_can.h"
 void Cap_Init(cap_t* my_cap);
@@ -45,3 +37,4 @@ static void Cap_HeartBeat(cap_t* my_cap)
 		my_cap->status->status = DEV_ONLINE;
 	}
 }
+

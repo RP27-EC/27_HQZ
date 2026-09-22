@@ -1,39 +1,12 @@
-
-/**
- * @file        rp_math.c
- * @author      RobotPilots
- * @Version     v1.1
- * @brief       RobotPilots Robots' Math Libaray.
- * @update
- *              v1.0(11-September-2020)
- *              v1.1(13-November-2021)
- *                  1.Ôö¼ÓÎ»²Ù×÷º¯Êı
- */
-
-/* Includes ------------------------------------------------------------------*/
+/* rp_math.c - æ•°å­¦å·¥å…· */
 #include "rp_math.h"
-
-/* Private macro -------------------------------------------------------------*/
-/* Private function prototypes -----------------------------------------------*/
-/* Private typedef -----------------------------------------------------------*/
-/* Private variables ---------------------------------------------------------*/
-/* Exported variables --------------------------------------------------------*/
-/* Private functions ---------------------------------------------------------*/
-/* Exported functions --------------------------------------------------------*/
-
-/**
- * @brief  µÍÍ¨ÂË²¨,K¡Ê(0,1)£¬K Ô½´ó£¬ÂË²¨Ğ§¹ûÔ½Èõ
- * @param  ÉÏ´ÎµÄÂË²¨Êä³öX_last  £¬ĞÂµÄÊäÈëX_new £¬ÂË²¨ÏµÊıK
- * @return  ÂË²¨ºóÊıÖµ
- */
+/* ä¸€é˜¶ä½é€šæ»¤æ³¢ */
 float Lowpass(float X_last, float X_new, float K)
 {
 	return (X_last + (X_new - X_last) * K);
 }
 
-/**
- *	@brief	¹ı°ëÈ¦´¦Àí angle£ºÔ´Êı¾İ cycle:Êı¾İ·¶Î§
- */
+/* è§’åº¦å½’ä¸€åŒ–åˆ°æ­£è´ŸåŠåœˆ */
 float motor_half_cycle(float angle, float max)
 {
 	if (abs(angle) > (max / 2))
@@ -95,26 +68,13 @@ float RampFloat(float final, float now, float ramp)
 
 
 
-float DeathZoom(float input, float center, float death)
+float deadzone(float input, float center, float death)
 {
 	if (abs(input - center) < death)
 		return center;
 	return input;
 }
-/**
-  * @name   Time_Trigger_inloop
-  * @brief  ÔÚÑ­»·Àï¶¨Ê±´¥·¢
-  * @note   ¢ÙĞèÒªÍâ²¿¶¨Òå±äÁ¿´æÊ±¼ä¡¢µÚÒ»´Î²»Ö±½Ó´¥·¢±êÖ¾Î»,·ÀÖ¹¶à´¦µ÷ÓÃ¹²ÓÃÊ±¼ä»ò±êÖ¾Î»µ¼ÖÂ´íÎó
-  *         ¢ÚÒªÃ´×Ô¼ºÍâ²¿Çå±êÖ¾Î»£¬ÒªÃ´Ö´ĞĞµÄÄÚÈİÒª½ô¸úÕâ¸öº¯ÊıºóÃæ£¬²»È»ÈİÒ×´í¹ı´¥·¢Ê±¼ä
-  *         ¢Û*ignore_first_trigger_flagĞèÒª³õÊ¼Îª0
-			 ¢Ü*ignore_first_trigger_flag ÍË³ö³¤°´ºóÒªÇåÁã
-  * @param  private_flag: ±êÖ¾Î»Ö¸Õë£¬ÓÃÓÚÖ¸Ê¾ÊÇ·ñ´¥·¢£¨1Îª´¥·¢£©
-  * @param  last_trigger_tick: ÓÃÓÚ´æ´¢ÉÏ´Î´¥·¢µÄÊ±¼ä£¨Íâ²¿±äÁ¿£¬Ğè³õÊ¼»¯Îª0£©
-  * @param  ignore_first_trigger_flag: ÊÇ·ñºöÂÔµÚÒ»´Î´¥·¢µÄ±êÖ¾Î»£¨Íâ²¿±äÁ¿£¬Ğè³õÊ¼»¯Îª0,ÍË³ö³¤°´ºóÒªÇåÁã£©
-  * @param  delay_tick: ´¥·¢µÄÊ±¼ä¼ä¸ô£¨µ¥Î»£ººÁÃë£©
-  * @param  if_ignore_first: ÊÇ·ñºöÂÔµÚÒ»´Î´¥·¢£¨1ÎªºöÂÔ£¬0Îª²»ºöÂÔ£©
-  * @author HERMIT_PURPLE
-  */
+/* Time_Trigger_inloop */
 void Time_Trigger_inloop(Time_trigger_t *Time_trigger_struct)
 {
 	if (Time_trigger_struct->private_flag == NULL || Time_trigger_struct->last_trigger_tick == NULL || Time_trigger_struct->ignore_first_trigger_flag == NULL)
@@ -122,7 +82,7 @@ void Time_Trigger_inloop(Time_trigger_t *Time_trigger_struct)
 		return;
 	}
 
-	// Èç¹û½øÀ´Õâ¸öº¯Êı²»Ö±½Ó´¥·¢Ò»´Î,¾ÍÏÈ¸³ÖµÒ»´ÎÉÏ´ÎµÄÊ±¼ä
+
 	if (Time_trigger_struct->if_ignore_first == 1 && Time_trigger_struct->ignore_first_trigger_flag == 0)
 	{
 		*Time_trigger_struct->ignore_first_trigger_flag = 1;
@@ -134,7 +94,7 @@ void Time_Trigger_inloop(Time_trigger_t *Time_trigger_struct)
 		*Time_trigger_struct->private_flag = 1;
 		*Time_trigger_struct->last_trigger_tick = HAL_GetTick();
 	}
-	/*ÄÚ²¿Çå±êÖ¾Î»*/
+
 	else
 	{
 		*Time_trigger_struct->private_flag = Time_trigger_struct->flag_before_trigger;
@@ -150,11 +110,7 @@ uint16_t float_to_uint(float x, float x_min, float x_max, uint8_t bits)
     return (uint16_t) ((x-offset)*((float)((1<<bits)-1))/span);
 }
 
-/**
-  * @brief  ½«uint×ªÎªfloat£¬²¢¶ÔÕı¸º×ö´¦Àí
-  * @param
-  * @retval 
-  */
+/* å®šé•¿æ•´å‹è½¬æµ®ç‚¹ */
 float uint_to_float(uint16_t x_int, float x_min, float x_max, uint8_t bits)
 {
     float span = x_max - x_min;
@@ -162,26 +118,23 @@ float uint_to_float(uint16_t x_int, float x_min, float x_max, uint8_t bits)
     return ((float)x_int)*span/((float)((1<<bits)-1)) + offset;
 }
 
-/**
- * @brief ²½½øÊ½ÏŞ·ùÂË²¨º¯Êı
- * @param new_value µ±Ç°²ÉÑùÖµ
- * @param last_value ÉÏÒ»´ÎµÄÂË²¨Êä³öÖµ
- * @param max_step ×î´ó²½½øÖµ£¨ËÀÇøãĞÖµ£©
- * @return ±¾´ÎÂË²¨ºóµÄÖµ
- */
+/* é™é€Ÿæ–œå¡æ»¤æ³¢ */
 float step_limit_filter(float new_value, float last_value, float max_step)
 {
     float filtered_value;
     float difference = new_value - last_value;
 
-    // Èç¹û±ä»¯Á¿³¬¹ı×î´ó²½½øÖµ£¬Ôò½øĞĞÏŞ·ù²½½ø´¦Àí
+
     if (fabs(difference) > max_step) {
         filtered_value = last_value + sgn(difference) * max_step;
     } else {
-        // ±ä»¯Á¿ÔÚÔÊĞí·¶Î§ÄÚ£¬Ö±½Ó²ÉÓÃĞÂ²ÉÑùÖµ
+
         filtered_value = new_value;
     }
     
     return filtered_value; 
 }
+
+
+
 

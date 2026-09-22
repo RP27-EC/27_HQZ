@@ -1,55 +1,27 @@
-/**
-  ******************************************************************************
-  * @file   bmi.c
-  * @brief  陀螺仪数据解算
-  * @update 2024-8
-  ******************************************************************************
-  */
-
-/* Includes ------------------------------------------------------------------*/
+/* bmi.c - Mahony 互补滤波姿态解算 */
 #include "bmi.h"
 #include "rp_math.h"
 #include "ave_filter.h"
 
 #if IMU_USE_MAHONY==1
-/* Exported macro ------------------------------------------------------------*/
 /* Macros to select the sensors */
 
 /* 重力加速度 */
 #define GRAVITY_EARTH  (9.80665f)
-
-/* Private variables ---------------------------------------------------------*/
 /* 矩阵实例定义 */
 arm_matrix_instance_f32 Trans;
 arm_matrix_instance_f32 Src;
 arm_matrix_instance_f32 Dst;
 
-/**
- * @brief   坐标变换采用Z-Y-X欧拉角描述，即从陀螺仪坐标系向云台坐标系变换中，
- *          坐标系按照绕陀螺仪Z轴、Y轴、X轴的顺序旋转
- *          每一次旋转的参考坐标系为当前陀螺仪坐标系  
- *  @param
- *  @arz
- *      陀螺仪x轴与roll轴之间的夹角，单位为度
- *  @ary
- *      陀螺仪x轴与yaw轴之间的夹角，单位为度
- *  @arx
- *      陀螺仪y轴与yaw轴之间的夹角，单位为度
- */
-gimbal_transform_t gim_trans = {
+/* imu_frame_t */
+imu_frame_t imu_frame = {
     .arz = 90.0f,
     .ary = 0.0f,
     .arx = 0.0f,
     .trans = {0.0f},
 };
 
-/**
- * @param
- * @Kp
- *     越大表示越信任加速度，但快速晃动时，yaw轴角度可能会变化或者快速漂移。Kp越大，初始化的时候数据稳定越快。
- * @halfT
- *     解算周期的一半，比如1ms解算1次则halfT为0.0005f
- */
+/* bmi_t */
 bmi_t bmi = {
     .Kp = 500.0f,
     .norm = 0.0f,
@@ -62,14 +34,7 @@ bmi_t bmi = {
     .q0_temp = 0.0f, .q1_temp = 0.0f, .q2_temp = 0.0f, .q3_temp = 0.0f,
     .sintemp = 0.0f, .sintemp_ = 0.0f, .costemp = 0.0f, .costemp_ = 0.0f,
 };
-
-/* Exported variables --------------------------------------------------------*/
-/* Exported functions --------------------------------------------------------*/
-/**
- * @brief  开平方的倒数
- * @param  x
- * @retval y
- */
+/* 快速平方根倒数 */
 float inVSqrt(float x)
 {
 	float halfx = 0.5f * x;
@@ -81,43 +46,33 @@ float inVSqrt(float x)
 	return y;
 }
 
-/**
-  * @brief  陀螺仪坐标变换初始化，若不需要变换可在imu_sensor.c中imu_init将其注释
-  * @param  
-  * @retval 
-  */
-void transform_init(gimbal_transform_t *gim_trans)
+/* 由安装角生成坐标变换矩阵 */
+void imu_frame_init(imu_frame_t *imu_frame)
 {
     float arz, ary, arx;
 
 	/* 角度单位转换（to弧度） */
-	arz = gim_trans->arz * (double)0.017453;
-	ary = gim_trans->ary * (double)0.017453;
-	arx = gim_trans->arx * (double)0.017453;
+	arz = imu_frame->arz * (double)0.017453;
+	ary = imu_frame->ary * (double)0.017453;
+	arx = imu_frame->arx * (double)0.017453;
 
 	/* 旋转矩阵赋值（三个旋转矩阵叠加） */
-	gim_trans->trans[0] = arm_cos_f32(arz)*arm_cos_f32(ary);
-	gim_trans->trans[1] = arm_cos_f32(arz)*arm_sin_f32(ary)*arm_sin_f32(arx) - arm_sin_f32(arz)*arm_cos_f32(arx);
-	gim_trans->trans[2] = arm_cos_f32(arz)*arm_sin_f32(ary)*arm_cos_f32(arx) + arm_sin_f32(arz)*arm_sin_f32(arx);
-	gim_trans->trans[3] = arm_sin_f32(arz)*arm_cos_f32(ary);
-	gim_trans->trans[4] = arm_sin_f32(arz)*arm_sin_f32(ary)*arm_sin_f32(arx) + arm_cos_f32(arz)*arm_cos_f32(arx);
-	gim_trans->trans[5] = arm_sin_f32(arz)*arm_sin_f32(ary)*arm_cos_f32(arx) - arm_cos_f32(arz)*arm_sin_f32(arx);
-	gim_trans->trans[6] = -arm_sin_f32(ary);
-	gim_trans->trans[7] = arm_cos_f32(ary)*arm_sin_f32(arx);
-	gim_trans->trans[8] = arm_cos_f32(ary)*arm_cos_f32(arx);
+	imu_frame->trans[0] = arm_cos_f32(arz)*arm_cos_f32(ary);
+	imu_frame->trans[1] = arm_cos_f32(arz)*arm_sin_f32(ary)*arm_sin_f32(arx) - arm_sin_f32(arz)*arm_cos_f32(arx);
+	imu_frame->trans[2] = arm_cos_f32(arz)*arm_sin_f32(ary)*arm_cos_f32(arx) + arm_sin_f32(arz)*arm_sin_f32(arx);
+	imu_frame->trans[3] = arm_sin_f32(arz)*arm_cos_f32(ary);
+	imu_frame->trans[4] = arm_sin_f32(arz)*arm_sin_f32(ary)*arm_sin_f32(arx) + arm_cos_f32(arz)*arm_cos_f32(arx);
+	imu_frame->trans[5] = arm_sin_f32(arz)*arm_sin_f32(ary)*arm_cos_f32(arx) - arm_cos_f32(arz)*arm_sin_f32(arx);
+	imu_frame->trans[6] = -arm_sin_f32(ary);
+	imu_frame->trans[7] = arm_cos_f32(ary)*arm_sin_f32(arx);
+	imu_frame->trans[8] = arm_cos_f32(ary)*arm_cos_f32(arx);
 	
     /* 3x3变换矩阵初始化 */
-	arm_mat_init_f32(&Trans, 3, 3, (float *)gim_trans->trans); 
+	arm_mat_init_f32(&Trans, 3, 3, (float *)imu_frame->trans); 
 }
 
-/**
-  * @brief  将陀螺仪坐标变换为云台坐标，若不需要变换可在imu_protocol.c中imu_update将其注释
-  * @brief  坐标变换采用Z-Y-X欧拉角描述，即从陀螺仪坐标系向云台坐标系变换中，坐标系按照绕陀螺仪Z轴、Y轴、X轴的顺序旋转
-  *					每一次旋转的参考坐标系为当前陀螺仪坐标系
-  * @param[in]  (int16_t) gx,  gy,  gz,  ax,  ay,  az
-  * @param[out] (float *) gx, gy, gz, aax, ay, az
-  */
-void Vector_Transform(float gx, float gy, float gz,\
+/* 传感器系转云台系 */
+void imu_frame_rotate(float gx, float gy, float gz,\
 	                  float ax, float ay, float az,\
 	                  float *ggx, float *ggy, float *ggz,\
 					  float *aax, float *aay, float *aaz)
@@ -145,13 +100,8 @@ void Vector_Transform(float gx, float gy, float gz,\
 	*aax = acc_out[0], *aay = acc_out[1], *aaz = acc_out[2];
 }
 
-/**
-  * @brief  获取欧拉角，不带_的为涉及加速度计的，
-  *         带_的为不涉及加速度计的，用于差分计算速度
-  * @param  
-  * @retval 
-  */
-uint8_t BMI_Get_EulerAngle(float *pitch,float *roll,float *yaw,\
+/* Mahony 解算欧拉角 */
+uint8_t imu_mahony_euler(float *pitch,float *roll,float *yaw,\
 						   float *gx,float *gy,float *gz,\
 						   float *ax,float *ay,float *az)
 {
@@ -235,10 +185,8 @@ uint8_t BMI_Get_EulerAngle(float *pitch,float *roll,float *yaw,\
 	return 0;
 }
 
-/**
- * @brief  获取世界坐标系的加速度
- */
-void BMI_Get_Acceleration(float pitch, float roll, float yaw,\
+/* 机体系加速度转世界系 */
+void imu_world_accel(float pitch, float roll, float yaw,\
 						  float ax, float ay, float az,\
 						  float *accx, float *accy, float *accz)
 {
@@ -275,3 +223,6 @@ void BMI_Change_Kp(void)
 }
 
 #endif
+
+
+

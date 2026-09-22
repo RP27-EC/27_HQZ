@@ -1,3 +1,5 @@
+/* chassis_follow.h - 底盘跟随 */
+
 #ifndef __CHASSIS_FOLLOW_H
 #define __CHASSIS_FOLLOW_H
 
@@ -30,3 +32,4 @@ uint8_t Chassis_Follow_IsActive(void);
 uint8_t Chassis_Follow_HasFault(void);
 
 #endif
+

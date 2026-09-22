@@ -1,3 +1,5 @@
+/* observe_task.h - 监测任务 */
+
 #ifndef __OBSERVE_TASK
 #define __OBSERVE_TASK
 
@@ -9,3 +11,4 @@
 void StartUpdataTask(void const * argument);
 
 #endif
+
