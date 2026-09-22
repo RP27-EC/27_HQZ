@@ -8,6 +8,7 @@
 #include "rc_protocol.h"
 #include "rp_device_config.h"
 #include "board_remote_config.h"
+#include "launcher.h"
 
 volatile imu_debug_t imu_dbg;
 
@@ -77,6 +78,7 @@ void StartControlTask(void const *argument)
 #endif
         Module_Work();
         gimbal_can_send();
+        Launcher_Work();
         Send_To_Down_Board();
 
         osDelay(1);

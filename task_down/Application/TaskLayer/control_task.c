@@ -13,6 +13,7 @@
 #include "chassis_control.h"
 #include "chassis_follow.h"
 #include "chassis_spin.h"
+#include "launch.h"
 
 uint8_t open_ui = 0;
 
@@ -25,7 +26,8 @@ void StartCtrlTask(void const *argument)
 #if BOARD_COMM_DEBUG
         /* S1 up: arm; middle/down: disarm and keep the board link alive. */
         if ((rc_dev.work_state == DEV_ONLINE) &&
-            (rc_dev.info->s1.value == RC_SW_UP))
+            ((rc_dev.info->s1.value == RC_SW_UP) ||
+             (rc_dev.info->s1.value == RC_SW_MID)))
         {
             board.tx_pkt->car_pkt.car_state = 1u;
             board.tx_pkt->car_pkt.gimbal_mode = 1u;
@@ -49,6 +51,7 @@ void StartCtrlTask(void const *argument)
         Chassis_Follow_Update(&chassis_input_cmd);
         Chassis_Spin_Update(&chassis_input_cmd);
         Chassis_Control_Update(&chassis_input_cmd);
+        launch.work(&launch);
 #elif !BOARD_COMM_DEBUG
         infantry.work(&infantry);
 

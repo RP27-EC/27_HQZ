@@ -2,6 +2,7 @@
 
 #include "launch.h"
 #include "board_protocol.h"
+#include "rc_sensor.h"
 /*
 上供弹关系，底盘发射机构模块只需要向上传输
                  状态，
@@ -36,8 +37,39 @@ static void Launch_Init(Launch_t* launch)
 
 static void Launch_Data_Update(Launch_t* launch)
 {
-  
+    uint8_t rc_online;
+    int16_t thumbwheel;
 
+    rc_online = (rc_dev.work_state == DEV_ONLINE) ? 1u : 0u;
+
+    if ((rc_online != 0u) &&
+        (rc_dev.info->s1.value == RC_SW_MID))
+    {
+        launch->state = L_UNLOCK;
+
+        thumbwheel = rc_dev.info->thumbwheel.value;
+        if (thumbwheel <= -200)
+        {
+            launch->mode = SINGLE_SHOT;
+            launch->shoot_level = 1u;
+        }
+        else if (thumbwheel >= 200)
+        {
+            launch->mode = REPEAT_SHOT;
+            launch->shoot_level = 1u;
+        }
+        else
+        {
+            launch->mode = SINGLE_SHOT;
+            launch->shoot_level = 0u;
+        }
+    }
+    else
+    {
+        launch->state = L_LOCK;
+        launch->mode = SINGLE_SHOT;
+        launch->shoot_level = 0u;
+    }
 }
 
 
@@ -62,6 +94,7 @@ static void Launch_Cmd_Transmit(Launch_t* launch)
 
 static void Launch_Work(Launch_t* launch)
 {
+  Launch_Data_Update(launch);
   Launch_Cmd_Transmit(launch);
 }
 

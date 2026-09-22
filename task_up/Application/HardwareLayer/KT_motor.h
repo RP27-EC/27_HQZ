@@ -55,6 +55,8 @@ typedef struct KT_motor_rx_info_t
 	int32_t 	accel;						 //加速度 1dps/s
 	
 	uint16_t 	encoder;					 //编码器位置             （0~16383 * 4）
+	uint32_t 	encoder_sum;			 //编码器累加角度
+	uint16_t 	last_encoder;		 //上一次编码器值
 	uint16_t 	encoderRaw;				 //编码器原始位置         （0~16383 * 4）
 	uint16_t 	encoderOffset;		 //编码器零偏             （0~16383 * 4）
 	

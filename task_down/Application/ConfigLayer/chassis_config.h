@@ -30,7 +30,7 @@
 #define CHASSIS_SPIN_TRANSLATION_YAW_SIGN 1.0f
 #define CHASSIS_SPIN_TRANSLATION_SIGN     1.0f
 #define CHASSIS_SPIN_GIMBAL_TIMEOUT_MS    50u
-#define CHASSIS_SPIN_TORQUE_LIMIT_NM     3.0f
+#define CHASSIS_SPIN_TORQUE_LIMIT_NM     4.0f
 
 /* 底盘跟随云台参数。S1 上拨使能，S2 上拨选择跟随模式。 */
 #define CHASSIS_FOLLOW_TRANSLATION_ENABLE 1u
@@ -66,7 +66,7 @@
 #define CHASSIS_SPEED_KP                0.8f
 #define CHASSIS_SPEED_KI                0.0f
 #define CHASSIS_SPEED_KD                0.0f
-#define CHASSIS_TEST_TORQUE_LIMIT_NM    1.5f
+#define CHASSIS_TEST_TORQUE_LIMIT_NM    2.0f
 #define CHASSIS_FIXED_CURRENT_LIMIT_A   20.0f
 #define CHASSIS_FIXED_TORQUE_LIMIT_NM   5.4f
 

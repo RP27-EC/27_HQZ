@@ -1,6 +1,5 @@
-/* KT_motor.c - KT 电机驱动 */
+/* KT_motor.c - KT 鐢垫満椹卞姩 */
 
-#if 0 /* Legacy KT motor driver disabled: current gimbal board uses DM motors only. */
 #include "KT_motor.h"
 extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
@@ -11,42 +10,43 @@ void kt_motor_class_pid_init(KT_motor_t *motor);
 void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf);  
 void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command);
 void tx_kt_motor_R_command(KT_motor_t *motor, uint8_t command);
+static void KT_Encoder_Sum_Cal(KT_motor_t *motor);
 
 
-// 写 PID 参数
+// 鍐� PID 鍙傛暟
 void write_kt_motor_pid_param(KT_motor_t *motor, uint8_t* buff);
 
-// 写加速度参数
+// 鍐欏姞閫熷害鍙傛暟
 void write_kt_motor_accel_param(KT_motor_t *motor, int32_t accel);
 
-// 写编码器零偏
+// 鍐欑紪鐮佸櫒闆跺亸
 void write_kt_motor_encoderOffset_param(KT_motor_t *motor, uint16_t encoderOffset);
 
-// 写功率控制参数
+// 鍐欏姛鐜囨帶鍒跺弬鏁�
 void write_kt_motor_powerControl_param(KT_motor_t *motor, int16_t powerControl);
 
-// 写电流控制参数
+// 鍐欑數娴佹帶鍒跺弬鏁�
 void write_kt_motor_iqControl_param(KT_motor_t *motor, int16_t iqControl);
 
-// 写速度控制参数
+// 鍐欓€熷害鎺у埗鍙傛暟
 void write_kt_motor_speedControl_param(KT_motor_t *motor, int32_t speedControl);
 
-// 写累计角度控制参数
+// 鍐欑疮璁¤搴︽帶鍒跺弬鏁�
 void write_kt_motor_angle_sum_Control_param(KT_motor_t    *motor, 
 																						int32_t       angle_sum_Control,
 	                                          uint16_t      angle_sum_Control_maxSpeed);
 
-// 写单圈角度控制参数
+// 鍐欏崟鍦堣搴︽帶鍒跺弬鏁�
 void write_kt_motor_angle_single_Control_param(KT_motor_t   *motor, 
 																	 uint16_t     angle_single_Control,
 																	 uint8_t   	  angle_single_Control_spinDirection,
 																	 uint16_t			angle_single_Control_maxSpeed);
 
-// 写角度增量控制参数
+// 鍐欒搴﹀閲忔帶鍒跺弬鏁�
 void write_kt_motor_angle_add_Control_param(KT_motor_t   *motor, 
 																						int32_t      angle_add_Control,
 																			      uint16_t     angle_add_Control_maxSpeed);
-/* 绑定接口并复位状态 */
+/* 缁戝畾鎺ュ彛骞跺浣嶇姸鎬� */
 void KT_motor_class_init(KT_motor_t *motor)
 {
 	
@@ -83,7 +83,7 @@ void KT_motor_class_init(KT_motor_t *motor)
 	
 }
 
-/* 离线检测 */
+/* 绂荤嚎妫€娴� */
 void KT_motor_class_heartbeat(KT_motor_t *motor)
 {	
 	static int16_t current_last;
@@ -99,7 +99,7 @@ void KT_motor_class_heartbeat(KT_motor_t *motor)
 	}
 		
 	state_info->offline_cnt++;
-	// 电流长时间不变判定为堵转, 触发自保护
+	// 鐢垫祦闀挎椂闂翠笉鍙樺垽瀹氫负鍫佃浆, 瑙﹀彂鑷繚鎶�
 	if(motor->KT_motor_info.rx_info.current==current_last)
 	{
 		state_info->selfprotect_cnt++;
@@ -135,7 +135,7 @@ void KT_motor_class_heartbeat(KT_motor_t *motor)
 }
 
 
-/* 初始化 PID */
+/* 鍒濆鍖� PID */
 void kt_motor_class_pid_init(KT_motor_t *motor)
 {
 	if(motor == NULL)	
@@ -163,13 +163,13 @@ void kt_motor_class_pid_init(KT_motor_t *motor)
 }	
 
 
-/* 多电机控制 */
+/* 澶氱數鏈烘帶鍒� */
 
 
-/* 多电机统一控制: 按 ID 顺序发送 4 个电机的电流 */
+/* 澶氱數鏈虹粺涓€鎺у埗: 鎸� ID 椤哄簭鍙戦€� 4 涓數鏈虹殑鐢垫祦 */
 void kt_motor_multi_control(int16_t* iqControl, char kt_motor_num, motor_drive_e drive_type)
 {
-	// 参数检查
+	// 鍙傛暟妫€鏌�
 	for(int i = 0; i < kt_motor_num; i ++)
 	{
 		if( within_or_not(iqControl[i], -KT_TX_IQ_CONTROL_MAX, KT_TX_IQ_CONTROL_MAX) == Flase )
@@ -207,7 +207,7 @@ void kt_motor_multi_control(int16_t* iqControl, char kt_motor_num, motor_drive_e
 }
 
 
-/* 写参数指令帧 */
+/* 鍐欏弬鏁版寚浠ゅ抚 */
 void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 {
 	
@@ -222,7 +222,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 	
 	switch(command)
 	{
-		case PID_TX_RAM_ID:  // 写 PID 参数到 RAM
+		case PID_TX_RAM_ID:  // 鍐� PID 鍙傛暟鍒� RAM
 			motor->tx_buff[0] = PID_TX_RAM_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = pid->tx.angleKp;
@@ -233,7 +233,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = pid->tx.iqKi;
 		break;
 		
-		case PID_TX_ROM_ID:  // 写 PID 参数到 ROM
+		case PID_TX_ROM_ID:  // 鍐� PID 鍙傛暟鍒� ROM
 			motor->tx_buff[0] = PID_TX_RAM_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = pid->tx.angleKp;
@@ -244,7 +244,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = pid->tx.iqKi;
 		break;
 		
-		case ACCEL_TX_ID:  // 写加速度到 RAM
+		case ACCEL_TX_ID:  // 鍐欏姞閫熷害鍒� RAM
 			motor->tx_buff[0] = ACCEL_TX_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -255,7 +255,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->accel >> 24);
 		break;
 		
-		case ZERO_ENCODER_TX_ID:  // 写编码器零位到 ROM
+		case ZERO_ENCODER_TX_ID:  // 鍐欑紪鐮佸櫒闆朵綅鍒� ROM
 			motor->tx_buff[0] = ZERO_ENCODER_TX_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -266,7 +266,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->encoderOffset >> 8);
 		break;
 		
-		case ZERO_POSNOW_TX_ID:  // 写当前位置为零点
+		case ZERO_POSNOW_TX_ID:  // 鍐欏綋鍓嶄綅缃负闆剁偣
 			motor->tx_buff[0] = ZERO_POSNOW_TX_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -277,19 +277,19 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->encoderOffset >> 8);
 		break;
 		
-		case MOTOR_CLOSE_ID:  // 电机失能
+		case MOTOR_CLOSE_ID:  // 鐢垫満澶辫兘
 			motor->tx_buff[0] = MOTOR_CLOSE_ID;
 		break;
 		
-		case MOTOR_STOP_ID:  // 电机停止
+		case MOTOR_STOP_ID:  // 鐢垫満鍋滄
 			motor->tx_buff[0] = MOTOR_STOP_ID;
 		break;
 		
-		case MOTOR_RUN_ID:  // 电机恢复运行
+		case MOTOR_RUN_ID:  // 鐢垫満鎭㈠杩愯
 			motor->tx_buff[0] = MOTOR_RUN_ID;
 		break;
 		
-		case TORQUE_OPEN_LOOP_ID:  // 开环力矩控制
+		case TORQUE_OPEN_LOOP_ID:  // 寮€鐜姏鐭╂帶鍒�
 			motor->tx_buff[0] = TORQUE_OPEN_LOOP_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -300,7 +300,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = 0x00;
 		break;
 		
-		case TORQUE_CLOSE_LOOP_ID:  // 闭环力矩控制
+		case TORQUE_CLOSE_LOOP_ID:  // 闂幆鍔涚煩鎺у埗
 			motor->tx_buff[0] = TORQUE_CLOSE_LOOP_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -311,7 +311,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = 0x00;
 		break;
 		
-		case SPEED_CLOSE_LOOP_ID:  // 速度闭环控制
+		case SPEED_CLOSE_LOOP_ID:  // 閫熷害闂幆鎺у埗
 			motor->tx_buff[0] = SPEED_CLOSE_LOOP_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -322,7 +322,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->speedControl >> 24);
 		break;
 		
-		case POSI_CLOSE_LOOP_ID1:  // 角度累计闭环, 速度不限
+		case POSI_CLOSE_LOOP_ID1:  // 瑙掑害绱闂幆, 閫熷害涓嶉檺
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID1;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -333,7 +333,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->angle_sum_Control >> 24);
 		break;
 		
-		case POSI_CLOSE_LOOP_ID2:  // 角度累计闭环, 速度限制
+		case POSI_CLOSE_LOOP_ID2:  // 瑙掑害绱闂幆, 閫熷害闄愬埗
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID2;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = (uint8_t) tx_info->angle_sum_Control_maxSpeed;
@@ -344,7 +344,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->angle_sum_Control >> 24);
 		break;
 		
-		case POSI_CLOSE_LOOP_ID3:  // 单圈角度控制
+		case POSI_CLOSE_LOOP_ID3:  // 鍗曞湀瑙掑害鎺у埗
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID3;
 			motor->tx_buff[1] = (uint8_t) tx_info->angle_single_Control_spinDirection;
 		  motor->tx_buff[2] = 0x00;
@@ -355,7 +355,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = 0x00;
 		break;
 		
-		case POSI_CLOSE_LOOP_ID4:  // 单圈角度控制, 限速
+		case POSI_CLOSE_LOOP_ID4:  // 鍗曞湀瑙掑害鎺у埗, 闄愰€�
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID4;
 			motor->tx_buff[1] = (uint8_t) tx_info->angle_single_Control_spinDirection;
 		  motor->tx_buff[2] = (uint8_t) tx_info->angle_single_Control_maxSpeed;
@@ -366,7 +366,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = 0x00;
 		break;
 		
-		case POSI_CLOSE_LOOP_ID5:  // 角度增量控制, 速度不限
+		case POSI_CLOSE_LOOP_ID5:  // 瑙掑害澧為噺鎺у埗, 閫熷害涓嶉檺
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID5;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -377,7 +377,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->angle_add_Control >> 24);
 		break;
 				
-		case POSI_CLOSE_LOOP_ID6:  // 角度增量控制, 速度限制
+		case POSI_CLOSE_LOOP_ID6:  // 瑙掑害澧為噺鎺у埗, 閫熷害闄愬埗
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID6;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = (uint8_t) tx_info->angle_add_Control_maxSpeed;
@@ -408,7 +408,7 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 
 
 
-/* 读参数指令帧 */
+/* 璇诲弬鏁版寚浠ゅ抚 */
 void tx_kt_motor_R_command(KT_motor_t *motor, uint8_t command)
 {
 	if( motor == NULL )
@@ -418,35 +418,35 @@ void tx_kt_motor_R_command(KT_motor_t *motor, uint8_t command)
 	
 	switch(command)
 	{
-		case PID_RX_ID:  // 读取 PID 参数
+		case PID_RX_ID:  // 璇诲彇 PID 鍙傛暟
 			motor->tx_buff[0] = PID_RX_ID;
 		break;
 		
-		case ACCEL_RX_ID:  // 读取加速度参数
+		case ACCEL_RX_ID:  // 璇诲彇鍔犻€熷害鍙傛暟
 			motor->tx_buff[0] = ACCEL_RX_ID;
 		break;
 		
-		case ENCODER_RX_ID:  // 读取编码器零位
+		case ENCODER_RX_ID:  // 璇诲彇缂栫爜鍣ㄩ浂浣�
 			motor->tx_buff[0] = ENCODER_RX_ID;
 		break;
 		
-		case MOTOR_ANGLE_ID:  // 读取多圈绝对角度
+		case MOTOR_ANGLE_ID:  // 璇诲彇澶氬湀缁濆瑙掑害
 		 motor->tx_buff[0] = MOTOR_ANGLE_ID;
 		break;
 		
-		case CIRCLE_ANGLE_ID:  // 读取单圈角度
+		case CIRCLE_ANGLE_ID:  // 璇诲彇鍗曞湀瑙掑害
 			motor->tx_buff[0] = CIRCLE_ANGLE_ID;
 		break;
 		
-		case STATE1_ID:  // 读取状态1与错误标志
+		case STATE1_ID:  // 璇诲彇鐘舵€�1涓庨敊璇爣蹇�
 			motor->tx_buff[0] = STATE1_ID;
 		break;
 		
-		case STATE2_ID:  // 读取状态2
+		case STATE2_ID:  // 璇诲彇鐘舵€�2
 			motor->tx_buff[0] = STATE2_ID;
 		break;
 		
-		case STATE3_ID:  // 读取状态3
+		case STATE3_ID:  // 璇诲彇鐘舵€�3
 			motor->tx_buff[0] = STATE3_ID;
 		break;
 		
@@ -468,7 +468,40 @@ void tx_kt_motor_R_command(KT_motor_t *motor, uint8_t command)
 
 
 
-/* 解析电机反馈帧 */
+/* 瑙ｆ瀽鐢垫満鍙嶉甯� */
+static void KT_Encoder_Sum_Cal(KT_motor_t *motor)
+{
+    int32_t err;
+    KT_motor_rx_info_t *rx_info = &motor->KT_motor_info.rx_info;
+
+    if ((rx_info->last_encoder == 0u) && (rx_info->encoder_sum == 0u))
+    {
+        err = 0;
+    }
+    else
+    {
+        err = (int32_t)rx_info->encoder - (int32_t)rx_info->last_encoder;
+    }
+
+    if ((err > 32767) || (err < -32767))
+    {
+        if (err >= 0)
+        {
+            rx_info->encoder_sum += (uint32_t)(-65535 + err);
+        }
+        else
+        {
+            rx_info->encoder_sum += (uint32_t)(65535 + err);
+        }
+    }
+    else
+    {
+        rx_info->encoder_sum += (uint32_t)err;
+    }
+
+    rx_info->last_encoder = rx_info->encoder;
+}
+
 void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 {
 	if( motor == NULL || rxBuf == NULL )
@@ -488,7 +521,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 	
 	switch (ID)
 	{
-		case PID_RX_ID:  // 读取 PID 参数
+		case PID_RX_ID:  // 璇诲彇 PID 鍙傛暟
 			pid_rx_info->angleKp = rxBuf[2];
 			pid_rx_info->angleKi = rxBuf[3];
 			pid_rx_info->speedKp = rxBuf[4];
@@ -497,7 +530,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			pid_rx_info->iqKi	   = rxBuf[7];
 		break;
 		
-		case PID_TX_RAM_ID:  // 写 PID 参数到 RAM
+		case PID_TX_RAM_ID:  // 鍐� PID 鍙傛暟鍒� RAM
 			pid_rx_info->angleKp = rxBuf[2];
 			pid_rx_info->angleKi = rxBuf[3];
 			pid_rx_info->speedKp = rxBuf[4];
@@ -506,7 +539,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			pid_rx_info->iqKi	   = rxBuf[7];
 		break;
 		
-		case PID_TX_ROM_ID:  // 写 PID 参数到 ROM
+		case PID_TX_ROM_ID:  // 鍐� PID 鍙傛暟鍒� ROM
 			pid_rx_info->angleKp = rxBuf[2];
 			pid_rx_info->angleKi = rxBuf[3];
 			pid_rx_info->speedKp = rxBuf[4];
@@ -515,7 +548,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			pid_rx_info->iqKi	   = rxBuf[7];
 		break;
 		
-		case ACCEL_RX_ID:  // 读取加速度参数
+		case ACCEL_RX_ID:  // 璇诲彇鍔犻€熷害鍙傛暟
 			rx_info->accel  = (int32_t)rxBuf[7];
 			rx_info->accel <<= 8;
 			rx_info->accel |= (int32_t)rxBuf[6];
@@ -526,7 +559,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->accel <<= 8;
 		break;
 		
-		case ACCEL_TX_ID:  // 写加速度到 RAM
+		case ACCEL_TX_ID:  // 鍐欏姞閫熷害鍒� RAM
 			rx_info->accel  = (int32_t)rxBuf[7];
 			rx_info->accel <<= 8;
 			rx_info->accel |= (int32_t)rxBuf[6];
@@ -537,7 +570,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->accel <<= 8;
 		break;	
 		
-		case ENCODER_RX_ID:  // 读取编码器零位
+		case ENCODER_RX_ID:  // 璇诲彇缂栫爜鍣ㄩ浂浣�
 			rx_info->encoder = (uint16_t)rxBuf[3];
 			rx_info->encoder <<= 8;
 			rx_info->encoder |= (uint16_t)rxBuf[2];
@@ -549,20 +582,20 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->encoderOffset |= (uint16_t)rxBuf[6];
 		break;
 		
-		case ZERO_ENCODER_TX_ID:  // 写编码器零位到 ROM
+		case ZERO_ENCODER_TX_ID:  // 鍐欑紪鐮佸櫒闆朵綅鍒� ROM
 			rx_info->encoderOffset = (uint16_t)rxBuf[7];
 			rx_info->encoderOffset <<= 8;
 			rx_info->encoderOffset |= (uint16_t)rxBuf[6];
 		break;
 		
-		case ZERO_POSNOW_TX_ID:  // 写当前位置为零点
+		case ZERO_POSNOW_TX_ID:  // 鍐欏綋鍓嶄綅缃负闆剁偣
 			rx_info->encoderOffset = (uint16_t)rxBuf[7];
 			rx_info->encoderOffset <<= 8;
 			rx_info->encoderOffset |= (uint16_t)rxBuf[6];
 		break;
 		
 		
-		case MOTOR_ANGLE_ID:  // 读取多圈绝对角度
+		case MOTOR_ANGLE_ID:  // 璇诲彇澶氬湀缁濆瑙掑害
 			rx_info->motorAngle  = (int64_t)rxBuf[7];
 			rx_info->motorAngle <<= 8;
 			rx_info->motorAngle |= (int64_t)rxBuf[6];
@@ -578,7 +611,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->motorAngle |= (int64_t)rxBuf[1];
 		break;
 		
-		case CIRCLE_ANGLE_ID:  // 读取单圈角度
+		case CIRCLE_ANGLE_ID:  // 璇诲彇鍗曞湀瑙掑害
 			rx_info->circleAngle  = (uint32_t)rxBuf[7];
 			rx_info->circleAngle <<= 8;
 			rx_info->circleAngle |= (uint32_t)rxBuf[6];
@@ -588,7 +621,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->circleAngle |= (uint32_t)rxBuf[4];
 		break;
 		
-		case STATE1_ID:  // 读取状态1与错误标志
+		case STATE1_ID:  // 璇诲彇鐘舵€�1涓庨敊璇爣蹇�
 			rx_info->temperature = (int8_t)rxBuf[1]; 
 			rx_info->voltage = (uint16_t)rxBuf[4];
 			rx_info->voltage <<= 8;
@@ -596,7 +629,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->errorState = rxBuf[7];
 		break;
 		
-		case STATE2_ID:  // 读取状态2
+		case STATE2_ID:  // 璇诲彇鐘舵€�2
 			rx_info->temperature = (int8_t)rxBuf[1];
 			rx_info->current = (int16_t)rxBuf[3];
 			rx_info->current <<= 8;
@@ -609,7 +642,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->encoder |= (uint16_t)rxBuf[6];
 		break;
 		
-		case STATE3_ID:  // 读取状态3
+		case STATE3_ID:  // 璇诲彇鐘舵€�3
 			rx_info->temperature = (int8_t)rxBuf[1];
 			rx_info->current_A = (int16_t)rxBuf[3];
 			rx_info->current_A <<= 8;
@@ -622,7 +655,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->current_C |= (int16_t)rxBuf[6];
 		break;
 		
-		case TORQUE_OPEN_LOOP_ID:  // 开环力矩控制
+		case TORQUE_OPEN_LOOP_ID:  // 寮€鐜姏鐭╂帶鍒�
 			rx_info->temperature = (int8_t)rxBuf[1]; 
 			rx_info->powerControl = (int16_t)rxBuf[3];
 			rx_info->powerControl <<= 8;	
@@ -635,7 +668,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->encoder |= (uint16_t)rxBuf[6];
 		break;
 		
-		case  TORQUE_CLOSE_LOOP_ID:  // 闭环力矩控制
+		case  TORQUE_CLOSE_LOOP_ID:  // 闂幆鍔涚煩鎺у埗
 		case  SPEED_CLOSE_LOOP_ID :
 		case  POSI_CLOSE_LOOP_ID1 :
 		case  POSI_CLOSE_LOOP_ID2 :
@@ -660,10 +693,12 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			break;
 	}
 
+    KT_Encoder_Sum_Cal(motor);
+
 	
 }
 
-/* 写 PID 参数 */
+/* 鍐� PID 鍙傛暟 */
 void write_kt_motor_pid_param(KT_motor_t *motor, uint8_t* buff)
 {
 	if(motor == NULL || buff == NULL)
@@ -680,7 +715,7 @@ void write_kt_motor_pid_param(KT_motor_t *motor, uint8_t* buff)
 }
 
 
-/* 写加速度参数 */
+/* 鍐欏姞閫熷害鍙傛暟 */
 void write_kt_motor_accel_param(KT_motor_t *motor, int32_t accel)
 {
 	if(motor == NULL)
@@ -690,20 +725,20 @@ void write_kt_motor_accel_param(KT_motor_t *motor, int32_t accel)
 }
 
 
-/* 写编码器零偏 */
+/* 鍐欑紪鐮佸櫒闆跺亸 */
 void write_kt_motor_encoderOffset_param(KT_motor_t *motor, uint16_t encoderOffset)
 {
 	if(motor == NULL)
 		return;
 	
-	// 参数越界直接返回
+	// 鍙傛暟瓒婄晫鐩存帴杩斿洖
 	if( encoderOffset > KT_TX_ENCODER_OFFSET_MAX )
 	  return;
 	
 	motor->KT_motor_info.tx_info.encoderOffset = encoderOffset;
 }
 
-/* 写功率控制参数 */
+/* 鍐欏姛鐜囨帶鍒跺弬鏁� */
 void write_kt_motor_powerControl_param(KT_motor_t *motor, int16_t powerControl)
 {
 	if(motor == NULL)
@@ -715,7 +750,7 @@ void write_kt_motor_powerControl_param(KT_motor_t *motor, int16_t powerControl)
 	motor->KT_motor_info.tx_info.powerControl = powerControl;
 }
 
-/* 写电流控制参数 */
+/* 鍐欑數娴佹帶鍒跺弬鏁� */
 void write_kt_motor_iqControl_param(KT_motor_t *motor, int16_t iqControl)
 {
 	if(motor == NULL)
@@ -727,7 +762,7 @@ void write_kt_motor_iqControl_param(KT_motor_t *motor, int16_t iqControl)
 }
 
 
-/* 写速度控制参数 */
+/* 鍐欓€熷害鎺у埗鍙傛暟 */
 void write_kt_motor_speedControl_param(KT_motor_t *motor, int32_t speedControl)
 {
 	if(motor == NULL)
@@ -736,7 +771,7 @@ void write_kt_motor_speedControl_param(KT_motor_t *motor, int32_t speedControl)
 	motor->KT_motor_info.tx_info.speedControl = speedControl;
 }
 
-/* 写累计角度控制参数 */
+/* 鍐欑疮璁¤搴︽帶鍒跺弬鏁� */
 void write_kt_motor_angle_sum_Control_param(KT_motor_t    *motor, 
 																						int32_t       angle_sum_Control,
 	                                          uint16_t      angle_sum_Control_maxSpeed)
@@ -750,7 +785,7 @@ void write_kt_motor_angle_sum_Control_param(KT_motor_t    *motor,
 }
 
 
-/* 写单圈角度控制参数 */
+/* 鍐欏崟鍦堣搴︽帶鍒跺弬鏁� */
 void write_kt_motor_angle_single_Control_param(KT_motor_t   *motor, 
 											 uint16_t     angle_single_Control,
 											 uint8_t   	  angle_single_Control_spinDirection,
@@ -759,7 +794,7 @@ void write_kt_motor_angle_single_Control_param(KT_motor_t   *motor,
 //	if(motor == NULL)
 //		return;
 //	
-//	//�޷��ŵ���within_or_not�ᱨ����
+//	//锟睫凤拷锟脚碉拷锟斤拷within_or_not锟结报锟斤拷锟斤拷
 //	if( angle_single_Control > KT_TX_ANGLE_SIGNLE_MAX )
 //		return;
 //	
@@ -775,7 +810,7 @@ void write_kt_motor_angle_single_Control_param(KT_motor_t   *motor,
 	motor->KT_motor_info.tx_info.angle_single_Control_maxSpeed = angle_single_Control_maxSpeed;
 }
 
-/* 写角度增量控制参数 */
+/* 鍐欒搴﹀閲忔帶鍒跺弬鏁� */
 void write_kt_motor_angle_add_Control_param(KT_motor_t   *motor, 
 																						int32_t      angle_add_Control,
 																			      uint16_t     angle_add_Control_maxSpeed)
@@ -788,10 +823,3 @@ void write_kt_motor_angle_add_Control_param(KT_motor_t   *motor,
 	motor->KT_motor_info.tx_info.angle_add_Control_maxSpeed = angle_add_Control_maxSpeed;
 	
 }
-
-
-
-#endif
-
-
-

@@ -12,6 +12,18 @@ void CAN1_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
         dm_motor[PITCH].rx(&dm_motor[PITCH], rxBuf);
         break;
 
+    case ID_FRIC_L:
+        rm_motor[SHOOT_FRIC_L].rx(&rm_motor[SHOOT_FRIC_L], rxBuf);
+        break;
+
+    case ID_FRIC_R:
+        rm_motor[SHOOT_FRIC_R].rx(&rm_motor[SHOOT_FRIC_R], rxBuf);
+        break;
+
+    case ID_DIAL:
+        dail_motor.get_info(&dail_motor, rxBuf);
+        break;
+
     default:
         break;
     }

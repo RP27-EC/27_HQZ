@@ -22,6 +22,7 @@ void DEVICE_Init(void)
     rc_dev.init(&rc_dev);
     board.init(&board);
 #if CHASSIS_BRINGUP_ENABLE
+    launch.init(&launch);
     rm_motor_list_init();
     Chassis_Follow_Init();
     Chassis_Spin_Init();

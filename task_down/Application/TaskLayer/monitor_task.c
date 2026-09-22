@@ -11,6 +11,7 @@
 #include "iwdg.h"
 #include "board_comm_config.h"
 #include "chassis_config.h"
+#include "launch.h"
 
 void StartMonitorTask(void const *argument)
 {
@@ -22,6 +23,7 @@ void StartMonitorTask(void const *argument)
         rm_motor_list_heart_beat();
 #endif
         rc_dev.heart_beat(&rc_dev);
+        launch.heart_beat(&launch);
 #if !BOARD_COMM_DEBUG
         imu_dev.heart_beat(&imu_dev.work_state);
 #endif

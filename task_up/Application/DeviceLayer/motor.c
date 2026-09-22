@@ -139,115 +139,115 @@ dm_group_t DM_Group =
 /*DM_end*/
 
 /*RM START*/
-#if 0 /* Legacy RM motor: not used by the current gimbal board. */
+rm_cfg_t L_Fric_Born =
+{
+    .rxId = 0,
+    .stdId = 0x200,
+    .type = _3508_Single,
+    .hcan = &hcan1,
+};
+
 rm_cfg_t R_Fric_Born =
 {
-	.rxId = 0,
-	
-	.hcan = &hcan1,
-	
-	.type = _6020_Single,
-	
-	.stdId = 0x1FE,
+    .rxId = 1,
+    .stdId = 0x200,
+    .type = _3508_Single,
+    .hcan = &hcan1,
 };
 
+rm_tx_t L_Fric_Tx;
 rm_tx_t R_Fric_Tx;
-
+rm_rx_t L_Fric_Rx;
+rm_rx_t R_Fric_Rx;
+rm_state_t L_Fric_State;
 rm_state_t R_Fric_State;
 
-rm_rx_t R_Fric_Rx;
-
-pid_ctrl_t R_Fric_Speed_Ctrl = 
+pid_ctrl_t L_Fric_Speed_Ctrl =
 {
-	.kp = 10.f,//
-	.ki = 0.2f,
-	.kd = 0.f,
-	.integral_max = 6000.f,
-	.out_max = 8000.f,//
+    .kp = 0.0f,
+    .ki = 0.0f,
+    .kd = 0.0f,
+    .integral_max = 0.0f,
+    .out_max = 0.0f,
 };
 
-rm_ctrl_t R_Fric_Ctrl = 
+pid_ctrl_t R_Fric_Speed_Ctrl =
 {
-	.speed_ctrl = &R_Fric_Speed_Ctrl,
+    .kp = 0.0f,
+    .ki = 0.0f,
+    .kd = 0.0f,
+    .integral_max = 0.0f,
+    .out_max = 0.0f,
 };
 
-rm_motor_t R_Fric = 
+rm_ctrl_t L_Fric_Ctrl =
 {
-	.born_info = &R_Fric_Born,
-	
-	.rx_info = &R_Fric_Rx,
-	
-	.tx_info = &R_Fric_Tx,
+    .speed_ctrl = &L_Fric_Speed_Ctrl,
+};
 
-  .state = &R_Fric_State,
-	
-	.single_init = RM_Motor_Init,
-	
-	.ctrl = &R_Fric_Ctrl,
+rm_ctrl_t R_Fric_Ctrl =
+{
+    .speed_ctrl = &R_Fric_Speed_Ctrl,
+};
+
+rm_motor_t rm_motor[SHOOT_FRIC_NUM] =
+{
+    [SHOOT_FRIC_L] =
+    {
+        .born_info = &L_Fric_Born,
+        .rx_info = &L_Fric_Rx,
+        .tx_info = &L_Fric_Tx,
+        .state = &L_Fric_State,
+        .ctrl = &L_Fric_Ctrl,
+        .single_init = rm_motor_init,
+    },
+    [SHOOT_FRIC_R] =
+    {
+        .born_info = &R_Fric_Born,
+        .rx_info = &R_Fric_Rx,
+        .tx_info = &R_Fric_Tx,
+        .state = &R_Fric_State,
+        .ctrl = &R_Fric_Ctrl,
+        .single_init = rm_motor_init,
+    },
 };
 
 rm_group_t RM_Group =
 {
-	.motor[0] = &R_Fric,
-	
-	.motor[1] = NULL,
-	
-	.motor[2] = NULL,
-	
-	.motor[3] = NULL,
-	
-	.stdId=0x1FE,
-	
-	.hcan=&hcan1,
-	
-	.group_init = rm_group_init,
+    .motor[SHOOT_FRIC_L] = &rm_motor[SHOOT_FRIC_L],
+    .motor[SHOOT_FRIC_R] = &rm_motor[SHOOT_FRIC_R],
+    .stdId = 0x200,
+    .hcan = &hcan1,
+    .group_init = rm_group_init,
 };
-
 /*RM END*/
-#endif
-#if 0 /* Legacy KT motor: not used by the current gimbal board. */
-KT_motor_t kt_motor[] = {
-	[0] = {
-		.KT_motor_info = {
-			.tx_info = {
-				.angle_single_Control = 0,
-				.angle_single_Control_maxSpeed = 0,
-				.angle_single_Control_spinDirection = 0,
-				.angle_add_Control = 0,
-				.angle_add_Control_maxSpeed = 0,
-				.angle_sum_Control = 0,
-				.angle_sum_Control_maxSpeed = 0,
-				.iqControl = 0,
-				.speedControl = 0,
-			},
-			.id = {
-				.tx_id = ID_GIMB_Y,
-				.rx_id = 0x88,
-				.drive_type = M_CAN1,
-				.motor_type = KT9015,
-			},
-		},
-		.init = KT_motor_class_init,
-	},
-};
-#endif
-#if 0 /* Legacy RM motor initialization disabled. */
-void rm_motor_list_init()
-{
-	
-	R_Fric.single_init(&R_Fric);
-	RM_Group.group_init(&RM_Group);
-}
-#endif
 
-#if 0 /* Legacy KT motor initialization disabled. */
-void kt_motor_list_init()
+/*KT START*/
+KT_motor_t dail_motor =
 {
-	kt_motor[0].init(&kt_motor[0]);
-	
-	
+    .KT_motor_info =
+    {
+        .id =
+        {
+            .tx_id = ID_DIAL,
+            .rx_id = ID_DIAL,
+            .drive_type = M_CAN1,
+            .motor_type = KT4005,
+        },
+    },
+    .init = KT_motor_class_init,
+};
+/*KT END*/
+
+void rm_motor_list_init(void)
+{
+    RM_Group.group_init(&RM_Group);
 }
-#endif
+
+void kt_motor_list_init(void)
+{
+    KT_motor_class_init(&dail_motor);
+}
 void dm_motor_list_init()
 {
     DM_Group.group_init(&DM_Group);
@@ -266,12 +266,33 @@ void ht_motor_list_init()
 }
 #endif
 
-#if 0 /* Legacy RM motor heartbeat disabled. */
-void rm_motor_list_heart_beat()
+void rm_motor_list_heart_beat(void)
 {
-	RM_Group.group_heartbeat(&RM_Group);
+    RM_Group.group_heartbeat(&RM_Group);
 }
-#endif
+
+void kt_motor_list_heart_beat(void)
+{
+    if (dail_motor.heartbeat != NULL)
+    {
+        dail_motor.heartbeat(&dail_motor);
+    }
+}
+
+void rm_motor_list_sleep(void)
+{
+    RM_Group.group_sleep(&RM_Group);
+    RM_Group.group_set_torque(&RM_Group);
+}
+
+void kt_motor_list_sleep(void)
+{
+    if ((dail_motor.W_iqControl != NULL) && (dail_motor.tx_W_cmd != NULL))
+    {
+        dail_motor.W_iqControl(&dail_motor, 0);
+        dail_motor.tx_W_cmd(&dail_motor, TORQUE_CLOSE_LOOP_ID);
+    }
+}
 
 
 

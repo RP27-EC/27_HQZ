@@ -539,6 +539,11 @@
               <FilePath>..\Application\ModuleLayer\gimbal.c</FilePath>
             </File>
             <File>
+              <FileName>launcher.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ModuleLayer\launcher.c</FilePath>
+            </File>
+            <File>
               <FileName>module.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\ModuleLayer\module.c</FilePath>

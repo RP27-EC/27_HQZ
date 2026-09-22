@@ -1,6 +1,5 @@
 /* RM_motor.c - RM 电机驱动 */
 
-#if 0 /* Legacy RM motor driver disabled: current gimbal board uses DM motors only. */
 /**
   ******************************************************************************
   * @file    RM_motor.c
@@ -19,8 +18,6 @@
 static uint16_t CAN_01_GetMotorAngle(uint8_t *rxData);
 static int16_t CAN_23_GetMotorSpeed(uint8_t *rxData);
 static int16_t CAN_45_GetMotorCurrent(uint8_t *rxData);
-static int16_t CAN_23_GetMotorTorque(uint8_t *rxData);
-static int16_t CAN_45_GetMotorTorque(uint8_t *rxData);
 static uint8_t CAN_6_GetMotorTemperature(uint8_t *rxData);
 static void Torque_to_Raw_Current(rm_motor_t *motor);
 static void Angle_Sum_Cal(rm_motor_t *motor);
@@ -274,21 +271,6 @@ static int16_t CAN_45_GetMotorCurrent(uint8_t *rxData)
 	return current;
 }
 
-/* 解析力矩反馈帧 */
-static int16_t CAN_23_GetMotorTorque(uint8_t *rxData)
-{
-	int16_t torque;
-	torque = ((uint16_t)rxData[2] << 8 | rxData[3]);
-	return torque;
-}
-
-/* 解析力矩反馈帧 */
-static int16_t CAN_45_GetMotorTorque(uint8_t *rxData)
-{
-	int16_t torque;
-	torque = ((uint16_t)rxData[4] << 8 | rxData[5]);
-	return torque;
-}
 
 /* 解析温度反馈帧 */
 static uint8_t CAN_6_GetMotorTemperature(uint8_t *rxData)
@@ -453,7 +435,3 @@ static void Raw_Current_to_Torque(rm_motor_t* motor)
 		motor->rx_info->torque_current = (motor->rx_info->torque_current_raw / 16384.f)*20.f;
 		motor->rx_info->torque = motor->rx_info->torque_current * _3508_TORQUE_CONSTANT;
 }
-
-#endif
-
-

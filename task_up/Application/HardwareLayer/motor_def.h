@@ -77,6 +77,7 @@ typedef enum motor_type_e
 	RM2006,
 	KT9015 = 4,
 	KT9025,
+	KT4005 = 6,
 }motor_type_e;
 
 typedef enum motor_dir_e 
