@@ -6,8 +6,17 @@
 /* 第一阶段底盘调试开关。 */
 #define CHASSIS_BRINGUP_ENABLE          1u
 #define CHASSIS_RC_INPUT_ENABLE         1u
-#define CHASSIS_KEYBOARD_INPUT_ENABLE   0u
+#define CHASSIS_KEYBOARD_INPUT_ENABLE   1u
 #define CHASSIS_OWNS_RC_YAW             1u
+
+/* 键鼠模式：S1 上拨使能，S2 中位选择。 */
+#define CHASSIS_KEY_SPEED_BOOST         1.5f
+#define CHASSIS_KEY_SPEED_SLOW          0.5f
+#define CHASSIS_KEY_YAW_ENABLE          1u
+/* 实车方向若相反，只改这三个符号。 */
+#define CHASSIS_KEY_VX_SIGN             1.0f
+#define CHASSIS_KEY_VY_SIGN             1.0f
+#define CHASSIS_KEY_WZ_SIGN             1.0f
 
 /* 后续阶段保留，第一阶段默认关闭。 */
 #define CHASSIS_PLANNER_ENABLE          0u

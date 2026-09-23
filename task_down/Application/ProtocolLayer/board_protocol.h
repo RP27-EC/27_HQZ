@@ -14,6 +14,10 @@
 #define BOARD_D5_PITCH_RATE_MAX_DEG_S   150.0f
 #define BOARD_D5_RATE_LSB_DEG_S         0.1f
 
+/* 键鼠：鼠标计数转云台角速度的增益。 */
+#define BOARD_D5_MOUSE_YAW_GAIN         3.0f
+#define BOARD_D5_MOUSE_PITCH_GAIN       3.0f
+
 #define  ID_PKT_01     0xD1
 #define  ID_PKT_02     0xD2
 #define  ID_PKT_03     0xD3
