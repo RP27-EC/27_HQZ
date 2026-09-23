@@ -512,13 +512,13 @@ void Launcher_Work(void)
             launcher.state = LAUNCHER_READY;
             launcher.state_tick = now;
             launcher.jam_tick = now;
+            launcher_jam_count = 0u;
         }
-        else if (((jam_now != 0u) &&
-                  ((now - launcher.jam_tick) >= LAUNCHER_DIAL_JAM_TIME_MS)) ||
-                 ((now - launcher.state_tick) >= LAUNCHER_DIAL_SINGLE_TIMEOUT_MS))
+        else if ((jam_now != 0u) &&
+                 ((now - launcher.jam_tick) >= LAUNCHER_DIAL_JAM_TIME_MS))
         {
             launcher_jam_count++;
-            if (launcher_jam_count >= 3u)
+            if (launcher_jam_count >= LAUNCHER_DIAL_JAM_MAX_RETRY)
             {
                 launcher.state = LAUNCHER_FAULT;
                 launcher.fault = 1u;
@@ -531,6 +531,15 @@ void Launcher_Work(void)
             Launcher_DialClearPid();
             launcher.state_tick = now;
             launcher.jam_tick = now;
+        }
+        else if ((now - launcher.state_tick) >= LAUNCHER_DIAL_SINGLE_TIMEOUT_MS)
+        {
+            Launcher_DialClearPid();
+            launcher.dial_target_angle = current_angle;
+            launcher.state = LAUNCHER_READY;
+            launcher.state_tick = now;
+            launcher.jam_tick = now;
+            break;
         }
         else
         {
