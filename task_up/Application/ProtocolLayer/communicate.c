@@ -26,6 +26,7 @@ Board_HeartBeat_t Board_HeartBeat =
 static uint8_t board_tx_buf1[8];
 static uint8_t board_tx_buf2[8];
 
+/* 浮点按量程归一化到 16 位, 双板约定 */
 static uint16_t board_float_to_uint(float value, float min_value, float max_value)
 {
     float span = max_value - min_value;
@@ -44,12 +45,14 @@ static uint16_t board_float_to_uint(float value, float min_value, float max_valu
     return (uint16_t)(normalized * 65535.0f);
 }
 
+/* 16 位还原为浮点, 与 board_float_to_uint 配对 */
 static float board_uint_to_float(uint16_t value, float min_value, float max_value)
 {
     float span = max_value - min_value;
     return ((float)value * span / 65535.0f) + min_value;
 }
 
+/* D1: 整车状态与发射指令, 位域打包 */
 static void Board_Rx_Pkt_01(uint8_t *rxbuf)
 {
     Board_Rx_Info.state_pkt.car_state = rxbuf[0] & 0x03;
@@ -64,6 +67,7 @@ static void Board_Rx_Pkt_01(uint8_t *rxbuf)
     Board_Rx_Info.shoot_pkt.is_hole = (rxbuf[5] >> 3) & 0x01;
 }
 
+/* D2: 云台角度目标 */
 static void Board_Rx_Pkt_02(uint8_t *rxbuf)
 {
     uint16_t pitch_imu_raw = ((uint16_t)rxbuf[0] << 8) | rxbuf[1];
@@ -81,6 +85,7 @@ static void Board_Rx_Pkt_02(uint8_t *rxbuf)
         board_uint_to_float(yaw_mec_raw, -4.0f, 4.0f);
 }
 
+/* D5: 遥控角速度指令 */
 static void Board_Rx_Pkt_05(uint8_t *rxbuf)
 {
     int16_t yaw_raw = (int16_t)(((uint16_t)rxbuf[2] << 8) | rxbuf[3]);
@@ -93,6 +98,7 @@ static void Board_Rx_Pkt_05(uint8_t *rxbuf)
     Board_Rx_Info.remote_cmd_pkt.pitch_rate_deg_s = (float)pitch_raw * 0.1f;
 }
 
+/* 汇总本板状态供 C1/C2 发送 */
 static void Board_Tx_Update(void)
 {
     Board_Tx_Info.gimbal_meg.yaw_mec = Gimbal.base_info.yaw_mec_angle * GIMBAL_DEG_TO_RAD;
@@ -115,6 +121,7 @@ static void Board_Tx_Update(void)
     Board_Tx_Info.state_meg.lift_state = 0;
 }
 
+/* C1: 各电机在线位 + 升降状态 */
 static void Board_Tx_Meg_01(uint8_t *txbuf)
 {
     uint16_t zero = board_float_to_uint(0.0f, -360.0f, 360.0f);
@@ -137,6 +144,7 @@ static void Board_Tx_Meg_01(uint8_t *txbuf)
     CAN_SendData(&hcan2, ID_BOARD_TX1, txbuf);
 }
 
+/* C2: 云台角度反馈 */
 static void Board_Tx_Meg_02(uint8_t *txbuf)
 {
     uint16_t yaw_mec = board_float_to_uint(Board_Tx_Info.gimbal_meg.yaw_mec, -4.0f, 4.0f);
@@ -156,36 +164,42 @@ static void Board_Tx_Meg_02(uint8_t *txbuf)
     CAN_SendData(&hcan2, ID_BOARD_TX2, txbuf);
 }
 
+/* D1 到达: 刷新离线计数 */
 void Board_Rx_01(uint8_t *rxbuf)
 {
     Board_Rx_Pkt_01(rxbuf);
     Board_HeartBeat.offline_cnt_1 = 0;
 }
 
+/* D2 到达: 刷新离线计数 */
 void Board_Rx_02(uint8_t *rxbuf)
 {
     Board_Rx_Pkt_02(rxbuf);
     Board_HeartBeat.offline_cnt_2 = 0;
 }
 
+/* D3 预留 */
 void Board_Rx_03(uint8_t *rxbuf)
 {
     (void)rxbuf;
     Board_HeartBeat.offline_cnt_3 = 0;
 }
 
+/* D4 预留 */
 void Board_Rx_04(uint8_t *rxbuf)
 {
     (void)rxbuf;
     Board_HeartBeat.offline_cnt_4 = 0;
 }
 
+/* D5 到达: 刷新离线计数 */
 void Board_Rx_05(uint8_t *rxbuf)
 {
     Board_Rx_Pkt_05(rxbuf);
     Board_HeartBeat.offline_cnt_5 = 0;
 }
 
+/* 1ms 发送 C1/C2 */
 void Send_To_Down_Board(void)
 {
     Board_Tx_Update();
@@ -193,6 +207,7 @@ void Send_To_Down_Board(void)
     Board_Tx_Meg_02(board_tx_buf2);
 }
 
+/* 离线看门狗: D1/D2 任一超时即判下板离线 */
 void C_Board_Communicate_HeartBeat(void)
 {
     if (Board_HeartBeat.offline_cnt_1 < Board_HeartBeat.offline_cnt_max)
