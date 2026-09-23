@@ -120,7 +120,6 @@
         <SetRegEntry>
           <Number>0</Number>
           <Key>DLGUARM</Key>
-          <Name></Name>
         </SetRegEntry>
         <SetRegEntry>
           <Number>0</Number>
@@ -658,7 +657,7 @@
       <GroupNumber>4</GroupNumber>
       <FileNumber>18</FileNumber>
       <FileType>1</FileType>
-      <tvExp>1</tvExp>
+      <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
       <PathWithFileName>..\Application\ModuleLayer\gimbal.c</PathWithFileName>
@@ -702,7 +701,7 @@
 
   <Group>
     <GroupName>Device</GroupName>
-    <tvExp>0</tvExp>
+    <tvExp>1</tvExp>
     <tvExpOptDlg>0</tvExpOptDlg>
     <cbSel>0</cbSel>
     <RteFlg>0</RteFlg>
@@ -1829,8 +1828,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\FastMathFunctions\FastMathFunctions.c</PathWithFileName>
-      <FilenameWithoutPath>FastMathFunctions.c</FilenameWithoutPath>
+      <PathWithFileName>..\Application\AlgorithmLayer\arm_sin_table.c</PathWithFileName>
+      <FilenameWithoutPath>arm_sin_table.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1841,8 +1840,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\BasicMathFunctions\BasicMathFunctions.c</PathWithFileName>
-      <FilenameWithoutPath>BasicMathFunctions.c</FilenameWithoutPath>
+      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\FastMathFunctions\arm_sin_f32.c</PathWithFileName>
+      <FilenameWithoutPath>arm_sin_f32.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1853,8 +1852,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\BasicMathFunctions\BasicMathFunctionsF16.c</PathWithFileName>
-      <FilenameWithoutPath>BasicMathFunctionsF16.c</FilenameWithoutPath>
+      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\FastMathFunctions\arm_cos_f32.c</PathWithFileName>
+      <FilenameWithoutPath>arm_cos_f32.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1865,8 +1864,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\BayesFunctions\BayesFunctions.c</PathWithFileName>
-      <FilenameWithoutPath>BayesFunctions.c</FilenameWithoutPath>
+      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\FastMathFunctions\arm_atan2_f32.c</PathWithFileName>
+      <FilenameWithoutPath>arm_atan2_f32.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1877,8 +1876,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\BayesFunctions\BayesFunctionsF16.c</PathWithFileName>
-      <FilenameWithoutPath>BayesFunctionsF16.c</FilenameWithoutPath>
+      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_init_f32.c</PathWithFileName>
+      <FilenameWithoutPath>arm_mat_init_f32.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1889,8 +1888,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\CommonTables\CommonTablesF16.c</PathWithFileName>
-      <FilenameWithoutPath>CommonTablesF16.c</FilenameWithoutPath>
+      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_add_f32.c</PathWithFileName>
+      <FilenameWithoutPath>arm_mat_add_f32.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1901,8 +1900,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\CommonTables\CommonTables.c</PathWithFileName>
-      <FilenameWithoutPath>CommonTables.c</FilenameWithoutPath>
+      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_sub_f32.c</PathWithFileName>
+      <FilenameWithoutPath>arm_mat_sub_f32.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1913,8 +1912,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\ComplexMathFunctions\ComplexMathFunctions.c</PathWithFileName>
-      <FilenameWithoutPath>ComplexMathFunctions.c</FilenameWithoutPath>
+      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_mult_f32.c</PathWithFileName>
+      <FilenameWithoutPath>arm_mat_mult_f32.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1925,8 +1924,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\ComplexMathFunctions\ComplexMathFunctionsF16.c</PathWithFileName>
-      <FilenameWithoutPath>ComplexMathFunctionsF16.c</FilenameWithoutPath>
+      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_trans_f32.c</PathWithFileName>
+      <FilenameWithoutPath>arm_mat_trans_f32.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1937,8 +1936,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\ControllerFunctions\ControllerFunctions.c</PathWithFileName>
-      <FilenameWithoutPath>ControllerFunctions.c</FilenameWithoutPath>
+      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_inverse_f32.c</PathWithFileName>
+      <FilenameWithoutPath>arm_mat_inverse_f32.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>
@@ -1949,140 +1948,8 @@
       <tvExp>0</tvExp>
       <tvExpOptDlg>0</tvExpOptDlg>
       <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\FastMathFunctions\FastMathFunctionsF16.c</PathWithFileName>
-      <FilenameWithoutPath>FastMathFunctionsF16.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>21</GroupNumber>
-      <FileNumber>115</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\InterpolationFunctions\InterpolationFunctions.c</PathWithFileName>
-      <FilenameWithoutPath>InterpolationFunctions.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>21</GroupNumber>
-      <FileNumber>116</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\InterpolationFunctions\InterpolationFunctionsF16.c</PathWithFileName>
-      <FilenameWithoutPath>InterpolationFunctionsF16.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>21</GroupNumber>
-      <FileNumber>117</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\MatrixFunctions.c</PathWithFileName>
-      <FilenameWithoutPath>MatrixFunctions.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>21</GroupNumber>
-      <FileNumber>118</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\MatrixFunctionsF16.c</PathWithFileName>
-      <FilenameWithoutPath>MatrixFunctionsF16.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>21</GroupNumber>
-      <FileNumber>119</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\QuaternionMathFunctions\QuaternionMathFunctions.c</PathWithFileName>
-      <FilenameWithoutPath>QuaternionMathFunctions.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>21</GroupNumber>
-      <FileNumber>120</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\StatisticsFunctions\StatisticsFunctions.c</PathWithFileName>
-      <FilenameWithoutPath>StatisticsFunctions.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>21</GroupNumber>
-      <FileNumber>121</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\StatisticsFunctions\StatisticsFunctionsF16.c</PathWithFileName>
-      <FilenameWithoutPath>StatisticsFunctionsF16.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>21</GroupNumber>
-      <FileNumber>122</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\SVMFunctions\SVMFunctions.c</PathWithFileName>
-      <FilenameWithoutPath>SVMFunctions.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>21</GroupNumber>
-      <FileNumber>123</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\SVMFunctions\SVMFunctionsF16.c</PathWithFileName>
-      <FilenameWithoutPath>SVMFunctionsF16.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>21</GroupNumber>
-      <FileNumber>124</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\TransformFunctions\TransformFunctions.c</PathWithFileName>
-      <FilenameWithoutPath>TransformFunctions.c</FilenameWithoutPath>
-      <RteFlg>0</RteFlg>
-      <bShared>0</bShared>
-    </File>
-    <File>
-      <GroupNumber>21</GroupNumber>
-      <FileNumber>125</FileNumber>
-      <FileType>1</FileType>
-      <tvExp>0</tvExp>
-      <tvExpOptDlg>0</tvExpOptDlg>
-      <bDave2>0</bDave2>
-      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\TransformFunctions\TransformFunctionsF16.c</PathWithFileName>
-      <FilenameWithoutPath>TransformFunctionsF16.c</FilenameWithoutPath>
+      <PathWithFileName>..\Drivers\CMSIS\DSP\Source\QuaternionMathFunctions\arm_quaternion_normalize_f32.c</PathWithFileName>
+      <FilenameWithoutPath>arm_quaternion_normalize_f32.c</FilenameWithoutPath>
       <RteFlg>0</RteFlg>
       <bShared>0</bShared>
     </File>

@@ -2037,114 +2037,59 @@
           </GroupOption>
           <Files>
             <File>
-              <FileName>FastMathFunctions.c</FileName>
+              <FileName>arm_sin_table.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\FastMathFunctions\FastMathFunctions.c</FilePath>
+              <FilePath>..\Application\AlgorithmLayer\arm_sin_table.c</FilePath>
             </File>
             <File>
-              <FileName>BasicMathFunctions.c</FileName>
+              <FileName>arm_sin_f32.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\BasicMathFunctions\BasicMathFunctions.c</FilePath>
+              <FilePath>..\Drivers\CMSIS\DSP\Source\FastMathFunctions\arm_sin_f32.c</FilePath>
             </File>
             <File>
-              <FileName>BasicMathFunctionsF16.c</FileName>
+              <FileName>arm_cos_f32.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\BasicMathFunctions\BasicMathFunctionsF16.c</FilePath>
+              <FilePath>..\Drivers\CMSIS\DSP\Source\FastMathFunctions\arm_cos_f32.c</FilePath>
             </File>
             <File>
-              <FileName>BayesFunctions.c</FileName>
+              <FileName>arm_atan2_f32.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\BayesFunctions\BayesFunctions.c</FilePath>
+              <FilePath>..\Drivers\CMSIS\DSP\Source\FastMathFunctions\arm_atan2_f32.c</FilePath>
             </File>
             <File>
-              <FileName>BayesFunctionsF16.c</FileName>
+              <FileName>arm_mat_init_f32.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\BayesFunctions\BayesFunctionsF16.c</FilePath>
+              <FilePath>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_init_f32.c</FilePath>
             </File>
             <File>
-              <FileName>CommonTablesF16.c</FileName>
+              <FileName>arm_mat_add_f32.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\CommonTables\CommonTablesF16.c</FilePath>
+              <FilePath>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_add_f32.c</FilePath>
             </File>
             <File>
-              <FileName>CommonTables.c</FileName>
+              <FileName>arm_mat_sub_f32.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\CommonTables\CommonTables.c</FilePath>
+              <FilePath>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_sub_f32.c</FilePath>
             </File>
             <File>
-              <FileName>ComplexMathFunctions.c</FileName>
+              <FileName>arm_mat_mult_f32.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\ComplexMathFunctions\ComplexMathFunctions.c</FilePath>
+              <FilePath>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_mult_f32.c</FilePath>
             </File>
             <File>
-              <FileName>ComplexMathFunctionsF16.c</FileName>
+              <FileName>arm_mat_trans_f32.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\ComplexMathFunctions\ComplexMathFunctionsF16.c</FilePath>
+              <FilePath>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_trans_f32.c</FilePath>
             </File>
             <File>
-              <FileName>ControllerFunctions.c</FileName>
+              <FileName>arm_mat_inverse_f32.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\ControllerFunctions\ControllerFunctions.c</FilePath>
+              <FilePath>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\arm_mat_inverse_f32.c</FilePath>
             </File>
             <File>
-              <FileName>FastMathFunctionsF16.c</FileName>
+              <FileName>arm_quaternion_normalize_f32.c</FileName>
               <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\FastMathFunctions\FastMathFunctionsF16.c</FilePath>
-            </File>
-            <File>
-              <FileName>InterpolationFunctions.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\InterpolationFunctions\InterpolationFunctions.c</FilePath>
-            </File>
-            <File>
-              <FileName>InterpolationFunctionsF16.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\InterpolationFunctions\InterpolationFunctionsF16.c</FilePath>
-            </File>
-            <File>
-              <FileName>MatrixFunctions.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\MatrixFunctions.c</FilePath>
-            </File>
-            <File>
-              <FileName>MatrixFunctionsF16.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\MatrixFunctions\MatrixFunctionsF16.c</FilePath>
-            </File>
-            <File>
-              <FileName>QuaternionMathFunctions.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\QuaternionMathFunctions\QuaternionMathFunctions.c</FilePath>
-            </File>
-            <File>
-              <FileName>StatisticsFunctions.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\StatisticsFunctions\StatisticsFunctions.c</FilePath>
-            </File>
-            <File>
-              <FileName>StatisticsFunctionsF16.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\StatisticsFunctions\StatisticsFunctionsF16.c</FilePath>
-            </File>
-            <File>
-              <FileName>SVMFunctions.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\SVMFunctions\SVMFunctions.c</FilePath>
-            </File>
-            <File>
-              <FileName>SVMFunctionsF16.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\SVMFunctions\SVMFunctionsF16.c</FilePath>
-            </File>
-            <File>
-              <FileName>TransformFunctions.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\TransformFunctions\TransformFunctions.c</FilePath>
-            </File>
-            <File>
-              <FileName>TransformFunctionsF16.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Drivers\CMSIS\DSP\Source\TransformFunctions\TransformFunctionsF16.c</FilePath>
+              <FilePath>..\Drivers\CMSIS\DSP\Source\QuaternionMathFunctions\arm_quaternion_normalize_f32.c</FilePath>
             </File>
           </Files>
         </Group>

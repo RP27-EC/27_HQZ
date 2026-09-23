@@ -23,7 +23,7 @@
 /* LK4005 dial control, feedback unit is 0.01 degree. */
 #define LAUNCHER_DIAL_AUTO_RESET_ENABLE  0u
 #define LAUNCHER_DIAL_READY_HOLD_ENABLE  0u
-#define LAUNCHER_DIAL_ANGLE_KP            0.18f
+#define LAUNCHER_DIAL_ANGLE_KP            0.3f
 #define LAUNCHER_DIAL_ANGLE_SIGN          1.0f
 #define LAUNCHER_DIAL_SPEED_SIGN          1.0f
 #define LAUNCHER_DIAL_OUTPUT_SIGN         1.0f
@@ -31,11 +31,11 @@
 #define LAUNCHER_DIAL_ANGLE_KI            0.0f
 #define LAUNCHER_DIAL_ANGLE_KD            0.0f
 #define LAUNCHER_DIAL_ANGLE_INTEGRAL_MAX  0.0f
-#define LAUNCHER_DIAL_SPEED_KP             0.16f
+#define LAUNCHER_DIAL_SPEED_KP             0.3f
 #define LAUNCHER_DIAL_SPEED_KI             0.0f
 #define LAUNCHER_DIAL_SPEED_KD             0.0f
 #define LAUNCHER_DIAL_SPEED_INTEGRAL_MAX   0.0f
-#define LAUNCHER_DIAL_CURRENT_LIMIT        1000.0f
+#define LAUNCHER_DIAL_CURRENT_LIMIT        2000.0f
 #define LAUNCHER_DIAL_RESET_ANGLE          31259.0f
 #define LAUNCHER_DIAL_RESET_TIMEOUT_MS     1000u
 #define LAUNCHER_DIAL_ONE_SHOT_ANGLE      65536.0f
