@@ -18,6 +18,9 @@ static uint8_t launcher_dial_last_online;
 static pid_ctrl_t launcher_dial_angle_pid;
 static pid_ctrl_t launcher_dial_speed_pid;
 
+// 连发独立速度环
+pid_ctrl_t launcher_dial_repeat_pid;
+
 static float Launcher_Ramp(float current, float target, float step)
 {
     float diff = target - current;
@@ -73,6 +76,10 @@ static void Launcher_DialClearPid(void)
     launcher_dial_speed_pid.integral = 0.0f;
     launcher_dial_speed_pid.last_err = 0.0f;
     launcher_dial_speed_pid.out = 0.0f;
+
+    launcher_dial_repeat_pid.integral = 0.0f;
+    launcher_dial_repeat_pid.last_err = 0.0f;
+    launcher_dial_repeat_pid.out = 0.0f;
 }
 #endif
 
@@ -98,6 +105,33 @@ static void Launcher_DialControl(void)
     if (launcher.state == LAUNCHER_READY)
     {
         Launcher_DialStop();
+        return;
+    }
+#endif
+
+#if LAUNCHER_REPEAT_ENABLE
+    // 连发: 纯速度环
+    if (launcher.state == LAUNCHER_REPEAT)
+    {
+        launcher_dial_repeat_pid.target =
+            LAUNCHER_DIAL_DIRECTION * (float)LAUNCHER_DIAL_REPEAT_SPEED_DPS;
+        launcher_dial_repeat_pid.measure =
+            LAUNCHER_DIAL_SPEED_SIGN *
+            (float)dail_motor.KT_motor_info.rx_info.speed;
+        launcher_dial_repeat_pid.err =
+            launcher_dial_repeat_pid.target - launcher_dial_repeat_pid.measure;
+        single_pid_ctrl(&launcher_dial_repeat_pid);
+
+        current_output = (int16_t)constrain(LAUNCHER_DIAL_OUTPUT_SIGN *
+                                           launcher_dial_repeat_pid.out,
+                                           -LAUNCHER_DIAL_CURRENT_LIMIT,
+                                           LAUNCHER_DIAL_CURRENT_LIMIT);
+
+        if ((dail_motor.W_iqControl != NULL) && (dail_motor.tx_W_cmd != NULL))
+        {
+            dail_motor.W_iqControl(&dail_motor, current_output);
+            dail_motor.tx_W_cmd(&dail_motor, TORQUE_CLOSE_LOOP_ID);
+        }
         return;
     }
 #endif
@@ -289,6 +323,14 @@ void Launcher_Init(void)
     launcher_dial_speed_pid.integral_max = LAUNCHER_DIAL_SPEED_INTEGRAL_MAX;
     launcher_dial_speed_pid.out_max = LAUNCHER_DIAL_CURRENT_LIMIT;
     launcher_dial_speed_pid.out = 0.0f;
+
+    launcher_dial_repeat_pid.kp = LAUNCHER_DIAL_REPEAT_KP;
+    launcher_dial_repeat_pid.ki = LAUNCHER_DIAL_REPEAT_KI;
+    launcher_dial_repeat_pid.kd = LAUNCHER_DIAL_REPEAT_KD;
+    launcher_dial_repeat_pid.integral = 0.0f;
+    launcher_dial_repeat_pid.integral_max = LAUNCHER_DIAL_REPEAT_INTEGRAL_MAX;
+    launcher_dial_repeat_pid.out_max = LAUNCHER_DIAL_CURRENT_LIMIT;
+    launcher_dial_repeat_pid.out = 0.0f;
 }
 
 void Launcher_Work(void)
@@ -490,22 +532,17 @@ void Launcher_Work(void)
             launcher.jam_tick = now;
         }
 #if LAUNCHER_REPEAT_ENABLE
-        else if ((shoot_mode != 0u) && (shoot_level != 0u) &&
-                 ((now - launcher.last_repeat_tick) >=
-                  LAUNCHER_DIAL_REPEAT_INTERVAL_MS))
+        else if ((shoot_mode != 0u) && (shoot_level != 0u))
         {
-            launcher.dial_target_angle +=
-                (int32_t)(LAUNCHER_DIAL_DIRECTION * LAUNCHER_DIAL_ONE_SHOT_ANGLE);
+            Launcher_DialClearPid();
             launcher.state = LAUNCHER_REPEAT;
             launcher.state_tick = now;
             launcher.jam_tick = now;
-            launcher.last_repeat_tick = now;
         }
 #endif
         break;
 
     case LAUNCHER_SINGLE:
-    case LAUNCHER_REPEAT:
         if (Launcher_DialAtTarget() != 0u)
         {
             Launcher_DialClearPid();
@@ -547,6 +584,40 @@ void Launcher_Work(void)
             {
                 launcher.jam_tick = now;
             }
+        }
+        break;
+
+    case LAUNCHER_REPEAT:
+        if ((shoot_mode == 0u) || (shoot_level == 0u))
+        {
+            Launcher_DialStop();
+            launcher.dial_target_angle = current_angle;
+            launcher.state = LAUNCHER_READY;
+            launcher.state_tick = now;
+            launcher.jam_tick = now;
+            launcher_jam_count = 0u;
+        }
+        else if ((jam_now != 0u) &&
+                 ((now - launcher.jam_tick) >= LAUNCHER_DIAL_JAM_TIME_MS))
+        {
+            Launcher_DialStop();
+            launcher_jam_count++;
+            if (launcher_jam_count >= LAUNCHER_DIAL_JAM_MAX_RETRY)
+            {
+                launcher.state = LAUNCHER_FAULT;
+                launcher.fault = 1u;
+                break;
+            }
+
+            launcher.dial_target_angle = current_angle -
+                (int32_t)(LAUNCHER_DIAL_DIRECTION * LAUNCHER_DIAL_REVERSE_ANGLE);
+            launcher.state = LAUNCHER_REVERSE;
+            launcher.state_tick = now;
+            launcher.jam_tick = now;
+        }
+        else if (jam_now == 0u)
+        {
+            launcher.jam_tick = now;
         }
         break;
 

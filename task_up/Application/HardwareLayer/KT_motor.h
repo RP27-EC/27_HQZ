@@ -19,7 +19,7 @@
 
 #define KT_TX_ANGLE_SIGNLE_MAX      35999           //0~35999
 #define K_CURRENT_TURN		        62.5f			      //电流值，反馈数值2000 对应 32A  2000 / 32
-#define KT_TX_IQ_CONTROL_MAX        1500             //-2000~2000    1A--->48的值   930
+#define KT_TX_IQ_CONTROL_MAX        2000             //-2000~2000    1A--->48的值   930
 typedef struct KT_motor_pid_rx_info_t
 {
 	uint8_t angleKp;

@@ -3,7 +3,7 @@
 
 /* Friction wheel speed control. */
 #define LAUNCHER_DIAL_ENABLE              1u
-#define LAUNCHER_REPEAT_ENABLE            0u
+#define LAUNCHER_REPEAT_ENABLE            1u
 #define LAUNCHER_FRIC_TARGET_RPM          2000.0f
 #define LAUNCHER_FRIC_RAMP_RPM_PER_MS     20.0f
 #define LAUNCHER_FRIC_STOP_RAMP_RPM_PER_MS 20.0f
@@ -42,15 +42,21 @@
 #define LAUNCHER_DIAL_REVERSE_ANGLE       65536.0f
 #define LAUNCHER_DIAL_STOP_ERROR          500.0f
 #define LAUNCHER_DIAL_MAX_SPEED_DPS       7000u
+#define LAUNCHER_DIAL_REPEAT_SPEED_DPS    3600u
 #define LAUNCHER_DIAL_SINGLE_TIMEOUT_MS   500u
-#define LAUNCHER_DIAL_REPEAT_INTERVAL_MS  56u
 #define LAUNCHER_DIAL_REVERSE_TIMEOUT_MS  200u
 #define LAUNCHER_DIAL_RELOAD_TIMEOUT_MS   200u
 
+/* Repeat speed loop. */
+#define LAUNCHER_DIAL_REPEAT_KP            0.5f
+#define LAUNCHER_DIAL_REPEAT_KI            0.01f
+#define LAUNCHER_DIAL_REPEAT_KD            0.0f
+#define LAUNCHER_DIAL_REPEAT_INTEGRAL_MAX  0.0f
+
 /* Jam detection. */
-#define LAUNCHER_DIAL_JAM_CURRENT_RAW     800
-#define LAUNCHER_DIAL_JAM_SPEED_DPS       5
-#define LAUNCHER_DIAL_JAM_TIME_MS         300u
+#define LAUNCHER_DIAL_JAM_CURRENT_RAW     1200
+#define LAUNCHER_DIAL_JAM_SPEED_DPS       2
+#define LAUNCHER_DIAL_JAM_TIME_MS         500u
 #define LAUNCHER_DIAL_JAM_MAX_RETRY       8u
 
 #endif
