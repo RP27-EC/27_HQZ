@@ -51,8 +51,11 @@ static uint8_t Launcher_DialOnline(void)
 
 static int32_t Launcher_DialAngle(void)
 {
-    return (int32_t)(LAUNCHER_DIAL_ANGLE_SIGN *
-                      (float)dail_motor.KT_motor_info.rx_info.encoder_sum);
+    /* encoder_sum 是有符号编码器计数（65536 count = 一圈），不能经 (float) 转换：
+     * 累计值超过 2^24 会丢精度，负值回绕时 (float)->int32_t 更是未定义行为。 */
+    int32_t raw = dail_motor.KT_motor_info.rx_info.encoder_sum;
+
+    return (LAUNCHER_DIAL_ANGLE_SIGN < 0.0f) ? -raw : raw;
 }
 
 static int32_t Launcher_DialEncoder(void)
@@ -314,6 +317,7 @@ void Launcher_Init(void)
     launcher_dial_angle_pid.integral = 0.0f;
     launcher_dial_angle_pid.integral_max = LAUNCHER_DIAL_ANGLE_INTEGRAL_MAX;
     launcher_dial_angle_pid.out_max = (float)LAUNCHER_DIAL_MAX_SPEED_DPS;
+    launcher_dial_angle_pid.deadband = LAUNCHER_DIAL_ANGLE_DEADBAND;
     launcher_dial_angle_pid.out = 0.0f;
 
     launcher_dial_speed_pid.kp = LAUNCHER_DIAL_SPEED_KP;
@@ -525,7 +529,9 @@ void Launcher_Work(void)
         if (launcher.single_pending != 0u)
         {
             launcher.single_pending = 0u;
-            launcher.dial_target_angle +=
+            /* 基准取当前实测位置：READY 期间电机断电，位置若被外力挪动，
+             * 用累加式目标会把这段偏差算进去，变成每次单发角度都不对 */
+            launcher.dial_target_angle = current_angle +
                 (int32_t)(LAUNCHER_DIAL_DIRECTION * LAUNCHER_DIAL_ONE_SHOT_ANGLE);
             launcher.state = LAUNCHER_SINGLE;
             launcher.state_tick = now;

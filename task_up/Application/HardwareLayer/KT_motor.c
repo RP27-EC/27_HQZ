@@ -474,29 +474,30 @@ static void KT_Encoder_Sum_Cal(KT_motor_t *motor)
     int32_t err;
     KT_motor_rx_info_t *rx_info = &motor->KT_motor_info.rx_info;
 
-    if ((rx_info->last_encoder == 0u) && (rx_info->encoder_sum == 0u))
+    if (rx_info->encoder_sum_ready == 0u)
     {
-        err = 0;
-    }
-    else
-    {
-        err = (int32_t)rx_info->encoder - (int32_t)rx_info->last_encoder;
+        /* First feedback frame only establishes the origin, no displacement. */
+        rx_info->encoder_sum = 0;
+        rx_info->encoder_sum_ready = 1u;
+        rx_info->last_encoder = rx_info->encoder;
+        return;
     }
 
-    if ((err > 32767) || (err < -32767))
+    err = (int32_t)rx_info->encoder - (int32_t)rx_info->last_encoder;
+
+    if (err > 32767)
     {
-        if (err >= 0)
-        {
-            rx_info->encoder_sum += (uint32_t)(-65535 + err);
-        }
-        else
-        {
-            rx_info->encoder_sum += (uint32_t)(65535 + err);
-        }
+        /* Wrapped backwards past the encoder zero point: real delta is negative. */
+        rx_info->encoder_sum += (err - 65536);
+    }
+    else if (err < -32767)
+    {
+        /* Wrapped forwards past the encoder zero point: real delta is positive. */
+        rx_info->encoder_sum += (err + 65536);
     }
     else
     {
-        rx_info->encoder_sum += (uint32_t)err;
+        rx_info->encoder_sum += err;
     }
 
     rx_info->last_encoder = rx_info->encoder;
