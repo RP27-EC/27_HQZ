@@ -89,8 +89,23 @@ static void Board_Rx_Pkt_05(uint8_t *rxbuf)
     Board_Rx_Info.remote_cmd_pkt.valid = rxbuf[0] & 0x01u;
     Board_Rx_Info.remote_cmd_pkt.ctrl_source = (rxbuf[0] >> 1) & 0x01u;
     Board_Rx_Info.remote_cmd_pkt.button_bits = rxbuf[1];
-    Board_Rx_Info.remote_cmd_pkt.yaw_rate_deg_s = (float)yaw_raw * 0.1f;
-    Board_Rx_Info.remote_cmd_pkt.pitch_rate_deg_s = (float)pitch_raw * 0.1f;
+    Board_Rx_Info.remote_cmd_pkt.cmd_type = (rxbuf[0] >> 2) & 0x01u;
+    Board_Rx_Info.remote_cmd_pkt.mouse_dx = 0;
+    Board_Rx_Info.remote_cmd_pkt.mouse_dy = 0;
+
+    if ((Board_Rx_Info.remote_cmd_pkt.ctrl_source == 1u) &&
+        (Board_Rx_Info.remote_cmd_pkt.cmd_type == 1u))
+    {
+        Board_Rx_Info.remote_cmd_pkt.mouse_dx = yaw_raw;
+        Board_Rx_Info.remote_cmd_pkt.mouse_dy = pitch_raw;
+        Board_Rx_Info.remote_cmd_pkt.yaw_rate_deg_s = 0.0f;
+        Board_Rx_Info.remote_cmd_pkt.pitch_rate_deg_s = 0.0f;
+    }
+    else
+    {
+        Board_Rx_Info.remote_cmd_pkt.yaw_rate_deg_s = (float)yaw_raw * 0.1f;
+        Board_Rx_Info.remote_cmd_pkt.pitch_rate_deg_s = (float)pitch_raw * 0.1f;
+    }
 }
 
 static void Board_Tx_Update(void)

@@ -7,6 +7,9 @@
 
 chassis_cmd_t chassis_input_cmd;
 
+static uint8_t keyboard_source_active;
+static uint8_t last_f_pressed;
+
 static float Chassis_RcAxisValue(int16_t axis)
 {
     float value = (float)axis;
@@ -29,6 +32,69 @@ static float Chassis_RcAxisValue(int16_t axis)
     return constrain(value, -1.0f, 1.0f);
 }
 
+uint8_t Chassis_Input_IsKeyboardMode(void)
+{
+#if !CHASSIS_KEYBOARD_INPUT_ENABLE
+    return 0u;
+#else
+    if ((keyboard_source_active == 0u) || (rc_dev.work_state != DEV_ONLINE) ||
+        (rc_dev.info == NULL))
+    {
+        return 0u;
+    }
+
+    return (rc_dev.info->s1.value == RC_SW_UP) ? 1u : 0u;
+#endif
+}
+
+static void Chassis_Input_Keyboard(chassis_cmd_t *cmd, const rc_data_t *rc)
+{
+    float forward = 0.0f;
+    float left = 0.0f;
+    float spin = 0.0f;
+    float scale = 1.0f;
+
+    if ((rc->key_v & KEY_PRESSED_OFFSET_W) != 0u)
+    {
+        forward += 1.0f;
+    }
+    if ((rc->key_v & KEY_PRESSED_OFFSET_S) != 0u)
+    {
+        forward -= 1.0f;
+    }
+    if ((rc->key_v & KEY_PRESSED_OFFSET_A) != 0u)
+    {
+        left += 1.0f;
+    }
+    if ((rc->key_v & KEY_PRESSED_OFFSET_D) != 0u)
+    {
+        left -= 1.0f;
+    }
+    if ((rc->key_v & KEY_PRESSED_OFFSET_Q) != 0u)
+    {
+        spin += 1.0f;
+    }
+    if ((rc->key_v & KEY_PRESSED_OFFSET_E) != 0u)
+    {
+        spin -= 1.0f;
+    }
+
+    if ((rc->key_v & KEY_PRESSED_OFFSET_SHIFT) != 0u)
+    {
+        scale = CHASSIS_KEY_SPEED_BOOST;
+    }
+    else if ((rc->key_v & KEY_PRESSED_OFFSET_CTRL) != 0u)
+    {
+        scale = CHASSIS_KEY_SPEED_SLOW;
+    }
+
+    cmd->vx = CHASSIS_KEY_VX_SIGN * forward * scale * CHASSIS_MAX_VX;
+    cmd->vy = CHASSIS_KEY_VY_SIGN * left * scale * CHASSIS_MAX_VY;
+    cmd->wz = CHASSIS_KEY_WZ_SIGN * spin * scale * CHASSIS_MAX_WZ;
+    cmd->valid = 1u;
+    cmd->source = CHASSIS_SRC_KEYBOARD;
+}
+
 void Chassis_Input_Init(void)
 {
     chassis_input_cmd.vx = 0.0f;
@@ -36,6 +102,8 @@ void Chassis_Input_Init(void)
     chassis_input_cmd.wz = 0.0f;
     chassis_input_cmd.valid = 0u;
     chassis_input_cmd.source = CHASSIS_SRC_NONE;
+    keyboard_source_active = 0u;
+    last_f_pressed = 0u;
 }
 
 void Chassis_Input_SetSource(chassis_source_e source)
@@ -46,6 +114,8 @@ void Chassis_Input_SetSource(chassis_source_e source)
 void Chassis_Input_Update(void)
 {
     chassis_cmd_t cmd;
+    const rc_data_t *rc = rc_dev.info;
+    uint8_t f_pressed = 0u;
 
     cmd.vx = 0.0f;
     cmd.vy = 0.0f;
@@ -53,28 +123,47 @@ void Chassis_Input_Update(void)
     cmd.valid = 0u;
     cmd.source = CHASSIS_SRC_NONE;
 
-#if CHASSIS_RC_INPUT_ENABLE
-    /* 未使能时底盘保持停止。 */
-    if ((rc_dev.work_state == DEV_ONLINE) &&
-        (rc_dev.info != NULL) &&
-        (rc_dev.info->s1.value == RC_SW_UP))
+    if ((rc_dev.work_state != DEV_ONLINE) || (rc == NULL))
     {
-        cmd.vx = -Chassis_RcAxisValue(rc_dev.info->ch3) * CHASSIS_MAX_VX;
-        cmd.vy = Chassis_RcAxisValue(rc_dev.info->ch2) * CHASSIS_MAX_VY;
+        keyboard_source_active = 0u;
+        last_f_pressed = 0u;
+        chassis_input_cmd = cmd;
+        return;
+    }
+
+    f_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_F) != 0u) ? 1u : 0u;
+    /* F 切换输入源 */
+    if ((f_pressed != 0u) && (last_f_pressed == 0u) && (rc->s1.value == RC_SW_UP))
+    {
+        keyboard_source_active ^= 1u;
+    }
+    last_f_pressed = f_pressed;
+
+#if CHASSIS_KEYBOARD_INPUT_ENABLE
+    if (Chassis_Input_IsKeyboardMode() != 0u)
+    {
+        Chassis_Input_Keyboard(&cmd, rc);
+        chassis_input_cmd = cmd;
+        return;
+    }
+#endif
+
+#if CHASSIS_RC_INPUT_ENABLE
+    if (rc->s1.value == RC_SW_UP)
+    {
+        cmd.vx = -Chassis_RcAxisValue(rc->ch3) * CHASSIS_MAX_VX;
+        cmd.vy = Chassis_RcAxisValue(rc->ch2) * CHASSIS_MAX_VY;
 #if CHASSIS_OWNS_RC_YAW
-        cmd.wz = Chassis_RcAxisValue(rc_dev.info->ch0) * CHASSIS_MAX_WZ;
+        cmd.wz = Chassis_RcAxisValue(rc->ch0) * CHASSIS_MAX_WZ;
 #else
         cmd.wz = 0.0f;
 #endif
         cmd.valid = 1u;
         cmd.source = CHASSIS_SRC_RC;
     }
-#endif
-
-#if CHASSIS_KEYBOARD_INPUT_ENABLE
-    /* 键鼠输入后续在这复用同一个 chassis_cmd_t。 */
+#else
+    (void)rc;
 #endif
 
     chassis_input_cmd = cmd;
 }
-

@@ -39,6 +39,9 @@ typedef struct
     uint8_t button_bits;
     float yaw_rate_deg_s;
     float pitch_rate_deg_s;
+    uint8_t cmd_type;
+    int16_t mouse_dx;
+    int16_t mouse_dy;
 } Board_Remote_Cmd_Pkt_t;
 
 typedef struct

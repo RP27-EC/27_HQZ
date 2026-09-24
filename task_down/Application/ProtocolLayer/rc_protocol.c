@@ -11,10 +11,10 @@ void rc_init(rc_dev_t *rc_sen)
 	// 初始化为离线状态
 	rc_sen->info->offline_cnt = rc_sen->info->offline_max_cnt + 1;
 	rc_sen->work_state = DEV_OFFLINE;
-	
+
 	rc_reset_data(rc_sen);
 	keyboard_cnt_max_set(rc_sen);
-	
+
 	if(rc_sen->id == DEV_ID_RC)
 		rc_sen->errno = NONE_ERR;
 	else
@@ -25,7 +25,7 @@ void rc_init(rc_dev_t *rc_sen)
 void keyboard_cnt_max_set(rc_dev_t *rc_sen)
 {
 	rc_data_t *info = rc_sen->info;
-	
+
   info->mouse_btn_l.cnt_max = MOUSE_BTN_L_CNT_MAX;
   info->mouse_btn_r.cnt_max = MOUSE_BTN_R_CNT_MAX;
   info->Q.cnt_max = KEY_Q_CNT_MAX;
@@ -62,9 +62,9 @@ void rc_interrupt_update(rc_dev_t *rc_sen)
 	mouse_y[index] = rc_sen->info->mouse_vy;
 	rc_sen->info->mouse_x += (float)mouse_x[index] / (float)REMOTE_SMOOTH_TIMES;
 	rc_sen->info->mouse_y += (float)mouse_y[index] / (float)REMOTE_SMOOTH_TIMES;
-	
+
 	index++;
-	
+
 }
 /* 解析遥控器帧 */
 void rc_update(rc_dev_t *rc_sen, uint8_t *rxBuf)
@@ -84,14 +84,14 @@ void rc_update(rc_dev_t *rc_sen, uint8_t *rxBuf)
 
 	rc_info->thumbwheel.value = ((int16_t)rxBuf[16] | ((int16_t)rxBuf[17] << 8)) & 0x07ff;
 	rc_info->thumbwheel.value -= 1024;
-	
+
 	if(abs(rc_info->thumbwheel.value)>660)
 	{
 		rc_info->thumbwheel.value=0;
 	}
 
 	rc_info->s1.value = ((rxBuf[5] >> 4) & 0x000C) >> 2;
-	rc_info->s2.value = (rxBuf[5] >> 4) & 0x0003;	
+	rc_info->s2.value = (rxBuf[5] >> 4) & 0x0003;
 	/*遥控器限位置零*/
 	if(rc_dev.info->ch3== -660)
 	{
@@ -104,8 +104,9 @@ void rc_update(rc_dev_t *rc_sen, uint8_t *rxBuf)
 	rc_info->mouse_vz = rxBuf[10] | (rxBuf[11] << 8);
   rc_info->mouse_btn_l.value = rxBuf[12] & 0x01;
   rc_info->mouse_btn_r.value = rxBuf[13] & 0x01;
-	rc_info->key_v   =  rxBuf[14] | (rxBuf[15] << 8);
-	
+  rc_info->key_v   =  rxBuf[14] | (rxBuf[15] << 8);
+  rc_info->update_seq++;
+
   rc_info->W.value = 	KEY_PRESSED_W;
   rc_info->S.value =    KEY_PRESSED_S;
   rc_info->A.value = 	KEY_PRESSED_A;
@@ -122,12 +123,12 @@ void rc_update(rc_dev_t *rc_sen, uint8_t *rxBuf)
   rc_info->C.value = 	KEY_PRESSED_C;
   rc_info->V.value = 	KEY_PRESSED_V;
   rc_info->B.value = 	KEY_PRESSED_B;
-	
+
 	rc_info->offline_cnt = 0;
 	tt1 = tt2;
 	tt2 = micros();
 	ttp1 = tt2 - tt1;
-	
+
 }
 
 /* 更新键盘状态 */
@@ -190,7 +191,7 @@ void keyboard_status_update(kb_key_t *key)
             {
                 key->status = short_press;
             }
-        } 
+        }
     }
 }
 
@@ -206,9 +207,9 @@ void USART5_rxDataHandler(uint8_t *rxBuf)
 	init_cnt ++;
 	rc_dev.update(&rc_dev, rxBuf);
 	rc_dev.check(&rc_dev);
-	
-	
+
+
 }
- 
+
 
 

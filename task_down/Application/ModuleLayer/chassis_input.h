@@ -10,6 +10,7 @@ extern chassis_cmd_t chassis_input_cmd;
 void Chassis_Input_Init(void);
 void Chassis_Input_Update(void);
 void Chassis_Input_SetSource(chassis_source_e source);
+uint8_t Chassis_Input_IsKeyboardMode(void);
 
 #endif
 

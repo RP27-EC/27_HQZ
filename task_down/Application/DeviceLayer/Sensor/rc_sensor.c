@@ -228,8 +228,9 @@ void rc_reset_data(rc_dev_t *rc)
 	rc->info->mouse_btn_l.value = 0;
 	rc->info->mouse_btn_r.value = 0;
 	// 键盘
-	rc->info->key_v = 0;
-	rc->info->W.value = 0;
+  rc->info->key_v = 0;
+  rc->info->update_seq = 0;
+  rc->info->W.value = 0;
 	rc->info->S.value = 0;
 	rc->info->A.value = 0;
 	rc->info->D.value = 0;

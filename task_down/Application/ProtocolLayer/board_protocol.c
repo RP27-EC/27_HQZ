@@ -10,6 +10,7 @@
 #include "rp_math.h"
 #include "main.h"
 #include "chassis_config.h"
+#include "chassis_input.h"
 #include "chassis_follow.h"
 #include "chassis_spin.h"
 
@@ -201,54 +202,79 @@ static float Board_Remote_Axis_To_Rate(int16_t axis, float max_rate)
 
 void Board_Tx_Pkt_05(Board_t* board)
 {
+    static uint32_t last_mouse_seq;
     float yaw_rate = 0.0f;
     float pitch_rate = 0.0f;
-    int16_t yaw_raw;
-    int16_t pitch_raw;
+    int16_t yaw_raw = 0;
+    int16_t pitch_raw = 0;
     uint8_t valid = 0u;
+    uint8_t ctrl_source = BOARD_D5_CTRL_RC;
+    uint8_t cmd_type = BOARD_D5_CMD_RC_RATE;
+    uint8_t button_bits = 0u;
 
     if (rc_dev.work_state == DEV_ONLINE)
     {
         valid = 1u;
-#if CHASSIS_BRINGUP_ENABLE
-        if (rc_dev.info->s1.value == RC_SW_DOWN)
+#if CHASSIS_KEYBOARD_INPUT_ENABLE
+        if (Chassis_Input_IsKeyboardMode() != 0u)
         {
-            yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
-                                                 BOARD_D5_YAW_RATE_MAX_DEG_S);
-        }
-        else if (Chassis_Follow_IsSelected() != 0u)
-        {
-            yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
-                                                 BOARD_D5_YAW_RATE_MAX_DEG_S);
-        }
-        else if (Chassis_Spin_IsSelected() != 0u)
-        {
-            yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
-                                                 BOARD_D5_YAW_RATE_MAX_DEG_S);
+            ctrl_source = BOARD_D5_CTRL_KEYBOARD;
+            cmd_type = BOARD_D5_CMD_MOUSE_DELTA;
+            button_bits = (uint8_t)((rc_dev.info->mouse_btn_l.value & 0x01u) |
+                                    ((rc_dev.info->mouse_btn_r.value & 0x01u) << 1));
+
+            if (rc_dev.info->update_seq != last_mouse_seq)
+            {
+                last_mouse_seq = rc_dev.info->update_seq;
+                yaw_raw = rc_dev.info->mouse_vx;
+                pitch_raw = rc_dev.info->mouse_vy;
+            }
         }
         else
+#endif
         {
+            last_mouse_seq = rc_dev.info->update_seq;
+#if CHASSIS_BRINGUP_ENABLE
+            if (rc_dev.info->s1.value == RC_SW_DOWN)
+            {
+                yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
+                                                     BOARD_D5_YAW_RATE_MAX_DEG_S);
+            }
+            else if (Chassis_Follow_IsSelected() != 0u)
+            {
+                yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
+                                                     BOARD_D5_YAW_RATE_MAX_DEG_S);
+            }
+            else if (Chassis_Spin_IsSelected() != 0u)
+            {
+                yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
+                                                     BOARD_D5_YAW_RATE_MAX_DEG_S);
+            }
+            else
+            {
 #if CHASSIS_OWNS_RC_YAW
-            yaw_rate = 0.0f;
+                yaw_rate = 0.0f;
+#else
+                yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
+                                                     BOARD_D5_YAW_RATE_MAX_DEG_S);
+#endif
+            }
 #else
             yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
                                                  BOARD_D5_YAW_RATE_MAX_DEG_S);
 #endif
+            pitch_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch1,
+                                                   BOARD_D5_PITCH_RATE_MAX_DEG_S);
+            yaw_raw = (int16_t)(yaw_rate / BOARD_D5_RATE_LSB_DEG_S);
+            pitch_raw = (int16_t)(pitch_rate / BOARD_D5_RATE_LSB_DEG_S);
         }
-#else
-        yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
-                                             BOARD_D5_YAW_RATE_MAX_DEG_S);
-#endif
-        pitch_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch1,
-                                               BOARD_D5_PITCH_RATE_MAX_DEG_S);
     }
 
-    yaw_raw = (int16_t)(yaw_rate / BOARD_D5_RATE_LSB_DEG_S);
-    pitch_raw = (int16_t)(pitch_rate / BOARD_D5_RATE_LSB_DEG_S);
-
     memset(pkt_05, 0, 8);
-    pkt_05[0] = valid & 0x01u;
-    pkt_05[1] = 0u;
+    pkt_05[0] = (valid & 0x01u) |
+                ((ctrl_source & 0x01u) << 1) |
+                ((cmd_type & 0x01u) << 2);
+    pkt_05[1] = button_bits;
     pkt_05[2] = (uint8_t)((uint16_t)yaw_raw >> 8);
     pkt_05[3] = (uint8_t)yaw_raw;
     pkt_05[4] = (uint8_t)((uint16_t)pitch_raw >> 8);

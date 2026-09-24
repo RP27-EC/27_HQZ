@@ -71,6 +71,13 @@
 /* 鼠标 Y 输入为 Pitch 的增益 */
 #define GIMBAL_MOUSE_PITCH_RATE_GAIN       1.0f
 
+/* 键鼠输入：鼠标计数 -> 目标角度增量 / 角速度前馈 */
+#define GIMBAL_MOUSE_DEG_PER_COUNT         0.04f
+#define GIMBAL_MOUSE_RATE_FF_DPS_PER_COUNT 0.0f
+#define GIMBAL_MOUSE_DEADBAND_COUNT         1.0f
+#define GIMBAL_INPUT_RC                    0u
+#define GIMBAL_INPUT_KEYBOARD              1u
+
 /* ========== 速控松杆位置保持：Yaw / Pitch 各自独立的 PI ========== */
 /* 操作手角速度低于该值，保持环完全接管，松杆后锁在当前位置 */
 #define GIMBAL_RATE_HOLD_ENTER_DEG_S       2.0f
@@ -128,6 +135,10 @@ typedef struct
 {
     float yaw_rate_cmd_deg_s;       /* 操作手原始 Yaw 角速度指令 */
     float pitch_rate_cmd_deg_s;     /* 操作手原始 Pitch 角速度指令 */
+    uint8_t manual_source;          /* 当前操作输入源 */
+    uint8_t manual_source_changed;  /* 输入源切换标志 */
+    float mouse_dx_counts;          /* 鼠标 X 原始增量 */
+    float mouse_dy_counts;          /* 鼠标 Y 原始增量 */
     float yaw_rate_target_deg_s;    /* 速控分支使用的 Yaw 目标角速度 */
     float pitch_rate_target_deg_s;  /* 速控分支使用的 Pitch 目标角速度 */
     float yaw_rate_cmd_last_deg_s;  /* 上一周期 Yaw 指令 */
@@ -164,6 +175,9 @@ typedef struct
     volatile float yaw_manual_rate_max_deg_s;
     volatile float manual_pitch_sign;
     volatile float manual_yaw_sign;
+    volatile float mouse_deg_per_count;
+    volatile float mouse_rate_ff_dps_per_count;
+    volatile float mouse_deadband_count;
 } gimbal_tune_t;
 
 /* 目标角与 8 路串级 PID */

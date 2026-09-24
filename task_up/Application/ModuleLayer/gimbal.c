@@ -103,18 +103,34 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
 {
     float yaw_rate = 0.0f;
     float pitch_rate = 0.0f;
+    uint8_t source = GIMBAL_INPUT_RC;
+
+    gimbal->feedforward.mouse_dx_counts = 0.0f;
+    gimbal->feedforward.mouse_dy_counts = 0.0f;
 
 #if GIMBAL_DOWN_RC_ENABLE
     if ((Board_HeartBeat.offline_cnt_5 < Board_HeartBeat.offline_cnt_max) &&
         (Board_Rx_Info.remote_cmd_pkt.valid != 0u) &&
         (Board_Rx_Info.state_pkt.car_state != 0u))
     {
-        yaw_rate = gimbal_clamp(Board_Rx_Info.remote_cmd_pkt.yaw_rate_deg_s,
-                                -gimbal_tune.yaw_manual_rate_max_deg_s,
-                                gimbal_tune.yaw_manual_rate_max_deg_s);
-        pitch_rate = gimbal_clamp(Board_Rx_Info.remote_cmd_pkt.pitch_rate_deg_s,
-                                  -gimbal_tune.pitch_manual_rate_max_deg_s,
-                                  gimbal_tune.pitch_manual_rate_max_deg_s);
+        if ((Board_Rx_Info.remote_cmd_pkt.ctrl_source == 1u) &&
+            (Board_Rx_Info.remote_cmd_pkt.cmd_type == 1u))
+        {
+            source = GIMBAL_INPUT_KEYBOARD;
+            gimbal->feedforward.mouse_dx_counts =
+                (float)Board_Rx_Info.remote_cmd_pkt.mouse_dx;
+            gimbal->feedforward.mouse_dy_counts =
+                (float)Board_Rx_Info.remote_cmd_pkt.mouse_dy;
+        }
+        else
+        {
+            yaw_rate = gimbal_clamp(Board_Rx_Info.remote_cmd_pkt.yaw_rate_deg_s,
+                                    -gimbal_tune.yaw_manual_rate_max_deg_s,
+                                    gimbal_tune.yaw_manual_rate_max_deg_s);
+            pitch_rate = gimbal_clamp(Board_Rx_Info.remote_cmd_pkt.pitch_rate_deg_s,
+                                      -gimbal_tune.pitch_manual_rate_max_deg_s,
+                                      gimbal_tune.pitch_manual_rate_max_deg_s);
+        }
     }
 #elif GIMBAL_LOCAL_RC_ENABLE
     if (rc_dev.work_state == DEV_ONLINE)
@@ -143,6 +159,12 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
     /* Apply operator direction conventions after source decoding. */
     yaw_rate *= gimbal_tune.manual_yaw_sign;
     pitch_rate *= gimbal_tune.manual_pitch_sign;
+
+    if (source != gimbal->feedforward.manual_source)
+    {
+        gimbal->feedforward.manual_source = source;
+        gimbal->feedforward.manual_source_changed = 1u;
+    }
 
     gimbal->feedforward.yaw_rate_cmd_deg_s = yaw_rate;
     gimbal->feedforward.pitch_rate_cmd_deg_s = pitch_rate;
@@ -484,9 +506,8 @@ static float gimbal_hold_blend(float rate_mag)
 /*
  * 更新速控模式目标角速度。
  *
- * 结构上是在内环速度环之前再套一层角度 PI：操作手有输入时保持角跟随
- * 当前角，保持环输出接近零，不打手手感；操作手松杆后保持角冻结，保持环
- * 把角度误差换成角速度修正量叠加上去。两个轴各自独立调参。
+ * 遥控器按纯角速度输入；鼠标按增量累加虚拟目标角，保持环输出角速度。
+ * 内环仍是速控，鼠标停止后虚拟目标角保持不动。
  */
 static void gimbal_update_rate_targets(gimbal_t *gimbal)
 {
@@ -507,20 +528,80 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     gimbal->pid_info.pitch_hold.integral_max = gimbal_tune.pitch_hold_integral_max;
     gimbal->pid_info.pitch_hold.out_max = gimbal_tune.pitch_hold_out_max;
 
-    /*
-     * 操作手接管区间：保持角跟随当前角，同时清掉积分。
-     * 保持角跟随保证手动响应不被拖慢，清积分保证上一次保持的积分
-     * 不会残留到下一次松杆，避免交接瞬间产生力矩突变。
-     */
-    if (yaw_mag > gimbal_tune.rate_hold_enter_deg_s)
+    if (gimbal->feedforward.manual_source_changed != 0u)
     {
         gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
-        integral_to_zero(&gimbal->pid_info.yaw_hold);
-    }
-    if (pitch_mag > gimbal_tune.rate_hold_enter_deg_s)
-    {
         gimbal->feedforward.pitch_hold_angle_deg = gimbal->base_info.pitch_mec_angle;
+        integral_to_zero(&gimbal->pid_info.yaw_hold);
         integral_to_zero(&gimbal->pid_info.pitch_hold);
+        gimbal->feedforward.manual_source_changed = 0u;
+    }
+
+    if (gimbal->feedforward.manual_source == GIMBAL_INPUT_KEYBOARD)
+    {
+        float yaw_delta = gimbal->feedforward.mouse_dx_counts;
+        float pitch_delta = gimbal->feedforward.mouse_dy_counts;
+
+        if (gimbal_abs(yaw_delta) < gimbal_tune.mouse_deadband_count)
+        {
+            yaw_delta = 0.0f;
+        }
+        if (gimbal_abs(pitch_delta) < gimbal_tune.mouse_deadband_count)
+        {
+            pitch_delta = 0.0f;
+        }
+
+        yaw_delta *= gimbal_tune.manual_yaw_sign;
+        pitch_delta *= gimbal_tune.manual_pitch_sign;
+
+        if (yaw_delta != 0.0f)
+        {
+            gimbal->feedforward.yaw_hold_angle_deg = gimbal_wrap_deg(
+                gimbal->feedforward.yaw_hold_angle_deg +
+                yaw_delta * gimbal_tune.mouse_deg_per_count);
+            integral_to_zero(&gimbal->pid_info.yaw_hold);
+        }
+        if (pitch_delta != 0.0f)
+        {
+            gimbal->feedforward.pitch_hold_angle_deg = gimbal_clamp(
+                gimbal->feedforward.pitch_hold_angle_deg +
+                pitch_delta * gimbal_tune.mouse_deg_per_count,
+                GIMBAL_PITCH_MIN_DEG,
+                GIMBAL_PITCH_MAX_DEG);
+            integral_to_zero(&gimbal->pid_info.pitch_hold);
+        }
+
+        yaw_cmd = gimbal_clamp(
+            yaw_delta * gimbal_tune.mouse_rate_ff_dps_per_count,
+            -gimbal_tune.yaw_manual_rate_max_deg_s,
+            gimbal_tune.yaw_manual_rate_max_deg_s);
+        pitch_cmd = gimbal_clamp(
+            pitch_delta * gimbal_tune.mouse_rate_ff_dps_per_count,
+            -gimbal_tune.pitch_manual_rate_max_deg_s,
+            gimbal_tune.pitch_manual_rate_max_deg_s);
+        yaw_blend = 1.0f;
+        pitch_blend = 1.0f;
+    }
+    else
+    {
+        /*
+         * 遥控器接管区间：保持角跟随当前角，同时清掉积分。
+         * 保持角跟随保证手动响应不被拖慢，清积分保证上一次保持的积分
+         * 不会残留到下一次松杆，避免交接瞬间产生力矩突变。
+         */
+        if (yaw_mag > gimbal_tune.rate_hold_enter_deg_s)
+        {
+            gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
+            integral_to_zero(&gimbal->pid_info.yaw_hold);
+        }
+        if (pitch_mag > gimbal_tune.rate_hold_enter_deg_s)
+        {
+            gimbal->feedforward.pitch_hold_angle_deg = gimbal->base_info.pitch_mec_angle;
+            integral_to_zero(&gimbal->pid_info.pitch_hold);
+        }
+
+        yaw_blend = gimbal_hold_blend(yaw_mag);
+        pitch_blend = gimbal_hold_blend(pitch_mag);
     }
 
     /* 保持环：角度误差 -> 角速度修正量 */
@@ -537,13 +618,14 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
         gimbal->feedforward.pitch_hold_angle_deg - gimbal->base_info.pitch_mec_angle;
     single_pid_ctrl(&gimbal->pid_info.pitch_hold);
 
-    yaw_blend = gimbal_hold_blend(yaw_mag);
-    pitch_blend = gimbal_hold_blend(pitch_mag);
-
-    gimbal->feedforward.yaw_rate_target_deg_s =
-        yaw_cmd + yaw_blend * gimbal->pid_info.yaw_hold.out;
-    gimbal->feedforward.pitch_rate_target_deg_s =
-        pitch_cmd + pitch_blend * gimbal->pid_info.pitch_hold.out;
+    gimbal->feedforward.yaw_rate_target_deg_s = gimbal_clamp(
+        yaw_cmd + yaw_blend * gimbal->pid_info.yaw_hold.out,
+        -gimbal_tune.yaw_manual_rate_max_deg_s,
+        gimbal_tune.yaw_manual_rate_max_deg_s);
+    gimbal->feedforward.pitch_rate_target_deg_s = gimbal_clamp(
+        pitch_cmd + pitch_blend * gimbal->pid_info.pitch_hold.out,
+        -gimbal_tune.pitch_manual_rate_max_deg_s,
+        gimbal_tune.pitch_manual_rate_max_deg_s);
 }
 
 /* Pitch 轴重力力矩补偿 */
@@ -753,6 +835,9 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_tune.yaw_manual_rate_max_deg_s = GIMBAL_MANUAL_YAW_RATE_DEG_S;
     gimbal_tune.manual_pitch_sign = GIMBAL_MANUAL_PITCH_SIGN;
     gimbal_tune.manual_yaw_sign = GIMBAL_MANUAL_YAW_SIGN;
+    gimbal_tune.mouse_deg_per_count = GIMBAL_MOUSE_DEG_PER_COUNT;
+    gimbal_tune.mouse_rate_ff_dps_per_count = GIMBAL_MOUSE_RATE_FF_DPS_PER_COUNT;
+    gimbal_tune.mouse_deadband_count = GIMBAL_MOUSE_DEADBAND_COUNT;
 
     /* 绑定电机驱动 */
     gimbal->pitch_motor = &dm_motor[PITCH];
@@ -787,6 +872,10 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal->feedforward.pitch_torque_ff_nm = 0.0f;
     gimbal->feedforward.yaw_hold_angle_deg = 0.0f;
     gimbal->feedforward.pitch_hold_angle_deg = 0.0f;
+    gimbal->feedforward.manual_source = GIMBAL_INPUT_RC;
+    gimbal->feedforward.manual_source_changed = 0u;
+    gimbal->feedforward.mouse_dx_counts = 0.0f;
+    gimbal->feedforward.mouse_dy_counts = 0.0f;
 
     gimbal_pid_init(gimbal);
     gimbal->base_info.output_gimbal_p = 0.0f;

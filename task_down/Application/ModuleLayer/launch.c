@@ -3,6 +3,7 @@
 #include "launch.h"
 #include "board_protocol.h"
 #include "rc_sensor.h"
+#include "chassis_input.h"
 /*
 上供弹关系，底盘发射机构模块只需要向上传输
                  状态，
@@ -41,6 +42,25 @@ static void Launch_Data_Update(Launch_t* launch)
     int16_t thumbwheel;
 
     rc_online = (rc_dev.work_state == DEV_ONLINE) ? 1u : 0u;
+
+    if (Chassis_Input_IsKeyboardMode() != 0u)
+    {
+        launch->state = L_UNLOCK;
+
+        if ((rc_dev.info->mouse_btn_l.value & 0x01u) != 0u)
+        {
+            launch->mode = (rc_dev.info->mouse_btn_l.status == long_press) ?
+                           REPEAT_SHOT : SINGLE_SHOT;
+            launch->shoot_level = 1u;
+        }
+        else
+        {
+            launch->mode = SINGLE_SHOT;
+            launch->shoot_level = 0u;
+        }
+
+        return;
+    }
 
     if ((rc_online != 0u) &&
         (rc_dev.info->s1.value == RC_SW_MID))

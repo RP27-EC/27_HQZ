@@ -14,6 +14,11 @@
 #define BOARD_D5_PITCH_RATE_MAX_DEG_S   150.0f
 #define BOARD_D5_RATE_LSB_DEG_S         0.1f
 
+#define BOARD_D5_CTRL_RC                0u
+#define BOARD_D5_CTRL_KEYBOARD          1u
+#define BOARD_D5_CMD_RC_RATE            0u
+#define BOARD_D5_CMD_MOUSE_DELTA        1u
+
 #define  ID_PKT_01     0xD1
 #define  ID_PKT_02     0xD2
 #define  ID_PKT_03     0xD3

@@ -204,7 +204,8 @@ typedef struct rc_sensor_info_struct {
   kb_key_t        B;  // 蓝
   kb_key_t        Shift;
   kb_key_t        Ctrl;
-	uint16_t								key_v;
+  volatile uint32_t update_seq;
+  uint16_t								key_v;
 	
 	int16_t		offline_cnt;
 	int16_t		offline_max_cnt;
