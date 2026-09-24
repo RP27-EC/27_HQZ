@@ -205,7 +205,7 @@ static void gimbal_pid_init(gimbal_t *gimbal)
     pid->integral_max = 0.0f; pid->out_max = 500.0f;
 
     pid = &gimbal->pid_info.yaw_mec_inner;
-    pid->kp = 0.8f; pid->ki = 0.0f; pid->kd = 0.0f;
+    pid->kp = 1.5f; pid->ki = 0.0f; pid->kd = 0.2f;
     pid->integral_max = 0.0f; pid->out_max = 100.0f;
 
     /* Pitch 机械编码器串级 */
@@ -769,8 +769,8 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal->init_info.init_time_max = 6000;
     gimbal->init_info.pitch_angle_tolerance = 2.0f;
     gimbal->init_info.yaw_angle_tolerance = 2.0f;
-    gimbal->init_info.pitch_ramp_step = 0.05f; //  归中速率限制
-    gimbal->init_info.yaw_ramp_step = 0.05f;   // 归中速率限制
+    gimbal->init_info.pitch_ramp_step = 0.25f; //  归中速率限制
+    gimbal->init_info.yaw_ramp_step = 0.25f;   // 归中速率限制
     gimbal->init_info.mode_transition_active = 0;
     gimbal->init_info.mode_pitch_ramp_step = 0.1f;
     gimbal->init_info.mode_yaw_ramp_step = 0.1f;
