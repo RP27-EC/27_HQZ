@@ -4,6 +4,7 @@
 #include "communicate.h"
 #include "motor.h"
 
+/* CAN1：Pitch、摩擦轮、拨盘反馈 */
 void CAN1_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
     switch (rxId)
@@ -29,6 +30,7 @@ void CAN1_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
     }
 }
 
+/* CAN2：Yaw 与下板报文 */
 void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
     switch (rxId)

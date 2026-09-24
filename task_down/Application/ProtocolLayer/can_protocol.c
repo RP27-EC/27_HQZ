@@ -8,6 +8,7 @@
 #include "board_comm_config.h"
 
 /* CAN1 接收分发 */
+/* 四轮、电容与无线充电接收分发 */
 void CAN1_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
 	switch (rxId)
@@ -36,7 +37,8 @@ void CAN1_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 		
 		case ID_WIRELESS_CHARGE:
 			memcpy(&wireless_rx_info,rxBuf,sizeof(wireless_rx_info_t));
-		  wireless_rx_info.charging_power = int16_to_float(wireless_rx_info.charging_power, 32000, -32000, 150, 0);
+        /* 无线充电功率按协议量程还原 */
+			wireless_rx_info.charging_power = int16_to_float(wireless_rx_info.charging_power, 32000, -32000, 150, 0);
 			break;
 		
 		
@@ -46,6 +48,7 @@ void CAN1_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 }
 
 /* CAN2 接收分发 */
+/* 上板心跳报文接收分发 */
 void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
 	switch (rxId)

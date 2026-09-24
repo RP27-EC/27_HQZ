@@ -9,27 +9,28 @@
 #include "pid.h"
 #include "rp_math.h"
 
-launcher_t launcher;
+launcher_t launcher; /* 发射机构对外状态 */
 
-static uint16_t launcher_fric_ready_count;
-uint8_t launcher_jam_count;
-static uint16_t launcher_fric_stop_count;
-static uint8_t launcher_dial_last_online;
-static uint8_t launcher_dial_stopped;
-static uint32_t launcher_dial_stop_tick;
-static uint8_t launcher_dial_target_synced;
-static uint8_t launcher_dial_recovery_repeat;
-static int8_t launcher_dial_motion_direction;
-static int64_t launcher_dial_target;
-static int64_t launcher_dial_feed_target;
+static uint16_t launcher_fric_ready_count; /* 摩擦轮达速确认计数 */
+uint8_t launcher_jam_count; /* 堵转次数，调试可观测 */
+static uint16_t launcher_fric_stop_count; /* 摩擦轮停转确认计数 */
+static uint8_t launcher_dial_last_online; /* 拨盘上次在线状态 */
+static uint8_t launcher_dial_stopped; /* 1 = 拨盘已停机 */
+static uint32_t launcher_dial_stop_tick; /* 上次停机命令时刻 */
+static uint8_t launcher_dial_target_synced; /* 目标是否已对齐反馈 */
+static uint8_t launcher_dial_recovery_repeat; /* 恢复后是否回连发 */
+static int8_t launcher_dial_motion_direction; /* 拨盘运动方向 */
+static int64_t launcher_dial_target; /* 拨盘绝对目标角度，count */
+static int64_t launcher_dial_feed_target; /* 退让前供弹目标，count */
 
-static pid_ctrl_t launcher_dial_angle_pid;
-static pid_ctrl_t launcher_dial_speed_pid;
-pid_ctrl_t launcher_dial_repeat_pid;
+static pid_ctrl_t launcher_dial_angle_pid; /* 拨盘位置环 */
+static pid_ctrl_t launcher_dial_speed_pid; /* 拨盘单发速度环 */
+pid_ctrl_t launcher_dial_repeat_pid; /* 拨盘连发速度环 */
 
+/* 按步长将当前值斜坡到目标值 */
 static float Launcher_Ramp(float current, float target, float step)
 {
-    float diff = target - current;
+    float diff = target - current; /* 剩余变化量 */
 
     if (diff > step)
     {
@@ -44,24 +45,28 @@ static float Launcher_Ramp(float current, float target, float step)
     return target;
 }
 
+/* 左/右摩擦轮是否在线 */
 static uint8_t Launcher_FricOnline(uint8_t index)
 {
     return ((rm_motor[index].state != NULL) &&
             (rm_motor[index].state->status == DEV_ONLINE)) ? 1u : 0u;
 }
 
+/* 拨盘是否在线 */
 static uint8_t Launcher_DialOnline(void)
 {
     return (dail_motor.KT_motor_info.state_info.work_state == M_ONLINE) ? 1u : 0u;
 }
 
+/* 拨盘角度按配置方向取符号 */
 static int32_t Launcher_DialAngle(void)
 {
-    int32_t raw = dail_motor.KT_motor_info.rx_info.encoder_sum;
+    int32_t raw = dail_motor.KT_motor_info.rx_info.encoder_sum; /* 累计编码器值 */
 
     return (LAUNCHER_DIAL_ANGLE_SIGN < 0.0f) ? -raw : raw;
 }
 
+/* 拨盘单圈编码器角度 */
 static int32_t Launcher_DialEncoder(void)
 {
     return (int32_t)dail_motor.KT_motor_info.rx_info.encoder;
@@ -72,23 +77,26 @@ static int64_t Launcher_AbsInt64(int64_t value)
     return (value < 0) ? -value : value;
 }
 
+/* 判断拨盘是否到达目标容差 */
 static uint8_t Launcher_DialAtTarget(int64_t target)
 {
-    int64_t error = target - (int64_t)Launcher_DialAngle();
+    int64_t error = target - (int64_t)Launcher_DialAngle(); /* 目标残差 */
 
     return (Launcher_AbsInt64(error) <=
             (int64_t)LAUNCHER_DIAL_STOP_ERROR) ? 1u : 0u;
 }
 
+/* 以力矩模式下发拨盘电流 */
 static void Launcher_DialApplyTorque(int16_t current)
 {
     if ((dail_motor.W_iqControl != NULL) && (dail_motor.tx_W_cmd != NULL))
     {
-        dail_motor.W_iqControl(&dail_motor, current);
+        dail_motor.W_iqControl(&dail_motor, current); /* 写入电流环 */
         (void)dail_motor.tx_W_cmd(&dail_motor, TORQUE_CLOSE_LOOP_ID);
     }
 }
 
+/* 清空拨盘 PID 历史状态 */
 static void Launcher_DialClearPid(void)
 {
     launcher_dial_angle_pid.integral = 0.0f;
@@ -110,6 +118,7 @@ static void Launcher_DialClearPid(void)
     launcher_dial_repeat_pid.out = 0.0f;
 }
 
+/* 安全停机，保留重试间隔 */
 static HAL_StatusTypeDef Launcher_DialStop(void)
 {
     Launcher_DialClearPid();
@@ -121,6 +130,7 @@ static HAL_StatusTypeDef Launcher_DialStop(void)
     return dail_motor.tx_W_cmd(&dail_motor, MOTOR_STOP_ID);
 }
 
+/* 拨盘进入闭环运行 */
 static HAL_StatusTypeDef Launcher_DialRun(void)
 {
     if (dail_motor.tx_W_cmd == NULL)
@@ -131,10 +141,11 @@ static HAL_StatusTypeDef Launcher_DialRun(void)
     return dail_motor.tx_W_cmd(&dail_motor, MOTOR_RUN_ID);
 }
 
+/* 位置环生成速度目标，再由速度环出力矩 */
 static void Launcher_DialPositionControl(int64_t target)
 {
-    float speed_target;
-    int16_t current_output;
+    float speed_target;    /* 位置环输出的速度目标 */
+    int16_t current_output;/* 速度环输出的力矩电流 */
 
     if (Launcher_DialOnline() == 0u)
     {
@@ -143,34 +154,35 @@ static void Launcher_DialPositionControl(int64_t target)
         return;
     }
 
-    launcher_dial_angle_pid.target = (float)target;
-    launcher_dial_angle_pid.measure = (float)Launcher_DialAngle();
+    launcher_dial_angle_pid.target = (float)target; /* 目标角 */
+    launcher_dial_angle_pid.measure = (float)Launcher_DialAngle(); /* 反馈角 */
     launcher_dial_angle_pid.err =
         launcher_dial_angle_pid.target - launcher_dial_angle_pid.measure;
     single_pid_ctrl(&launcher_dial_angle_pid);
 
-    speed_target = constrain(launcher_dial_angle_pid.out,
+    speed_target = constrain(launcher_dial_angle_pid.out, /* 限制速度目标 */
                              -(float)LAUNCHER_DIAL_MAX_SPEED_DPS,
                              (float)LAUNCHER_DIAL_MAX_SPEED_DPS);
 
-    launcher_dial_speed_pid.target = speed_target;
+    launcher_dial_speed_pid.target = speed_target; /* 速度目标 */
     launcher_dial_speed_pid.measure =
         LAUNCHER_DIAL_SPEED_SIGN *
-        (float)dail_motor.KT_motor_info.rx_info.speed;
+        (float)dail_motor.KT_motor_info.rx_info.speed; /* 反馈速度 */
     launcher_dial_speed_pid.err =
         launcher_dial_speed_pid.target - launcher_dial_speed_pid.measure;
     single_pid_ctrl(&launcher_dial_speed_pid);
 
-    current_output = (int16_t)constrain(
+    current_output = (int16_t)constrain( /* 电流输出限幅 */
         LAUNCHER_DIAL_OUTPUT_SIGN * launcher_dial_speed_pid.out,
         -LAUNCHER_DIAL_CURRENT_LIMIT,
         LAUNCHER_DIAL_CURRENT_LIMIT);
     Launcher_DialApplyTorque(current_output);
 }
 
+/* 连发独立速度环 */
 static void Launcher_DialSpeedControl(void)
 {
-    int16_t current_output;
+    int16_t current_output; /* 连发速度环输出 */
 
     if (Launcher_DialOnline() == 0u)
     {
@@ -179,7 +191,7 @@ static void Launcher_DialSpeedControl(void)
         return;
     }
 
-    launcher_dial_repeat_pid.target =
+    launcher_dial_repeat_pid.target = /* 连发目标速度 */
         LAUNCHER_DIAL_DIRECTION * (float)LAUNCHER_DIAL_REPEAT_SPEED_DPS;
     launcher_dial_repeat_pid.measure =
         LAUNCHER_DIAL_SPEED_SIGN *
@@ -188,20 +200,21 @@ static void Launcher_DialSpeedControl(void)
         launcher_dial_repeat_pid.target - launcher_dial_repeat_pid.measure;
     single_pid_ctrl(&launcher_dial_repeat_pid);
 
-    current_output = (int16_t)constrain(
+    current_output = (int16_t)constrain( /* 连发电流限幅 */
         LAUNCHER_DIAL_OUTPUT_SIGN * launcher_dial_repeat_pid.out,
         -LAUNCHER_DIAL_CURRENT_LIMIT,
         LAUNCHER_DIAL_CURRENT_LIMIT);
     Launcher_DialApplyTorque(current_output);
 }
 
+/* 低速高电流连续确认后判定堵转 */
 static uint8_t Launcher_DialBlockCheck(uint8_t moving)
 {
-    uint8_t blocked;
-    float speed = fabsf((float)dail_motor.KT_motor_info.rx_info.speed);
-    float current = fabsf((float)dail_motor.KT_motor_info.rx_info.current);
+    uint8_t blocked; /* 本拍是否疑似堵转 */
+    float speed = fabsf((float)dail_motor.KT_motor_info.rx_info.speed); /* 反馈转速 */
+    float current = fabsf((float)dail_motor.KT_motor_info.rx_info.current); /* 反馈电流 */
 
-    blocked = (moving != 0u) &&
+    blocked = (moving != 0u) && /* 旋转中且低速高流 */
               (speed <= (float)LAUNCHER_DIAL_JAM_SPEED_DPS) &&
               (current >= (float)LAUNCHER_DIAL_JAM_CURRENT_RAW);
 
@@ -221,10 +234,11 @@ static uint8_t Launcher_DialBlockCheck(uint8_t moving)
             LAUNCHER_DIAL_JAM_CONFIRM_TICKS) ? 1u : 0u;
 }
 
+/* 堵转后反向退让，再回到原供弹目标 */
 static void Launcher_DialEnterStuckRecovery(uint8_t continuous)
 {
-    int64_t current_angle = (int64_t)Launcher_DialAngle();
-    int64_t error = launcher_dial_target - current_angle;
+    int64_t current_angle = (int64_t)Launcher_DialAngle(); /* 当前绝对角度 */
+    int64_t error = launcher_dial_target - current_angle; /* 目标残差 */
 
     launcher_dial_recovery_repeat = continuous;
     launcher_dial_feed_target =
@@ -243,11 +257,13 @@ static void Launcher_DialEnterStuckRecovery(uint8_t continuous)
     Launcher_DialClearPid();
 }
 
+/* 拨盘状态机：单发升沿、连发、退让与复位 */
 static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
 {
-    uint32_t now = HAL_GetTick();
-    int64_t current_angle = (int64_t)Launcher_DialAngle();
+    uint32_t now = HAL_GetTick(); /* 本次调度时刻 */
+    int64_t current_angle = (int64_t)Launcher_DialAngle(); /* 当前绝对角度 */
 
+    /* 首次对齐反馈，避免上电跳变 */
     if (launcher_dial_target_synced == 0u)
     {
         launcher_dial_target = current_angle;
@@ -260,6 +276,7 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
 
     switch (launcher.state)
     {
+    /* 待发：单发升沿或连发请求触发供弹 */
     case LAUNCHER_READY:
         if (single_rising != 0u)
         {
@@ -285,6 +302,7 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
 #endif
         break;
 
+    /* 单发：堵转优先，其次到达或超时 */
     case LAUNCHER_SINGLE:
         if (Launcher_DialBlockCheck(
                 (Launcher_AbsInt64(launcher_dial_target - current_angle) >
@@ -292,11 +310,11 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
         {
             Launcher_DialEnterStuckRecovery(0u);
         }
-        else if ((Launcher_DialAtTarget(launcher_dial_target) != 0u) ||
+        else if ((Launcher_DialAtTarget(launcher_dial_target) != 0u) || /* 到位 */
                  ((now - launcher.state_tick) >=
                   LAUNCHER_DIAL_SINGLE_TIMEOUT_MS))
         {
-            launcher.state = LAUNCHER_READY;
+            launcher.state = LAUNCHER_READY; /* 单发完成 */
             launcher.state_tick = now;
             launcher.jam_tick = 0u;
             launcher_jam_count = 0u;
@@ -304,10 +322,11 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
         }
         break;
 
+    /* 连发：持续速度环，松触发后回待发 */
     case LAUNCHER_REPEAT:
         if (continuous == 0u)
         {
-            launcher.state = LAUNCHER_READY;
+            launcher.state = LAUNCHER_READY; /* 松开连发 */
             launcher_dial_target_synced = 0u;
             Launcher_DialClearPid();
             break;
@@ -320,25 +339,27 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
 #endif
         break;
 
+    /* 退让完成后回原供弹目标 */
     case LAUNCHER_REVERSE:
         if ((Launcher_DialAtTarget(launcher_dial_target) != 0u) ||
             ((now - launcher.state_tick) >=
              LAUNCHER_DIAL_REVERSE_TIMEOUT_MS))
         {
-            launcher_dial_target = launcher_dial_feed_target;
+            launcher_dial_target = launcher_dial_feed_target; /* 回到原供弹目标 */
             launcher.state = LAUNCHER_RELOAD;
             launcher.state_tick = now;
             Launcher_DialClearPid();
         }
         break;
 
+    /* 回目标完成，按恢复类型回到待发或连发 */
     case LAUNCHER_RELOAD:
         if ((Launcher_DialAtTarget(launcher_dial_target) != 0u) ||
             ((now - launcher.state_tick) >=
              LAUNCHER_DIAL_RELOAD_TIMEOUT_MS))
         {
             launcher.jam_tick = 0u;
-            if (launcher_dial_recovery_repeat != 0u)
+            if (launcher_dial_recovery_repeat != 0u) /* 恢复连发 */
             {
                 launcher.state = LAUNCHER_REPEAT;
             }
@@ -352,6 +373,7 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
         }
         break;
 
+    /* 非法状态统一回待发 */
     default:
         launcher.state = LAUNCHER_READY;
         launcher_dial_target_synced = 0u;
@@ -361,6 +383,7 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
     launcher.dial_target_angle = (int32_t)launcher_dial_target;
 }
 
+/* 非发射状态下周期停机，避免丢帧导致失控 */
 static void Launcher_DialSafeStop(uint32_t now)
 {
     if (((launcher_dial_stopped == 0u) ||
@@ -376,8 +399,10 @@ static void Launcher_DialSafeStop(uint32_t now)
     launcher_dial_target_synced = 0u;
 }
 
+/* 根据发射请求选择拨盘控制模式 */
 static void Launcher_DialControl(uint8_t shoot_active)
 {
+    /* 未发射时仅保留停机流程 */
     if (shoot_active == 0u)
     {
         if ((launcher.state != LAUNCHER_SLEEP) &&
@@ -417,19 +442,20 @@ static void Launcher_DialControl(uint8_t shoot_active)
 #endif
 }
 
+/* 双摩擦轮速度环，离线或失能时卸力 */
 static void Launcher_FricControl(uint8_t enable)
 {
     for (uint8_t i = 0u; i < SHOOT_FRIC_NUM; i++)
     {
-        pid_ctrl_t *pid = rm_motor[i].ctrl->speed_ctrl;
+        pid_ctrl_t *pid = rm_motor[i].ctrl->speed_ctrl; /* 当前速度环 */
         float direction = (i == SHOOT_FRIC_L) ?
                           LAUNCHER_FRIC_L_DIRECTION :
                           LAUNCHER_FRIC_R_DIRECTION;
 
         if ((enable != 0u) && (Launcher_FricOnline(i) != 0u))
         {
-            pid->target = direction * launcher.fric_target_rpm;
-            pid->measure = (float)rm_motor[i].rx_info->encoder_speed;
+            pid->target = direction * launcher.fric_target_rpm; /* 目标转速 */
+            pid->measure = (float)rm_motor[i].rx_info->encoder_speed; /* 反馈转速 */
             pid->err = pid->target - pid->measure;
 
             if (launcher.state == LAUNCHER_STOPPING)
@@ -438,7 +464,7 @@ static void Launcher_FricControl(uint8_t enable)
             }
 
             single_pid_ctrl(pid);
-            rm_motor[i].tx_info->torque =
+            rm_motor[i].tx_info->torque = /* 力矩限幅 */
                 constrain(pid->out,
                           -LAUNCHER_FRIC_OUT_MAX,
                           LAUNCHER_FRIC_OUT_MAX);
@@ -455,13 +481,14 @@ static void Launcher_FricControl(uint8_t enable)
     RM_Group.group_set_torque(&RM_Group);
 }
 
+/* 双轮连续达速后才置就绪 */
 static void Launcher_UpdateFrictionReady(uint8_t enabled)
 {
-    float l_speed = fabsf((float)rm_motor[SHOOT_FRIC_L].rx_info->encoder_speed);
-    float r_speed = fabsf((float)rm_motor[SHOOT_FRIC_R].rx_info->encoder_speed);
+    float l_speed = fabsf((float)rm_motor[SHOOT_FRIC_L].rx_info->encoder_speed); /* 左轮转速 */
+    float r_speed = fabsf((float)rm_motor[SHOOT_FRIC_R].rx_info->encoder_speed); /* 右轮转速 */
 
-    launcher.fric_l_speed_rpm = l_speed;
-    launcher.fric_r_speed_rpm = r_speed;
+    launcher.fric_l_speed_rpm = l_speed; /* 左轮反馈 */
+    launcher.fric_r_speed_rpm = r_speed; /* 右轮反馈 */
 
     if ((enabled != 0u) &&
         (Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
@@ -486,9 +513,10 @@ static void Launcher_UpdateFrictionReady(uint8_t enabled)
         (launcher_fric_ready_count >= LAUNCHER_FRIC_READY_TIME_MS) ? 1u : 0u;
 }
 
+/* 初始化发射机构状态与三套 PID */
 void Launcher_Init(void)
 {
-    pid_ctrl_t *pid;
+    pid_ctrl_t *pid; /* 摩擦轮速度环临时指针 */
 
     launcher.state = LAUNCHER_SLEEP;
     launcher.state_tick = 0u;
@@ -565,24 +593,25 @@ void Launcher_Init(void)
     launcher_dial_repeat_pid.out = 0.0f;
 }
 
+/* 发射机构周期任务 */
 void Launcher_Work(void)
 {
-    uint32_t now = HAL_GetTick();
-    uint8_t launch_on;
-    uint8_t shoot_level;
-    uint8_t shoot_mode;
-    uint8_t shoot_active;
-    uint8_t dial_ready;
-    uint8_t single_rising;
-    int32_t current_angle;
+    uint32_t now = HAL_GetTick(); /* 本次调度时刻 */
+    uint8_t launch_on;            /* 发射系统总使能 */
+    uint8_t shoot_level;          /* 发射触发电平 */
+    uint8_t shoot_mode;           /* 0 = 单发，1 = 连发 */
+    uint8_t shoot_active;         /* 发射保持状态 */
+    uint8_t dial_ready;           /* 拨盘可参与控制 */
+    uint8_t single_rising;        /* 单发触发升沿 */
+    int32_t current_angle;        /* 拨盘当前角度 */
 
-    current_angle = Launcher_DialAngle();
+    current_angle = Launcher_DialAngle(); /* 当前拨盘角 */
     launcher.dial_angle = current_angle;
-    launcher.dial_online = Launcher_DialOnline();
+    launcher.dial_online = Launcher_DialOnline(); /* 拨盘在线 */
 
     if ((launcher_dial_last_online == 0u) && (launcher.dial_online != 0u))
     {
-        launcher.dial_zero_angle = current_angle;
+        launcher.dial_zero_angle = current_angle; /* 记录上电零点 */
         launcher_dial_target = current_angle;
         launcher_dial_feed_target = current_angle;
         launcher_dial_target_synced = 0u;
@@ -603,6 +632,7 @@ void Launcher_Work(void)
 
 
 
+    /* 发射总开关关闭：降速后进入休眠 */
     if (launch_on == 0u)
     {
         launcher.enabled = 0u;
@@ -655,6 +685,7 @@ void Launcher_Work(void)
     launcher.enabled = 1u;
     launcher_fric_stop_count = 0u;
 
+    /* 从停机态接管时重新采样拨盘零点 */
     if ((launcher.state == LAUNCHER_SLEEP) ||
         (launcher.state == LAUNCHER_STOPPING))
     {
@@ -668,7 +699,7 @@ void Launcher_Work(void)
     }
 
 
-    launcher.fric_target_rpm = LAUNCHER_FRIC_TARGET_RPM;
+    launcher.fric_target_rpm = LAUNCHER_FRIC_TARGET_RPM; /* 目标转速 */
     Launcher_UpdateFrictionReady(1u);
 
     shoot_level = Board_Rx_Info.shoot_pkt.shoot_level;
@@ -678,10 +709,10 @@ void Launcher_Work(void)
     shoot_mode = 0u;
 #endif
 
-    single_rising = ((shoot_level != 0u) &&
+    single_rising = ((shoot_level != 0u) && /* 单发升沿 */
                      (launcher.last_shoot_level == 0u) &&
                      (shoot_mode == 0u)) ? 1u : 0u;
-    shoot_active = (shoot_level != 0u) ? 1u : 0u;
+    shoot_active = (shoot_level != 0u) ? 1u : 0u; /* 发射保持 */
 
     if ((shoot_active != 0u) && (launcher_dial_stopped != 0u))
     {

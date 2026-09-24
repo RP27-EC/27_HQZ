@@ -7,11 +7,13 @@ void keyboard_cnt_max_set(rc_dev_t *rc_sen);
 void keyboard_status_update(kb_key_t *key);
 
 extern uint32_t micros(void);
-uint32_t tt1, tt2, ttp1;
+uint32_t tt1, tt2, ttp1; /* 遥控帧间隔计时 */
+
+/* 初始化遥控设备，默认离线 */
 void rc_init(rc_dev_t *rc_sen)
 {
 	// 初始化为离线状态
-	rc_sen->info->offline_cnt = rc_sen->info->offline_max_cnt + 1;
+	rc_sen->info->offline_cnt = rc_sen->info->offline_max_cnt + 1; /* 强制离线 */
 	rc_sen->work_state = DEV_OFFLINE;
 	
 	rc_reset_data(rc_sen);
@@ -26,6 +28,7 @@ void rc_init(rc_dev_t *rc_sen)
 /**
   * @brief  按键长按时间设置
   */
+/* 设置各按键的长按判定阈值 */
 void keyboard_cnt_max_set(rc_dev_t *rc_sen)
 {
 	rc_data_t *info = rc_sen->info;
@@ -53,21 +56,22 @@ void keyboard_cnt_max_set(rc_dev_t *rc_sen)
 /**
   * @brief  鼠标数据更新
   */
+/* 对鼠标速度做滑动平均，降低抖动 */
 void rc_interrupt_update(rc_dev_t *rc_sen)
 {
 	/* 鼠标速度均值滤波 */
-	static int16_t mouse_x[REMOTE_SMOOTH_TIMES], mouse_y[REMOTE_SMOOTH_TIMES];
-	static int16_t index = 0;
+	static int16_t mouse_x[REMOTE_SMOOTH_TIMES], mouse_y[REMOTE_SMOOTH_TIMES]; /* 历史缓存 */
+	static int16_t index = 0; /* 环形索引 */
 	if(index == REMOTE_SMOOTH_TIMES)
 	{
 		index = 0;
 	}
-	rc_sen->info->mouse_x -= (float)mouse_x[index] / (float)REMOTE_SMOOTH_TIMES;
-	rc_sen->info->mouse_y -= (float)mouse_y[index] / (float)REMOTE_SMOOTH_TIMES;
+	rc_sen->info->mouse_x -= (float)mouse_x[index] / (float)REMOTE_SMOOTH_TIMES; /* 减去旧值 */
+	rc_sen->info->mouse_y -= (float)mouse_y[index] / (float)REMOTE_SMOOTH_TIMES; /* 减去旧值 */
 	mouse_x[index] = rc_sen->info->mouse_vx;
 	mouse_y[index] = rc_sen->info->mouse_vy;
-	rc_sen->info->mouse_x += (float)mouse_x[index] / (float)REMOTE_SMOOTH_TIMES;
-	rc_sen->info->mouse_y += (float)mouse_y[index] / (float)REMOTE_SMOOTH_TIMES;
+	rc_sen->info->mouse_x += (float)mouse_x[index] / (float)REMOTE_SMOOTH_TIMES; /* 加入新值 */
+	rc_sen->info->mouse_y += (float)mouse_y[index] / (float)REMOTE_SMOOTH_TIMES; /* 加入新值 */
 	
 	index++;
 	
@@ -79,22 +83,22 @@ void rc_update(rc_dev_t *rc_sen, uint8_t *rxBuf)
 {
 
 	rc_data_t *rc_info = rc_sen->info;
-	rc_info->offline_cnt=0;
+	rc_info->offline_cnt=0; /* 收到帧则在线 */
 	/* 遥控器 */
-	rc_info->ch0 = (rxBuf[0] | rxBuf[1] << 8) & 0x07FF;
+	rc_info->ch0 = (rxBuf[0] | rxBuf[1] << 8) & 0x07FF; /* 右横 */
 	rc_info->ch0 -= 1024;
-	rc_info->ch1 = (rxBuf[1] >> 3 | rxBuf[2] << 5) & 0x07FF;
+	rc_info->ch1 = (rxBuf[1] >> 3 | rxBuf[2] << 5) & 0x07FF; /* 右纵 */
 	rc_info->ch1 -= 1024;
-	rc_info->ch2 = (rxBuf[2] >> 6 | rxBuf[3] << 2 | rxBuf[4] << 10) & 0x07FF;
+	rc_info->ch2 = (rxBuf[2] >> 6 | rxBuf[3] << 2 | rxBuf[4] << 10) & 0x07FF; /* 左横 */
 	rc_info->ch2 -= 1024;
-	rc_info->ch3 = (rxBuf[4] >> 1 | rxBuf[5] << 7) & 0x07FF;
+	rc_info->ch3 = (rxBuf[4] >> 1 | rxBuf[5] << 7) & 0x07FF; /* 左纵 */
 	rc_info->ch3 -= 1024;
 
-	rc_info->thumbwheel.value = ((int16_t)rxBuf[16] | ((int16_t)rxBuf[17] << 8)) & 0x07ff;
+	rc_info->thumbwheel.value = ((int16_t)rxBuf[16] | ((int16_t)rxBuf[17] << 8)) & 0x07ff; /* 波轮 */
 	rc_info->thumbwheel.value -= 1024;
 
-	rc_info->s1.value = ((rxBuf[5] >> 4) & 0x000C) >> 2;
-	rc_info->s2.value = (rxBuf[5] >> 4) & 0x0003;	
+	rc_info->s1.value = ((rxBuf[5] >> 4) & 0x000C) >> 2; /* S1 档位 */
+	rc_info->s2.value = (rxBuf[5] >> 4) & 0x0003; /* S2 档位 */
 	/*遥控器限位置零*/
 	if(rc_dev.info->ch3== -660)
 	{
@@ -102,12 +106,12 @@ void rc_update(rc_dev_t *rc_sen, uint8_t *rxBuf)
 	}
 
 	/* 键鼠 */
-	rc_info->mouse_vx = rxBuf[6]  | (rxBuf[7 ] << 8);
-	rc_info->mouse_vy = rxBuf[8]  | (rxBuf[9 ] << 8);
-	rc_info->mouse_vz = rxBuf[10] | (rxBuf[11] << 8);
-  rc_info->mouse_btn_l.value = rxBuf[12] & 0x01;
-  rc_info->mouse_btn_r.value = rxBuf[13] & 0x01;
-	rc_info->key_v   =  rxBuf[14] | (rxBuf[15] << 8);
+	rc_info->mouse_vx = rxBuf[6]  | (rxBuf[7 ] << 8); /* 鼠标 X */
+	rc_info->mouse_vy = rxBuf[8]  | (rxBuf[9 ] << 8); /* 鼠标 Y */
+	rc_info->mouse_vz = rxBuf[10] | (rxBuf[11] << 8); /* 鼠标滚轮 */
+  rc_info->mouse_btn_l.value = rxBuf[12] & 0x01; /* 左键 */
+  rc_info->mouse_btn_r.value = rxBuf[13] & 0x01; /* 右键 */
+	rc_info->key_v   =  rxBuf[14] | (rxBuf[15] << 8); /* 键盘位图 */
 	
   rc_info->W.value = 	KEY_PRESSED_W;
   rc_info->S.value =    KEY_PRESSED_S;
@@ -164,7 +168,7 @@ void keyboard_update(rc_data_t	*info)
  */
 void keyboard_status_update(kb_key_t *key)
 {
-	key->last_status = key->status;
+	key->last_status = key->status; /* 保存上拍状态 */
 
     switch(key->value)
     {
@@ -172,31 +176,31 @@ void keyboard_status_update(kb_key_t *key)
         {
             if(key->cnt != 0)
             {
-                key->status = press_to_release;
+				key->status = press_to_release; /* 释放升沿 */
                 key->cnt = 0;
             }
             else
             {
-                key->status = release;
+				key->status = release; /* 持续释放 */
                 key->cnt = 0;
             }
             break;
         }
         case 1:
         {
-            key->cnt++;
+			key->cnt++; /* 按下计数 */
             if(key->cnt == 1)
             {
-                key->status = release_to_press;
+				key->status = release_to_press; /* 按下升沿 */
             }
             else if(key->cnt >= key->cnt_max)
             {
-                key->status = long_press;
+				key->status = long_press; /* 长按 */
 				key->cnt = key->cnt_max;
             }
             else
             {
-                key->status = short_press;
+				key->status = short_press; /* 短按保持 */
             }
         } 
     }

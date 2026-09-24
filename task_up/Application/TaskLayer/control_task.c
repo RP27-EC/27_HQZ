@@ -10,11 +10,13 @@
 #include "board_remote_config.h"
 #include "launcher.h"
 
-volatile imu_debug_t imu_dbg;
+volatile imu_debug_t imu_dbg; /* IMU 在线调试快照 */
+
+/* 将 IMU 内部数据同步到调试结构体 */
 
 static void imu_debug_update(void)
 {
-    imu_data_t *info = imu_dev.info;
+    imu_data_t *info = imu_dev.info; /* 原始 IMU 数据源 */
 
     imu_dbg.acc_x = info->raw_info.acc_x;
     imu_dbg.acc_y = info->raw_info.acc_y;
@@ -46,6 +48,7 @@ static void imu_debug_update(void)
     imu_dbg.err_code = (uint8_t)imu_dev.work_state.err_code;
 }
 
+/* 底盘失能时让云台电机卸力，保证安全 */
 static void gimbal_can_send(void)
 {
     if ((Board_HeartBeat.status == DEV_ONLINE) &&
@@ -60,12 +63,14 @@ static void gimbal_can_send(void)
     }
 }
 
+/* 上板 1 kHz 控制任务，顺序：IMU -> 模块 -> CAN -> 发射 -> 通信 */
 void StartControlTask(void const *argument)
 {
     (void)argument;
 
     for (;;)
     {
+        /* 仅错误以外的状态允许惯导更新 */
         if ((imu_dev.work_state.err_code == IMU_E_NONE) ||
             (imu_dev.work_state.err_code == IMU_E_CALI))
         {

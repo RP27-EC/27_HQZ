@@ -5,14 +5,15 @@
 #include "rc_sensor.h"
 #include "rp_math.h"
 
-chassis_cmd_t chassis_input_cmd;
+chassis_cmd_t chassis_input_cmd; /* 输入解析后的底盘指令 */
 
-static uint8_t keyboard_source_active;
-static uint8_t last_f_pressed;
+static uint8_t keyboard_source_active; /* 键鼠输入源已开启 */
+static uint8_t last_f_pressed; /* 上拍 F 键状态 */
 
+/* 遥控通道归一化，含死区 */
 static float Chassis_RcAxisValue(int16_t axis)
 {
-    float value = (float)axis;
+    float value = (float)axis; /* 去死区输入 */
 
     if ((value > -CHASSIS_RC_DEADBAND) && (value < CHASSIS_RC_DEADBAND))
     {
@@ -32,6 +33,7 @@ static float Chassis_RcAxisValue(int16_t axis)
     return constrain(value, -1.0f, 1.0f);
 }
 
+/* 当前是否由键盘模式接管 */
 uint8_t Chassis_Input_IsKeyboardMode(void)
 {
 #if !CHASSIS_KEYBOARD_INPUT_ENABLE
@@ -47,12 +49,13 @@ uint8_t Chassis_Input_IsKeyboardMode(void)
 #endif
 }
 
+/* WASD 平移、QE 旋转，Shift/Ctrl 调速 */
 static void Chassis_Input_Keyboard(chassis_cmd_t *cmd, const rc_data_t *rc)
 {
-    float forward = 0.0f;
-    float left = 0.0f;
-    float spin = 0.0f;
-    float scale = 1.0f;
+    float forward = 0.0f; /* 前后输入 */
+    float left = 0.0f;    /* 左右输入 */
+    float spin = 0.0f;    /* 旋转输入 */
+    float scale = 1.0f;   /* 速度倍率 */
 
     if ((rc->key_v & KEY_PRESSED_OFFSET_W) != 0u)
     {
@@ -95,6 +98,7 @@ static void Chassis_Input_Keyboard(chassis_cmd_t *cmd, const rc_data_t *rc)
     cmd->source = CHASSIS_SRC_KEYBOARD;
 }
 
+/* 初始化输入缓存与按键状态 */
 void Chassis_Input_Init(void)
 {
     chassis_input_cmd.vx = 0.0f;
@@ -106,16 +110,18 @@ void Chassis_Input_Init(void)
     last_f_pressed = 0u;
 }
 
+/* 上层模式覆盖输入来源 */
 void Chassis_Input_SetSource(chassis_source_e source)
 {
     chassis_input_cmd.source = source;
 }
 
+/* 周期解析键鼠或遥控，输出统一底盘指令 */
 void Chassis_Input_Update(void)
 {
-    chassis_cmd_t cmd;
-    const rc_data_t *rc = rc_dev.info;
-    uint8_t f_pressed = 0u;
+    chassis_cmd_t cmd;                 /* 本周期输出 */
+    const rc_data_t *rc = rc_dev.info; /* 遥控数据源 */
+    uint8_t f_pressed = 0u;            /* F 键当前状态 */
 
     cmd.vx = 0.0f;
     cmd.vy = 0.0f;
@@ -123,6 +129,7 @@ void Chassis_Input_Update(void)
     cmd.valid = 0u;
     cmd.source = CHASSIS_SRC_NONE;
 
+    /* 遥控离线时清零输入，避免保留旧速度 */
     if ((rc_dev.work_state != DEV_ONLINE) || (rc == NULL))
     {
         keyboard_source_active = 0u;
@@ -139,6 +146,7 @@ void Chassis_Input_Update(void)
     }
     last_f_pressed = f_pressed;
 
+    /* 键鼠模式优先于遥控摇杆 */
 #if CHASSIS_KEYBOARD_INPUT_ENABLE
     if (Chassis_Input_IsKeyboardMode() != 0u)
     {
@@ -149,6 +157,7 @@ void Chassis_Input_Update(void)
 #endif
 
 #if CHASSIS_RC_INPUT_ENABLE
+    /* S1 上拨才允许遥控底盘直控 */
     if (rc->s1.value == RC_SW_UP)
     {
         cmd.vx = -Chassis_RcAxisValue(rc->ch3) * CHASSIS_MAX_VX;

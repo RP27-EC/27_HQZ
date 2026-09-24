@@ -15,15 +15,15 @@
 #include "chassis_spin.h"
 
 
-Board_Tx_Pkt_t    board_tx_pkt;
-Board_Rx_Meg_t    board_rx_meg;
+Board_Tx_Pkt_t board_tx_pkt; /* 下板发送缓存 */
+Board_Rx_Meg_t board_rx_meg; /* 上板反馈缓存 */
 
-Board_Status_t board_status = 
+Board_Status_t board_status = /* 板间链路状态 */
 {
 	.offline_cnt_max = BOARD_OFFLINE_CNT_MAX,
 };
 
-Board_t board = 
+Board_t board = /* 板间通信对象 */
 {
 	.tx_pkt = &board_tx_pkt,
 	.rx_meg = &board_rx_meg,
@@ -34,6 +34,7 @@ Board_t board =
 
 
 
+/* 绑定收发函数并复位链路状态 */
 void Board_Init(Board_t* board)
 {
 	board->status->offline_cnt = board->status->offline_cnt_max;
@@ -54,6 +55,7 @@ void Board_Init(Board_t* board)
 }
 
 
+/* 每次周期累加离线计数，收到报文时清零 */
 void Board_Heart_Beat(Board_t* board)
 {
 	board->status->offline_cnt ++;
@@ -71,48 +73,50 @@ void Board_Heart_Beat(Board_t* board)
 
 
 
-uint8_t  pkt_01[8];
-uint8_t  pkt_02[8];
-uint8_t  pkt_03[8];
-uint8_t  pkt_04[8];
-uint8_t  pkt_05[8];
+uint8_t pkt_01[8]; /* D1 整车状态发送缓存 */
+uint8_t pkt_02[8]; /* D2 云台目标发送缓存 */
+uint8_t pkt_03[8]; /* D3 射击信息发送缓存 */
+uint8_t pkt_04[8]; /* D4 血量数据发送缓存 */
+uint8_t pkt_05[8]; /* D5 遥控控制发送缓存 */
+
+/* 打包 D1：整车状态、速度与发射状态 */
 
 void Board_Tx_Pkt_01(Board_t* board)
 {
-	memset(pkt_01, 0, 8);
+	memset(pkt_01, 0, 8); /* 清空缓存 */
 	
-	pkt_01[0] |= (board->tx_pkt->car_pkt.car_state & 0x03) << 0;
-	pkt_01[0] |= (board->tx_pkt->car_pkt.gimbal_mode & 0x01) << 2;
-	pkt_01[0] |= (board->tx_pkt->car_pkt.vision_mode & 0x07) << 3;
-	pkt_01[0] |= (board->tx_pkt->car_pkt.game_start & 0x01) << 6;
-	pkt_01[0] |= (board->tx_pkt->car_pkt.my_color & 0x01) << 7;
+	pkt_01[0] |= (board->tx_pkt->car_pkt.car_state & 0x03) << 0;   /* 车辆状态 */
+	pkt_01[0] |= (board->tx_pkt->car_pkt.gimbal_mode & 0x01) << 2; /* 云台模式 */
+	pkt_01[0] |= (board->tx_pkt->car_pkt.vision_mode & 0x07) << 3; /* 视觉模式 */
+	pkt_01[0] |= (board->tx_pkt->car_pkt.game_start & 0x01) << 6;  /* 比赛开始 */
+	pkt_01[0] |= (board->tx_pkt->car_pkt.my_color & 0x01) << 7;    /* 己方颜色 */
 	
-	uint16_t t1,t2;
+	uint16_t t1,t2; /* 速度压缩值 */
 	
-	t1 = float_to_uint(board->tx_pkt->car_pkt.v_x,-8000.f,8000.f,16);      //pitch陀螺仪模式目标角度
-	t2 = float_to_uint(board->tx_pkt->car_pkt.v_y,-8000.f,8000.f,16);  
+	t1 = float_to_uint(board->tx_pkt->car_pkt.v_x,-8000.f,8000.f,16); /* v_x 压缩值 */
+	t2 = float_to_uint(board->tx_pkt->car_pkt.v_y,-8000.f,8000.f,16); /* v_y 压缩值 */
 	
-	pkt_01[1] = t1>>8;
-	pkt_01[2] = t1;
-	pkt_01[3] = t2>>8;
-	pkt_01[4] = t2;
+	pkt_01[1] = t1>>8; /* v_x 高字节 */
+	pkt_01[2] = t1;    /* v_x 低字节 */
+	pkt_01[3] = t2>>8; /* v_y 高字节 */
+	pkt_01[4] = t2;    /* v_y 低字节 */
 
 									 
-	pkt_01[5] |= (board->tx_pkt->shoot_pkt.launch_state & 0x01) << 0;
-	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_mode & 0x01) << 1;
-	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_level & 0x01) << 2;
-	pkt_01[5] |= (board->tx_pkt->gimbal_target_pkt.is_hole & 0x01) << 3;
+	pkt_01[5] |= (board->tx_pkt->shoot_pkt.launch_state & 0x01) << 0; /* 发射许可 */
+	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_mode & 0x01) << 1; /* 发射模式 */
+	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_level & 0x01) << 2; /* 触发电平 */
+	pkt_01[5] |= (board->tx_pkt->gimbal_target_pkt.is_hole & 0x01) << 3; /* 过洞标志 */
 	
 
 	CAN_SendData(&hfdcan2, ID_PKT_01, pkt_01);
 	
-//	board->status->offline_cnt ++;
 	
 }
 
+/* 打包 D2：云台目标角度 */
 void Board_Tx_Pkt_02(Board_t* board)
 {
-	uint16_t t1,t2,t3,t4;
+	uint16_t t1,t2,t3,t4; /* 四个角度压缩值 */
 	
 	t1 = float_to_uint(board->tx_pkt->gimbal_target_pkt.pitch_imu_tar,-360.f,360.f,16);      //pitch陀螺仪模式目标角度
 	t2 = float_to_uint(board->tx_pkt->gimbal_target_pkt.yaw_imu_tar,-360.f,360.f,16);  
@@ -136,9 +140,10 @@ void Board_Tx_Pkt_02(Board_t* board)
 	
 }
 
+/* 打包 D3：射击热量与冷却信息 */
 void Board_Tx_Pkt_03(Board_t* board)
 {
-	uint16_t t1,t2;
+	uint16_t t1,t2; /* 弹速与射频压缩值 */
 	
 	t1 = float_to_uint(board->tx_pkt->judge_shoot_pkt.shoot_speed,-50.f,50.f,16);    
 	t2 = float_to_uint(board->tx_pkt->judge_shoot_pkt.shoot_freq,-50.f,50.f,16);  
@@ -162,6 +167,7 @@ void Board_Tx_Pkt_03(Board_t* board)
 }
 
 
+/* 打包 D4：透传血量字段 */
 void Board_Tx_Pkt_04(Board_t* board)
 {
 	for(uint8_t i = 0;i<8;i++)
@@ -176,6 +182,7 @@ void Board_Tx_Pkt_04(Board_t* board)
 }
 
 
+/* 摇杆原始值映射到最大角速度 */
 static float Board_Remote_Axis_To_Rate(int16_t axis, float max_rate)
 {
     float value = (float)axis;
@@ -200,17 +207,18 @@ static float Board_Remote_Axis_To_Rate(int16_t axis, float max_rate)
     return value * max_rate;
 }
 
+/* 打包 D5：遥控角速度或键鼠增量 */
 void Board_Tx_Pkt_05(Board_t* board)
 {
-    static uint32_t last_mouse_seq;
-    float yaw_rate = 0.0f;
-    float pitch_rate = 0.0f;
-    int16_t yaw_raw = 0;
-    int16_t pitch_raw = 0;
-    uint8_t valid = 0u;
-    uint8_t ctrl_source = BOARD_D5_CTRL_RC;
-    uint8_t cmd_type = BOARD_D5_CMD_RC_RATE;
-    uint8_t button_bits = 0u;
+    static uint32_t last_mouse_seq; /* 鼠标更新序号 */
+    float yaw_rate = 0.0f;   /* Yaw 角速度，deg/s */
+    float pitch_rate = 0.0f; /* Pitch 角速度，deg/s */
+    int16_t yaw_raw = 0;     /* Yaw 压缩值 */
+    int16_t pitch_raw = 0;   /* Pitch 压缩值 */
+    uint8_t valid = 0u;      /* 控制数据有效 */
+    uint8_t ctrl_source = BOARD_D5_CTRL_RC; /* 输入来源 */
+    uint8_t cmd_type = BOARD_D5_CMD_RC_RATE; /* 控制量类型 */
+    uint8_t button_bits = 0u; /* 鼠标键位 */
 
     if (rc_dev.work_state == DEV_ONLINE)
     {
@@ -223,6 +231,7 @@ void Board_Tx_Pkt_05(Board_t* board)
             button_bits = (uint8_t)((rc_dev.info->mouse_btn_l.value & 0x01u) |
                                     ((rc_dev.info->mouse_btn_r.value & 0x01u) << 1));
 
+        /* 鼠标增量按更新序号只取一次 */
             if (rc_dev.info->update_seq != last_mouse_seq)
             {
                 last_mouse_seq = rc_dev.info->update_seq;
@@ -233,6 +242,8 @@ void Board_Tx_Pkt_05(Board_t* board)
         else
 #endif
         {
+        /* 遥控角速度或鼠标增量二选一装箱 */
+            /* 切回遥控时同步序号，防止旧增量被重放 */
             last_mouse_seq = rc_dev.info->update_seq;
 #if CHASSIS_BRINGUP_ENABLE
             if (rc_dev.info->s1.value == RC_SW_DOWN)
@@ -271,6 +282,7 @@ void Board_Tx_Pkt_05(Board_t* board)
     }
 
     memset(pkt_05, 0, 8);
+    /* D5 状态位，低位依次为有效、来源、类型 */
     pkt_05[0] = (valid & 0x01u) |
                 ((ctrl_source & 0x01u) << 1) |
                 ((cmd_type & 0x01u) << 2);
@@ -285,6 +297,7 @@ void Board_Tx_Pkt_05(Board_t* board)
     CAN_SendData(&hfdcan2, ID_PKT_05, pkt_05);
 }
 
+/* 解析 C1：上板设备状态与云台姿态 */
 void Board_Rx_Meg_01(Board_t* board,uint8_t* rxbuf)
 {
 	board->rx_meg->state_meg.yaw_motor_state= (rxbuf[0] >> 0) & 0x01;
@@ -296,8 +309,8 @@ void Board_Rx_Meg_01(Board_t* board,uint8_t* rxbuf)
 	board->rx_meg->state_meg.vision_state= (rxbuf[0] >> 6) & 0x01;
 	board->rx_meg->state_meg.is_down= rxbuf[1];
 	
-	uint16_t t1 = ((uint16_t)rxbuf[2] << 8) | rxbuf[3];  
-  uint16_t t2 = ((uint16_t)rxbuf[4] << 8) | rxbuf[5];
+	uint16_t t1 = ((uint16_t)rxbuf[2] << 8) | rxbuf[3]; /* Yaw 目标原始值 */
+  uint16_t t2 = ((uint16_t)rxbuf[4] << 8) | rxbuf[5]; /* Pitch 目标原始值 */
 
   board->rx_meg->vision_meg.vision_yaw_tar = uint_to_float(t1, -360.0f, 360.0f,16);
   board->rx_meg->vision_meg.vision_pitch_tar = uint_to_float(t2, -360.0f, 360.0f,16);
@@ -310,12 +323,13 @@ void Board_Rx_Meg_01(Board_t* board,uint8_t* rxbuf)
 }
 
 
+/* 解析 C2：云台机械角与 IMU 角 */
 void Board_Rx_Meg_02(Board_t* board,uint8_t* rxbuf)
 {
-  uint16_t t1 = ((uint16_t)rxbuf[0] << 8) | rxbuf[1];  
-  uint16_t t2 = ((uint16_t)rxbuf[2] << 8) | rxbuf[3];
-  uint16_t t3 = ((uint16_t)rxbuf[4] << 8) | rxbuf[5];
-  uint16_t t4 = ((uint16_t)rxbuf[6] << 8) | rxbuf[7];
+  uint16_t t1 = ((uint16_t)rxbuf[0] << 8) | rxbuf[1]; /* Yaw 机械角原始值 */
+  uint16_t t2 = ((uint16_t)rxbuf[2] << 8) | rxbuf[3]; /* Pitch 机械角原始值 */
+  uint16_t t3 = ((uint16_t)rxbuf[4] << 8) | rxbuf[5]; /* Yaw IMU 角原始值 */
+  uint16_t t4 = ((uint16_t)rxbuf[6] << 8) | rxbuf[7]; /* Pitch IMU 角原始值 */
     
   board->rx_meg->gimbal_meg.yaw_mec     = uint_to_float(t1, -4.f, 4.f,16);
   board->rx_meg->gimbal_meg.pitch_mec   = uint_to_float(t2, -4.f, 4.f,16);

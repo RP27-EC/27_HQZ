@@ -10,22 +10,23 @@
 #include "drv_can.h"
 
 
+/* 四轮索引与数量 */
 typedef enum{
-	WHEEL_LF= 0,
-	WHEEL_LB,
-	WHEEL_RF,
-  WHEEL_RB, 
-	WHEEL_CNT,
+	WHEEL_LF = 0, /* 左前 */
+	WHEEL_LB,     /* 左后 */
+	WHEEL_RF,     /* 右前 */
+  WHEEL_RB,     /* 右后 */
+	WHEEL_CNT,    /* 轮数 */
 }Wheel_List_e;
 
 
-#define   ID_WHEEL_LF    0x201
-#define   ID_WHEEL_LB    0x202
-#define   ID_WHEEL_RF    0x203
-#define   ID_WHEEL_RB    0x204
+#define   ID_WHEEL_LF    0x201 /* 左前反馈 ID */
+#define   ID_WHEEL_LB    0x202 /* 左后反馈 ID */
+#define   ID_WHEEL_RF    0x203 /* 右前反馈 ID */
+#define   ID_WHEEL_RB    0x204 /* 右后反馈 ID */
 
-extern rm_motor_t wheel_motor[WHEEL_CNT];
-extern rm_group_t wheel_group;
+extern rm_motor_t wheel_motor[WHEEL_CNT]; /* 四轮单电机对象 */
+extern rm_group_t wheel_group;            /* 四轮电机组对象 */
 void rm_motor_list_init(void);
 void rm_motor_list_heart_beat(void);
 void kt_motor_list_init(void);

@@ -7,13 +7,14 @@
 
 #include "chassis_control.h"
 
+/* 小陀螺状态 */
 typedef struct
 {
-    float target_wz;
-    float output_wz;
+    float target_wz; /* 目标旋转角速度，rad/s */
+    float output_wz; /* 斜坡后旋转输出，rad/s */
 
-    uint8_t selected;
-    uint8_t active;
+    uint8_t selected;/* 1 = 小陀螺档位选中 */
+    uint8_t active;  /* 1 = 小陀螺控制生效 */
 } chassis_spin_state_t;
 
 extern chassis_spin_state_t chassis_spin;

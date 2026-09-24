@@ -17,12 +17,13 @@
 #include "rp_math.h"
 
 #if BOARD_COMM_DEBUG
+/* 调试模式下用遥控右摇杆生成云台机械角目标 */
 static void Board_Debug_Gimbal_Command(void)
 {
-    static uint8_t mec_mode_active = 0u;
-    static float yaw_mec_target = 0.0f;
-    static float pitch_mec_target = 0.0f;
-    rc_data_t *rc_info = rc_dev.info;
+    static uint8_t mec_mode_active = 0u; /* 机械角模式已激活 */
+    static float yaw_mec_target = 0.0f;  /* Yaw 机械目标角，rad */
+    static float pitch_mec_target = 0.0f;/* Pitch 机械目标角，rad */
+    rc_data_t *rc_info = rc_dev.info;     /* 遥控数据源 */
 
     if (rc_dev.work_state != DEV_ONLINE)
     {
@@ -38,9 +39,11 @@ static void Board_Debug_Gimbal_Command(void)
 
     board.tx_pkt->car_pkt.car_state = 1u;
     /* S1 下位保留控制使能，仅切换机械环 */
+    /* S1 下拨：只切换云台机械环，底盘仍由底盘分支控制 */
     if (rc_info->s1.value == RC_SW_DOWN)
     {
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
+        /* 进入机械模式时从当前角度起调，避免跳变 */
         if (mec_mode_active == 0u)
         {
             yaw_mec_target = board.rx_meg->gimbal_meg.yaw_mec;
@@ -65,6 +68,7 @@ static void Board_Debug_Gimbal_Command(void)
         }
         board.tx_pkt->gimbal_target_pkt.pitch_mec_tar = pitch_mec_target;
     }
+    /* 机械模式退出后交回 IMU 角度环 */
     else
     {
         board.tx_pkt->car_pkt.gimbal_mode = 1u;
@@ -73,7 +77,9 @@ static void Board_Debug_Gimbal_Command(void)
 }
 #endif
 
-uint8_t open_ui = 0;
+uint8_t open_ui = 0; /* UI 首次发送延迟标志 */
+
+/* 下板 1 kHz 控制任务，按调试阶段切换控制链路 */
 
 void StartCtrlTask(void const *argument)
 {
@@ -86,6 +92,7 @@ void StartCtrlTask(void const *argument)
 
 #endif
 
+    /* 第一阶段底盘调试链路 */
 #if CHASSIS_BRINGUP_ENABLE
         Chassis_Follow_UpdateMode();
         Chassis_Spin_UpdateMode();
@@ -102,6 +109,7 @@ void StartCtrlTask(void const *argument)
 #endif
 
 #if BOARD_UI_ENABLE
+    /* 第一阶段 UI 首帧跳过后再持续刷新 */
         if (open_ui == 0)
         {
             open_ui = 1;

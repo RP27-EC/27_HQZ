@@ -12,31 +12,33 @@
 #include "motor_def.h"
 #include "drv_can.h"
 
-#define ID_GIMB_P 0x11
-#define ID_GIMB_Y 0x12
-#define ID_FRIC_L 0x201
-#define ID_FRIC_R 0x202
-#define ID_DIAL   0x141
+#define ID_GIMB_P 0x11  /* Pitch DM 电机 ID */
+#define ID_GIMB_Y 0x12  /* Yaw DM 电机 ID */
+#define ID_FRIC_L 0x201 /* 左摩擦轮反馈 ID */
+#define ID_FRIC_R 0x202 /* 右摩擦轮反馈 ID */
+#define ID_DIAL   0x141 /* 拨盘 KT 电机 ID */
 
+/* 云台 DM 电机索引 */
 typedef enum
 {
-    YAW = 0,
-    PITCH,
+    YAW = 0, /* Yaw 轴 */
+    PITCH,   /* Pitch 轴 */
 } dev_dm_motor_list_e;
 
+/* 摩擦轮索引与数量 */
 typedef enum
 {
-    SHOOT_FRIC_L = 0,
-    SHOOT_FRIC_R,
-    SHOOT_FRIC_NUM,
+    SHOOT_FRIC_L = 0, /* 左摩擦轮 */
+    SHOOT_FRIC_R,     /* 右摩擦轮 */
+    SHOOT_FRIC_NUM,   /* 摩擦轮数 */
 } dev_shoot_rm_motor_list_e;
 
-extern  KT_motor_t dail_motor;
-extern  ht_motor_t L_Wheel;
-extern dm_motor_t dm_motor[2];
-extern dm_group_t DM_Group;
-extern  rm_motor_t rm_motor[SHOOT_FRIC_NUM];
-extern  rm_group_t RM_Group;
+extern KT_motor_t dail_motor;               /* 拨盘 KT 电机 */
+extern ht_motor_t L_Wheel;
+extern dm_motor_t dm_motor[2];              /* Yaw/Pitch DM 电机 */
+extern dm_group_t DM_Group;                 /* 云台 DM 电机组 */
+extern rm_motor_t rm_motor[SHOOT_FRIC_NUM]; /* 双摩擦轮 */
+extern rm_group_t RM_Group;                 /* 摩擦轮电机组 */
 void rm_motor_list_init(void);
 void rm_motor_list_heart_beat(void);
 void rm_motor_list_sleep(void);

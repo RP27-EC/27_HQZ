@@ -26,12 +26,12 @@ static float RPM_to_Rads(rm_motor_t *motor);
 static void Raw_Current_to_Torque(rm_motor_t* motor);
 static void Encoder_Sum_Cal(rm_motor_t *motor);
 /* 单电机函数 */
-/* 力矩输出 */
+/* 单电机力矩模式：力矩转电流后组帧发送 */
 static void Motor_Set_Torque(rm_motor_t *motor)
 {
-	uint8_t Id = motor->born_info->rxId*2;
+	uint8_t Id = motor->born_info->rxId*2; /* CAN 电流字节偏移 */
 	Torque_to_Raw_Current(motor);
-	motor->tx_info->tx_buff[Id] = (uint8_t)(motor->tx_info->torque_current_raw >> 8);
+	motor->tx_info->tx_buff[Id] = (uint8_t)(motor->tx_info->torque_current_raw >> 8); /* 电流高字节 */
 	motor->tx_info->tx_buff[Id+1] = (uint8_t)(motor->tx_info->torque_current_raw);
 	CAN_SendData(motor->born_info->hcan, motor->born_info->stdId, motor->tx_info->tx_buff);
 }
@@ -46,6 +46,7 @@ static void Motor_Ctrl(rm_motor_t *motor)
 }
 
 /* 单电机卸力 */
+/* 单电机卸力：清零力矩并发送 */
 static void Single_Motor_Sleep(rm_motor_t *motor)
 {
 	motor->tx_info->torque = 0;
@@ -55,9 +56,9 @@ static void Single_Motor_Sleep(rm_motor_t *motor)
 /* 速度环输出 */
 static void Motor_Set_Speed(rm_motor_t *motor)
 {
-	pid_ctrl_t* my_speed_ctrl = motor->ctrl->speed_ctrl;
-	my_speed_ctrl->measure = motor->rx_info->encoder_speed;
-	my_speed_ctrl->err=my_speed_ctrl->target-my_speed_ctrl->measure;
+	pid_ctrl_t* my_speed_ctrl = motor->ctrl->speed_ctrl; /* 速度环 */
+	my_speed_ctrl->measure = motor->rx_info->encoder_speed; /* 反馈转速 */
+	my_speed_ctrl->err=my_speed_ctrl->target-my_speed_ctrl->measure; /* 速度误差 */
 	single_pid_ctrl(my_speed_ctrl);
 	motor->tx_info->torque = my_speed_ctrl->out;
 }
@@ -66,14 +67,14 @@ static void Motor_Set_Speed(rm_motor_t *motor)
 /* 角度环输出 */
 static void Motor_Set_Angle(rm_motor_t *motor)
 {
-	pid_ctrl_t* my_angle_ctrl = motor->ctrl->angle_ctrl_outer;
-	pid_ctrl_t* my_speed_ctrl = motor->ctrl->angle_ctrl_inner;
+	pid_ctrl_t* my_angle_ctrl = motor->ctrl->angle_ctrl_outer; /* 外环角度 */
+	pid_ctrl_t* my_speed_ctrl = motor->ctrl->angle_ctrl_inner; /* 内环速度 */
 /* 外环参数 */
 	if(motor->ctrl->Angle_Input_Flag == false)
 	{
 	my_angle_ctrl->measure = motor->rx_info->encoder;
 	}
-	my_angle_ctrl->err=my_angle_ctrl->target-my_angle_ctrl->measure;
+	my_angle_ctrl->err=my_angle_ctrl->target-my_angle_ctrl->measure; /* 角度误差 */
 	if(motor->ctrl->Nearest_Return == true)
 	{
 		if(motor->ctrl->Angle_Input_Flag == false)
@@ -101,10 +102,10 @@ static void Motor_Set_Angle(rm_motor_t *motor)
 	}
 	single_pid_ctrl(my_angle_ctrl);
 	
-	my_speed_ctrl->target = my_angle_ctrl->out;
+	my_speed_ctrl->target = my_angle_ctrl->out; /* 外环输出作速度目标 */
 	if(motor->ctrl->Speed_Input_Flag == false)
 	my_speed_ctrl->measure = motor->rx_info->encoder_speed;
-	my_speed_ctrl->err=my_speed_ctrl->target-my_speed_ctrl->measure;
+	my_speed_ctrl->err=my_speed_ctrl->target-my_speed_ctrl->measure; /* 速度误差 */
 	single_pid_ctrl(my_speed_ctrl);
 	motor->tx_info->torque = my_speed_ctrl->out;
 }
@@ -250,24 +251,24 @@ void rm_group_init(rm_group_t *group)
 /* 解析角度反馈帧 */
 static uint16_t CAN_01_GetMotorAngle(uint8_t *rxData)
 {
-	uint16_t angle;
-	angle = (uint16_t)(rxData[0] << 8| rxData[1]);
+	uint16_t angle; /* 0-8191 编码器值 */
+	angle = (uint16_t)(rxData[0] << 8| rxData[1]); /* 大端拼接 */
 	return angle;
 }
 
 /* 解析速度反馈帧 */
 static int16_t CAN_23_GetMotorSpeed(uint8_t *rxData)
 {
-	int16_t speed;
-	speed = (int16_t)(rxData[2] << 8| rxData[3]);
+	int16_t speed; /* 转速，rpm */
+	speed = (int16_t)(rxData[2] << 8| rxData[3]); /* 大端拼接 */
 	return speed;
 }
 
 /* 解析电流反馈帧 */
 static int16_t CAN_45_GetMotorCurrent(uint8_t *rxData)
 {
-	int16_t current;
-	current = (int16_t)(rxData[4] << 8 | rxData[5]);
+	int16_t current; /* 原始电流 */
+	current = (int16_t)(rxData[4] << 8 | rxData[5]); /* 大端拼接 */
 	return current;
 }
 
@@ -275,8 +276,8 @@ static int16_t CAN_45_GetMotorCurrent(uint8_t *rxData)
 /* 解析温度反馈帧 */
 static uint8_t CAN_6_GetMotorTemperature(uint8_t *rxData)
 {
-	uint8_t temp;
-	temp = rxData[6];
+	uint8_t temp; /* 摄氏度 */
+	temp = rxData[6]; /* 温度字节 */
 	return temp;
 }
 
@@ -319,7 +320,7 @@ static void Torque_to_Raw_Current(rm_motor_t *motor)
 /* 编码器累计圈数 */
 static void Encoder_Sum_Cal(rm_motor_t *motor)
 {
-	int16_t err;
+	int16_t err; /* 相邻编码器差值 */
 	rm_rx_t *motor_info = motor->rx_info;
 	
 /* 未初始化 */
@@ -329,7 +330,7 @@ static void Encoder_Sum_Cal(rm_motor_t *motor)
 	}
 	else
 	{
-		err = motor_info->encoder - motor_info->encoder_last;
+		err = motor_info->encoder - motor_info->encoder_last; /* 编码器增量 */
 	}
 	
 /* 过零点 */
@@ -337,18 +338,18 @@ static void Encoder_Sum_Cal(rm_motor_t *motor)
 	{
 /* 0 -> 8191 */
 		if(err >= 0)
-			motor_info->encoder_sum += -8191 + err;
+			motor_info->encoder_sum += -8191 + err; /* 跨零点累加 */
 /* 8191 -> 0 */
 		else
-			motor_info->encoder_sum += 8191 + err;
+			motor_info->encoder_sum += 8191 + err; /* 跨零点累加 */
 	}
 /* 未跨零点 */
 	else
 	{
-		motor_info->encoder_sum += err;
+		motor_info->encoder_sum += err; /* 普通累加 */
 	}
 	
-	motor_info->encoder_last = motor_info->encoder;
+	motor_info->encoder_last = motor_info->encoder; /* 保存本拍编码器 */
 }
 
 
@@ -416,9 +417,10 @@ static void Angle_Sum_Cal(rm_motor_t *motor)
 }
 
 /* rpm 转 rad/s */
+/* rpm 转 rad/s，并按型号换算到输出轴 */
 static float RPM_to_Rads(rm_motor_t *motor)
 {
-	float ret;
+	float ret; /* rad/s */
 	if(motor->born_info->type == _3508_Reduction)
 	ret= motor->rx_info->encoder_speed/60.f*2*PI/_3508_REDUCT_RATIO;
 	else if(motor->born_info->type == _2006_Single)
@@ -432,6 +434,6 @@ static float RPM_to_Rads(rm_motor_t *motor)
 /* 原始电流转力矩 */
 static void Raw_Current_to_Torque(rm_motor_t* motor)
 {
-		motor->rx_info->torque_current = (motor->rx_info->torque_current_raw / 16384.f)*20.f;
-		motor->rx_info->torque = motor->rx_info->torque_current * _3508_TORQUE_CONSTANT;
+		motor->rx_info->torque_current = (motor->rx_info->torque_current_raw / 16384.f)*20.f; /* 原始值转电流 */
+		motor->rx_info->torque = motor->rx_info->torque_current * _3508_TORQUE_CONSTANT; /* 电流转力矩 */
 }

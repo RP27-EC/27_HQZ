@@ -171,6 +171,7 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
 }
 
 /* 重置单个 PID 历史状态 */
+/* 清空单个 PID 的积分和微分历史 */
 static void gimbal_pid_clear(pid_ctrl_t *pid)
 {
     integral_to_zero(pid);
@@ -184,6 +185,7 @@ static void gimbal_pid_clear(pid_ctrl_t *pid)
 }
 
 //清空所有 PID 历史状态
+/* 清除云台所有控制环历史，用于模式切换 */
 static void gimbal_clear_all_pid(gimbal_t *gimbal)
 {
     gimbal_pid_clear(&gimbal->pid_info.yaw_gyro_outer);
@@ -199,9 +201,10 @@ static void gimbal_clear_all_pid(gimbal_t *gimbal)
 }
 
 /* 参数默认值 */
+/* 初始化串级 PID 与松杆保持环参数 */
 static void gimbal_pid_init(gimbal_t *gimbal)
 {
-    pid_ctrl_t *pid;
+	pid_ctrl_t *pid; /* 当前配置的 PID 指针 */
 
     /* Yaw 陀螺仪串级 */
     pid = &gimbal->pid_info.yaw_gyro_outer;//  外环
@@ -258,9 +261,10 @@ static void gimbal_pid_init(gimbal_t *gimbal)
 }
 
 /* 传感器数据同步与坐标偏置换算 */
+/* 同步 IMU、电机和控制输入到云台状态 */
 static void gimbal_info_update(gimbal_t *gimbal)
 {
-    imu_data_t *imu = imu_dev.info;
+	imu_data_t *imu = imu_dev.info; /* IMU 数据源 */
 
     /* IMU 姿态与角速度 */
     //获取IMU的角度和角速度信息
@@ -271,12 +275,12 @@ static void gimbal_info_update(gimbal_t *gimbal)
 
     /* 电机编码器角度换算 */
     //获取电机的角度和速度信息，并进行换算
-    gimbal->base_info.yaw_mec_angle = gimbal_wrap_deg(
+    gimbal->base_info.yaw_mec_angle = gimbal_wrap_deg( /* Yaw 机械角 */
         gimbal->yaw_motor->rx_info->motor_angle * GIMBAL_RAD_TO_DEG -
         GIMBAL_YAW_MIDDLE_DEG);
     gimbal->base_info.yaw_mec_speed = gimbal->yaw_motor->rx_info->speed;
 
-    gimbal->base_info.pitch_mec_angle = gimbal_wrap_deg(
+    gimbal->base_info.pitch_mec_angle = gimbal_wrap_deg( /* Pitch 机械角 */
         gimbal->pitch_motor->rx_info->motor_angle * GIMBAL_RAD_TO_DEG -
         GIMBAL_PITCH_MIDDLE_DEG);
     gimbal->base_info.pitch_mec_speed = gimbal->pitch_motor->rx_info->speed;
@@ -295,6 +299,7 @@ static void gimbal_info_update(gimbal_t *gimbal)
 }
 
 /* 硬件与数据流 */
+/* 板间通信在线且车辆使能才允许闭环 */
 static uint8_t gimbal_safety_allows_control(gimbal_t *gimbal)
 {
     (void)gimbal;
@@ -306,6 +311,7 @@ static uint8_t gimbal_safety_allows_control(gimbal_t *gimbal)
 }
 
 /* 控制模式仲裁 */
+/* 根据安全、初始化和板间模式选择控制模式 */
 static gimbal_mode_e gimbal_select_mode(gimbal_t *gimbal)
 {
     // 任意安全条件不满足，进入休眠模式
@@ -332,6 +338,7 @@ static gimbal_mode_e gimbal_select_mode(gimbal_t *gimbal)
 }
 
 /* 获取当前模式最终目标 */
+/* 取出当前模式对应的 Yaw/Pitch 目标 */
 static void gimbal_get_command_target(gimbal_t *gimbal, float *yaw_target, float *pitch_target)
 {
     switch (gimbal->gimbal_mode)
@@ -357,21 +364,22 @@ static void gimbal_get_command_target(gimbal_t *gimbal, float *yaw_target, float
 }
 
 /* 对最终 Pitch 目标限位 */
+/* 按机械限位反推 IMU Pitch 目标上限 */
 static float gimbal_limit_pitch_target(gimbal_t *gimbal, float pitch_target)
 {
     if ((gimbal->gimbal_mode == G_GYRO) ||
         (gimbal->gimbal_mode == G_AUTO))
     {
-        float delta = pitch_target - gimbal->base_info.pitch_imu_angle;
-        float predicted_mec_angle = gimbal->base_info.pitch_mec_angle + delta;
+        float delta = pitch_target - gimbal->base_info.pitch_imu_angle; /* 目标变化量 */
+        float predicted_mec_angle = gimbal->base_info.pitch_mec_angle + delta; /* 预测机械角 */
 
         if (predicted_mec_angle > GIMBAL_PITCH_MAX_DEG)
         {
-            delta -= predicted_mec_angle - GIMBAL_PITCH_MAX_DEG;
+            delta -= predicted_mec_angle - GIMBAL_PITCH_MAX_DEG; /* 扣掉超限 */
         }
         else if (predicted_mec_angle < GIMBAL_PITCH_MIN_DEG)
         {
-            delta += GIMBAL_PITCH_MIN_DEG - predicted_mec_angle;
+            delta += GIMBAL_PITCH_MIN_DEG - predicted_mec_angle; /* 补足下限 */
         }
 
         return gimbal->base_info.pitch_imu_angle + delta;
@@ -387,9 +395,9 @@ static void gimbal_update_init(gimbal_t *gimbal)
         gimbal->base_info.yaw_mec_angle - gimbal->pid_info.yaw_mec_target_raw));
     float pitch_error = gimbal_abs(
         gimbal->base_info.pitch_mec_angle - gimbal->pid_info.pitch_mec_target_raw);
-    uint8_t position_ok = (yaw_error <= gimbal->init_info.yaw_angle_tolerance) &&
+    uint8_t position_ok = (yaw_error <= gimbal->init_info.yaw_angle_tolerance) && /* 到位 */
                           (pitch_error <= gimbal->init_info.pitch_angle_tolerance);
-    uint8_t speed_ok = (gimbal_abs(gimbal->base_info.yaw_mec_speed) <=
+    uint8_t speed_ok = (gimbal_abs(gimbal->base_info.yaw_mec_speed) <= /* 静止 */
                         gimbal->init_info.yaw_speed_tolerance) &&
                        (gimbal_abs(gimbal->base_info.pitch_mec_speed) <=
                         gimbal->init_info.pitch_speed_tolerance);
@@ -675,15 +683,16 @@ static float gimbal_gravity_compensation(gimbal_t *gimbal)
  */
 
 /*  PID 计算  力矩合成输出 */
+/* 按当前模式计算两轴力矩并做硬件限幅 */
 static void gimbal_calc_output(gimbal_t *gimbal)
 {
-    float gravity = gimbal_gravity_compensation(gimbal);
+    float gravity = gimbal_gravity_compensation(gimbal); /* Pitch 重力项 */
     gimbal->base_info.gravity_f = gravity;
 
 
     switch (gimbal->gimbal_mode)
     {
-    case G_INIT:
+    case G_INIT: /* 上电归中 */
         gimbal_update_init(gimbal);
         // 上电归中仍使用机械角/速度串级
         gimbal->base_info.output_gimbal_p =
@@ -788,16 +797,16 @@ static void gimbal_calc_output(gimbal_t *gimbal)
     /* 硬件输出力矩限幅 */
     if (gimbal->gimbal_mode != G_SLEEP)
     {
-        gimbal->base_info.output_gimbal_p +=
+        gimbal->base_info.output_gimbal_p += /* 叠加重力 */
             gimbal->feedforward.pitch_torque_ff_nm;
-        gimbal->base_info.output_gimbal_y +=
+        gimbal->base_info.output_gimbal_y += /* 叠加前馈 */
             gimbal->feedforward.yaw_torque_ff_nm;
 
-        gimbal->base_info.output_gimbal_p =
+        gimbal->base_info.output_gimbal_p = /* 力矩限幅 */
             gimbal_clamp(gimbal->base_info.output_gimbal_p,
                          -gimbal_tune.pitch_torque_limit_nm,
                          gimbal_tune.pitch_torque_limit_nm);
-        gimbal->base_info.output_gimbal_y =
+        gimbal->base_info.output_gimbal_y = /* 力矩限幅 */
             gimbal_clamp(gimbal->base_info.output_gimbal_y,
                          -gimbal_tune.yaw_torque_limit_nm,
                          gimbal_tune.yaw_torque_limit_nm);
@@ -809,6 +818,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
     }
 }
 
+/* 初始化调参、电机绑定、归中参数和 PID */
 void Gimbal_Init(gimbal_t *gimbal)
 {
     if (gimbal == NULL) return;
@@ -843,8 +853,8 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_tune.mouse_deadband_count = GIMBAL_MOUSE_DEADBAND_COUNT;
 
     /* 绑定电机驱动 */
-    gimbal->pitch_motor = &dm_motor[PITCH];
-    gimbal->yaw_motor = &dm_motor[YAW];
+    gimbal->pitch_motor = &dm_motor[PITCH]; /* 绑定 Pitch */
+    gimbal->yaw_motor = &dm_motor[YAW]; /* 绑定 Yaw */
     gimbal->init = Gimbal_Init;
     gimbal->work = Gimbal_Work;
 
@@ -939,8 +949,8 @@ void Gimbal_Work(gimbal_t *gimbal)
     }
 
     //  写入电机底层发送缓冲区
-    gimbal->pitch_motor->tx_info->torque = gimbal->base_info.output_gimbal_p;
-    gimbal->yaw_motor->tx_info->torque = gimbal->base_info.output_gimbal_y;
+    gimbal->pitch_motor->tx_info->torque = gimbal->base_info.output_gimbal_p; /* Pitch 输出 */
+    gimbal->yaw_motor->tx_info->torque = gimbal->base_info.output_gimbal_y; /* Yaw 输出 */
 }
 
 

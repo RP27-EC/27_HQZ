@@ -4,6 +4,7 @@ extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
 
 
+/* 四轮速度环参数，力矩单位 N*m */
 pid_ctrl_t wheel_speed_pid[WHEEL_CNT] = {
 	[WHEEL_LF] = {
 		.kp = 1,
@@ -113,6 +114,7 @@ pid_ctrl_t wheel_angle_out_pid[WHEEL_CNT] = {
 };
 
 
+/* 四轮 CAN 绑定：同一标准帧 ID 内用 rxId 区分 */
 rm_cfg_t wheel_born_info[WHEEL_CNT] = {
 	[WHEEL_LF] = {
 		.order_correction = 0,
@@ -150,9 +152,11 @@ rm_cfg_t wheel_born_info[WHEEL_CNT] = {
 };
 
 
+/* 四轮反馈、发送与在线状态缓存 */
 rm_rx_t   wheel_rx_info[WHEEL_CNT];
 rm_tx_t   wheel_tx_info[WHEEL_CNT];
 rm_state_t     wheel_state[WHEEL_CNT];
+/* 四轮控制器绑定表 */
 rm_ctrl_t wheel_ctrl_info[WHEEL_CNT] = {
 	[WHEEL_LF] = {
 	  .angle_ctrl_inner = &wheel_angle_inn_pid[WHEEL_LF],
@@ -178,6 +182,7 @@ rm_ctrl_t wheel_ctrl_info[WHEEL_CNT] = {
 };
 
 
+/* 四轮电机对象，组装配置、缓存与控制器 */
 rm_motor_t wheel_motor[WHEEL_CNT] = {
 	[WHEEL_LF] = {
 	 .born_info = &wheel_born_info[WHEEL_LF],
@@ -216,6 +221,7 @@ rm_motor_t wheel_motor[WHEEL_CNT] = {
 };
 
 
+/* 四轮电机组，统一收发 0x200 组帧 */
 rm_group_t wheel_group = {
 	.motor[WHEEL_LF] = &wheel_motor[WHEEL_LF],
 	.motor[WHEEL_LB] = &wheel_motor[WHEEL_LB],
@@ -227,6 +233,7 @@ rm_group_t wheel_group = {
 
 
 };
+/* 初始化四轮电机组 */
 void rm_motor_list_init()
 {
 	/*电机信息初始化*/
@@ -250,6 +257,7 @@ void ht_motor_list_init()
 	
 }
 
+/* 四轮电机组心跳 */
 void rm_motor_list_heart_beat()
 {
   wheel_group.group_heartbeat(&wheel_group);

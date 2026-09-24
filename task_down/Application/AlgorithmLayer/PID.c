@@ -7,18 +7,18 @@ void single_pid_ctrl(pid_ctrl_t *pid)
 {
 
 	//pid->err = pid->target-pid->measure;
-	  pid->integral += pid->err;  
-    pid->integral = constrain(pid->integral, -pid->integral_max, +pid->integral_max);
+	  pid->integral += pid->err; /* 累加误差 */
+    pid->integral = constrain(pid->integral, -pid->integral_max, +pid->integral_max); /* 积分限幅 */
 
-    pid->pout = pid->kp * pid->err;
-    pid->iout = pid->ki * pid->integral;
-	  pid->dout = pid->kd * (pid->err - pid->last_err);
+    pid->pout = pid->kp * pid->err; /* 比例项 */
+    pid->iout = pid->ki * pid->integral; /* 积分项 */
+	  pid->dout = pid->kd * (pid->err - pid->last_err); /* 微分项 */
 	  pid->last_dout=pid->dout;
 
-    pid->out = pid->pout + pid->iout + pid->dout;
-    pid->out = constrain(pid->out, -pid->out_max, pid->out_max);
+    pid->out = pid->pout + pid->iout + pid->dout; /* 总输出 */
+    pid->out = constrain(pid->out, -pid->out_max, pid->out_max); /* 输出限幅 */
 
-    pid->last_err = pid->err;
+    pid->last_err = pid->err; /* 保存微分历史 */
 }
 
 

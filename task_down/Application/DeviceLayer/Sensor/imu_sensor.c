@@ -32,6 +32,7 @@ static void InitQuaternion(float *init_q4);
 static float Sqrt(float x);
 
 #endif //IMU_USE_EKF
+/* IMU 温控 PID，当前仅保留配置 */
 pid_ctrl_t imu_temp_pid = {
 
     .kp = 1000.0f,
@@ -44,6 +45,7 @@ pid_ctrl_t imu_temp_pid = {
 
  
 
+/* IMU 全局数据缓存 */
 imu_data_t imu_data = 
 
 {
@@ -57,6 +59,7 @@ imu_data_t imu_data =
 	.init_flag = 0,
 
 };
+/* IMU 设备对象与接口绑定 */
 imu_dev_t imu_dev = {
 
 
@@ -88,22 +91,23 @@ imu_dev_t imu_dev = {
 //    .set_temperature = &imu_set_temperature,
 
 };
-float imu_read[3];
+float imu_read[3]; /* 预留读取缓存 */
 
-uint8_t init_cnt = 200;
+uint8_t init_cnt = 200; /* 初始化重试次数 */
 
 /* IMU 初始化 */
+/* 初始化 BMI088，重试超限后复位 MCU */
 void imu_init(struct imu_dev *self)
 
 {
 
-	uint32_t tickstart = HAL_GetTick();
+	uint32_t tickstart = HAL_GetTick(); /* 初始化起始时刻 */
 
 
 
 	self->work_state.dev_state = DEV_OFFLINE;
 
-	self->work_state.init_code = BMI088_init();
+	self->work_state.init_code = BMI088_init(); /* BMI088 初始化 */
 
 
 
@@ -137,13 +141,13 @@ void imu_init(struct imu_dev *self)
 
 	{
 
-		self->work_state.dev_state = DEV_ONLINE;
+		self->work_state.dev_state = DEV_ONLINE; /* 初始化成功 */
 
 		
 
 //		self->work_state.err_cnt = 0;
 
-		self->info->init_flag = 1;
+		self->info->init_flag = 1; /* 标记已初始化 */
 
 		
 
@@ -301,24 +305,25 @@ static uint32_t imu_tick_now, imu_tick_last;
 
 #endif
 
+/* IMU 周期任务：采样、校准、滤波、姿态解算 */
 void imu_update(imu_dev_t *imu_sen)
 
 {
 
 
 
-    imu_data_t *imu_data = imu_sen->info;
+    imu_data_t *imu_data = imu_sen->info; /* IMU 数据缓存 */
 
 	
 
 	/* 获取陀螺仪数据 */
 
-	BMI088_read(gyro, accel, &temp);
+	BMI088_read(gyro, accel, &temp); /* 读取原始 IMU */
 
 	if(imu_dev.info->base_info.temperature >= 40)
 			imu_dev.info->offset_info.gz_offset = 0.0007f;
 
-	imu_data->raw_info.acc_x = accel[0];
+	imu_data->raw_info.acc_x = accel[0]; /* 原始加速度 X */
 
 	imu_data->raw_info.acc_y = accel[1];
 
@@ -342,7 +347,7 @@ void imu_update(imu_dev_t *imu_sen)
 
 	/* 陀螺仪校正 */
 
-	if (imu_sen->work_state.err_code == IMU_E_CALI)
+	if (imu_sen->work_state.err_code == IMU_E_CALI) /* 零偏标定阶段 */
 
 	{
 
@@ -350,11 +355,11 @@ void imu_update(imu_dev_t *imu_sen)
 
 		{
 
-			imu_data->offset_info.gx_offset -= gyrox * 0.0005f;
+			imu_data->offset_info.gx_offset -= gyrox * 0.0005f; /* X 零偏积分 */
 
-			imu_data->offset_info.gy_offset -= gyroy * 0.0005f;
+			imu_data->offset_info.gy_offset -= gyroy * 0.0005f; /* Y 零偏积分 */
 
-			imu_data->offset_info.gz_offset -= gyroz * 0.0005f;
+			imu_data->offset_info.gz_offset -= gyroz * 0.0005f; /* Z 零偏积分 */
 
 			imu_cnt++;
 
@@ -382,7 +387,7 @@ void imu_update(imu_dev_t *imu_sen)
 
 				imu_data->offset_info.gz_offset = 0;
 
-			imu_sen->work_state.cali_end = 1;
+			imu_sen->work_state.cali_end = 1; /* 标定完成 */
 
 		}
 
@@ -392,7 +397,7 @@ void imu_update(imu_dev_t *imu_sen)
 
 	{
 
-		gyrox += imu_data->offset_info.gx_offset;
+		gyrox += imu_data->offset_info.gx_offset; /* 补偿 X 零偏 */
 
 		gyroy += imu_data->offset_info.gy_offset;
 
@@ -404,17 +409,17 @@ void imu_update(imu_dev_t *imu_sen)
 
 	/* 原始数据低通滤波 */
 
-	gyrox_ = Lowpass(gyrox_, gyrox, 1);
+	gyrox_ = Lowpass(gyrox_, gyrox, 1); /* X 角速度滤波 */
 
-	gyroy_ = Lowpass(gyroy_, gyroy, 1);
+	gyroy_ = Lowpass(gyroy_, gyroy, 1); /* Y 角速度滤波 */
 
-	gyroz_ = Lowpass(gyroz_, gyroz, 1);
+	gyroz_ = Lowpass(gyroz_, gyroz, 1); /* Z 角速度滤波 */
 
-	accx_ = Lowpass(accx_, accx, 0.8);
+	accx_ = Lowpass(accx_, accx, 0.8); /* X 加速度滤波 */
 
-	accy_ = Lowpass(accy_, accy, 0.2);
+	accy_ = Lowpass(accy_, accy, 0.2); /* Y 加速度滤波 */
 
-	accz_ = Lowpass(accz_, accz, 0.2);
+	accz_ = Lowpass(accz_, accz, 0.2); /* Z 加速度滤波 */
 
 	
 
@@ -448,7 +453,7 @@ void imu_update(imu_dev_t *imu_sen)
 
 	}
 
-	imu_dt = (imu_tick_now - imu_tick_last) * 0.000001f; // us to s
+	imu_dt = (imu_tick_now - imu_tick_last) * 0.000001f; /* 采样周期，s */
 
 	imu_tick_last = imu_tick_now;
 
@@ -456,7 +461,7 @@ void imu_update(imu_dev_t *imu_sen)
 
     // 核心函数,EKF更新四元数
 
-    ekf_update(gyrox, gyroy, gyroz, accx, accy, accz, imu_dt);
+    ekf_update(gyrox, gyroy, gyroz, accx, accy, accz, imu_dt); /* EKF 递推 */
 
 
 
@@ -486,7 +491,7 @@ void imu_update(imu_dev_t *imu_sen)
 
 	//pitch
 
-	imu_data->base_info.rate_pitch = gyroy_ / (double)0.017453;
+	imu_data->base_info.rate_pitch = gyroy_ / (double)0.017453; /* rad/s 转 deg/s */
 
 	imu_data->base_info.ave_rate_pitch = avg_push(&imu_pitch_dif_speed_ave_filter, imu_data->base_info.rate_pitch, 3);
 
@@ -494,7 +499,7 @@ void imu_update(imu_dev_t *imu_sen)
 
 	//roll
 
-	imu_data->base_info.rate_roll = gyrox_ / (double)0.017453;
+	imu_data->base_info.rate_roll = gyrox_ / (double)0.017453; /* rad/s 转 deg/s */
 
 	imu_data->base_info.ave_rate_roll = avg_push(&imu_roll_dif_speed_ave_filter, imu_data->base_info.rate_roll, 3);
 
@@ -502,13 +507,13 @@ void imu_update(imu_dev_t *imu_sen)
 
 	//yaw
 
-	imu_data->base_info.rate_yaw = gyroz_ / (double)0.017453;
+	imu_data->base_info.rate_yaw = gyroz_ / (double)0.017453; /* rad/s 转 deg/s */
 
 	imu_data->base_info.ave_rate_yaw = avg_push(&imu_yaw_dif_speed_ave_filter, imu_data->base_info.rate_yaw, 3);
 
 	
 
-	imu_sen->work_state.offline_cnt = 0;
+	imu_sen->work_state.offline_cnt = 0; /* 数据有效 */
 
 	
 
@@ -524,9 +529,9 @@ void imu_update(imu_dev_t *imu_sen)
 
 		{
 
-			imu_sen->work_state.dev_state = DEV_OFFLINE;
+		imu_sen->work_state.dev_state = DEV_OFFLINE; /* 数据全零视为离线 */
 
-			imu_sen->work_state.err_code = IMU_E_DATA;
+			imu_sen->work_state.err_code = IMU_E_DATA; /* 数据异常 */
 
 			imu_sen->work_state.offline_cnt = imu_sen->work_state.offline_max_cnt;
 
@@ -540,7 +545,7 @@ void imu_update(imu_dev_t *imu_sen)
 
     /* imu获取温度 */
 
-    imu_data->base_info.temperature = temp;
+	imu_data->base_info.temperature = temp; /* 更新温度 */
 
 
 
@@ -552,11 +557,12 @@ void imu_update(imu_dev_t *imu_sen)
 
 // 使用加速度计的数据初始化Roll和Pitch,而Yaw置0,这样可以避免在初始时候的姿态估计误差
 
+/* 用加速度均值初始化 Roll/Pitch，Yaw 置零 */
 static void InitQuaternion(float *init_q4)
 
 {
 
-    float acc_sum[3] = {0};
+    float acc_sum[3] = {0}; /* 加速度累计值 */
 
 	float gyro[3], acc_init[3], temp;
 
@@ -570,11 +576,11 @@ static void InitQuaternion(float *init_q4)
 
         BMI088_read(gyro, acc_init, &temp);
 
-        acc_sum[0] += acc_init[0];
+        acc_sum[0] += acc_init[0]; /* 累计 X */
 
-        acc_sum[1] += acc_init[1];
+        acc_sum[1] += acc_init[1]; /* 累计 Y */
 
-        acc_sum[2] += acc_init[2];
+        acc_sum[2] += acc_init[2]; /* 累计 Z */
 
         delay_ms(1);
 
@@ -584,9 +590,9 @@ static void InitQuaternion(float *init_q4)
 
         acc_init[i] = acc_sum[i]/100;
 
-		float pitch = atan2(-acc_init[0], Sqrt(acc_init[1] * acc_init[1] + acc_init[2] * acc_init[2]));
+		float pitch = atan2(-acc_init[0], Sqrt(acc_init[1] * acc_init[1] + acc_init[2] * acc_init[2])); /* 初始 Pitch */
 
-		float roll = atan2(acc_init[1], acc_init[2]);
+		float roll = atan2(acc_init[1], acc_init[2]); /* 初始 Roll */
 
 		
 
@@ -610,6 +616,7 @@ static void InitQuaternion(float *init_q4)
 
 // 快速开方
 
+/* 牛顿迭代开方 */
 static float Sqrt(float x)
 
 {

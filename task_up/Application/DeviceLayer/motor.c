@@ -3,6 +3,7 @@
 #include "motor.h"
 //
 
+/* Pitch 轴 CAN 绑定 */
 drv_can_t rm_motor_driver[] = {
 	[GIMB_P] = {
 		.can_id = DRV_CAN2,
@@ -63,6 +64,7 @@ ht_motor_t L_Wheel =
 #endif
 
 /*DM_start*/
+/* Yaw DM 电机配置 */
 dm_cfg_t Yaw_Born_Info =
 {
     .stdId = 0x02,
@@ -89,6 +91,7 @@ dm_motor_t Yaw_Motor =
 	.single_init = &dm_motor_init,
 };
 
+/* Pitch DM 电机配置 */
 dm_cfg_t Pitch_Born_Info =
 {
     .stdId = 0x01,
@@ -108,6 +111,7 @@ dm_motor_t Pitch_Motor =
     .single_init = &dm_motor_init,
 };
 
+/* 云台 DM 电机索引表 */
 dm_motor_t dm_motor[] =
 {
     [YAW] =
@@ -128,6 +132,7 @@ dm_motor_t dm_motor[] =
     },
 };
 
+/* 云台两轴 DM 电机组 */
 dm_group_t DM_Group =
 {
     .motor[YAW] = &dm_motor[YAW],
@@ -139,6 +144,7 @@ dm_group_t DM_Group =
 /*DM_end*/
 
 /*RM START*/
+/* 左摩擦轮 CAN 配置 */
 rm_cfg_t L_Fric_Born =
 {
     .rxId = 0,
@@ -147,6 +153,7 @@ rm_cfg_t L_Fric_Born =
     .hcan = &hcan1,
 };
 
+/* 右摩擦轮 CAN 配置 */
 rm_cfg_t R_Fric_Born =
 {
     .rxId = 1,
@@ -190,6 +197,7 @@ rm_ctrl_t R_Fric_Ctrl =
     .speed_ctrl = &R_Fric_Speed_Ctrl,
 };
 
+/* 摩擦轮索引表 */
 rm_motor_t rm_motor[SHOOT_FRIC_NUM] =
 {
     [SHOOT_FRIC_L] =
@@ -212,6 +220,7 @@ rm_motor_t rm_motor[SHOOT_FRIC_NUM] =
     },
 };
 
+/* 摩擦轮电机组，统一收发 0x200 组帧 */
 rm_group_t RM_Group =
 {
     .motor[SHOOT_FRIC_L] = &rm_motor[SHOOT_FRIC_L],
@@ -223,6 +232,7 @@ rm_group_t RM_Group =
 /*RM END*/
 
 /*KT START*/
+/* 拨盘 KT4005 电机对象 */
 KT_motor_t dail_motor =
 {
     .KT_motor_info =
@@ -239,20 +249,24 @@ KT_motor_t dail_motor =
 };
 /*KT END*/
 
+/* 初始化摩擦轮电机组 */
 void rm_motor_list_init(void)
 {
     RM_Group.group_init(&RM_Group);
 }
 
+/* 初始化拨盘 KT 电机 */
 void kt_motor_list_init(void)
 {
     KT_motor_class_init(&dail_motor);
 }
+/* 初始化云台 DM 电机组 */
 void dm_motor_list_init()
 {
     DM_Group.group_init(&DM_Group);
 }
 
+/* 云台电机组心跳 */
 void dm_motor_list_heart_beat()
 {
     DM_Group.group_heartbeat(&DM_Group);
@@ -266,11 +280,13 @@ void ht_motor_list_init()
 }
 #endif
 
+/* 摩擦轮电机组心跳 */
 void rm_motor_list_heart_beat(void)
 {
     RM_Group.group_heartbeat(&RM_Group);
 }
 
+/* 拨盘 KT 电机心跳 */
 void kt_motor_list_heart_beat(void)
 {
     if (dail_motor.heartbeat != NULL)
@@ -279,12 +295,14 @@ void kt_motor_list_heart_beat(void)
     }
 }
 
+/* 摩擦轮组卸力 */
 void rm_motor_list_sleep(void)
 {
     RM_Group.group_sleep(&RM_Group);
     RM_Group.group_set_torque(&RM_Group);
 }
 
+/* 拨盘力矩清零后发送 */
 void kt_motor_list_sleep(void)
 {
     if ((dail_motor.W_iqControl != NULL) && (dail_motor.tx_W_cmd != NULL))

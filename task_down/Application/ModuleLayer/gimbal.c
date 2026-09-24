@@ -18,6 +18,7 @@ static void Gimbal_Cmd_Transmit(Gimbal_t* gimbal);
 static void Gimbal_Work(Gimbal_t* gimbal);
 
 
+/* 云台控制对象：默认休眠，标定四个朝向的 Yaw 零点 */
 Gimbal_t gimbal = {
   .mode = G_SLEEP,
   .gimbal_reset_flag= false,
@@ -43,13 +44,14 @@ Gimbal_t gimbal = {
 
 
 
+/* 绑定周期任务与心跳接口 */
 static void Gimbal_Init(Gimbal_t* gimbal)
 {
   gimbal->work = Gimbal_Work;
 	gimbal->heart_beat = Gimbal_Offline_Update;
 }
 
-/* 云台状态刷新 */
+/* 将整车模式映射为云台模式，狗洞场景按头/底盘状态仲裁 */
 static void Gimbal_Status_Update(Gimbal_t* gimbal)
 {
 	switch (infantry.mode)
@@ -99,7 +101,7 @@ static void Gimbal_Status_Update(Gimbal_t* gimbal)
 	
 }
 
-/* 云台数据刷新 */
+/* 刷新云台反馈并计算机械零点误差，Yaw IMU 可选本地或上板 */
 static void Gimbal_Data_Update(Gimbal_t* gimbal)
 {
   gimbal->info.yaw_mec = board.rx_meg->gimbal_meg.yaw_mec;
@@ -122,7 +124,7 @@ static void Gimbal_Data_Update(Gimbal_t* gimbal)
 	
 
 static uint16_t reset_tick = 0;
-/* 云台自检流程 */
+/* 上电回中：机械误差进入容差或超时后置复位完成标志 */
 static void Gimbal_Init_Process(Gimbal_t* gimbal)
 {
 	gimbal->target.yaw_mec_tar = YAW_MEC_ZERO_ANGLE;
@@ -175,6 +177,7 @@ static void Gimbal_Direct_Update(Gimbal_t* gimbal)
 
 
 
+/* 从控模式：锁机械角，过洞压低，掉头切换前后零点 */
 static void  Gimbal_Slave_Update(Gimbal_t* gimbal)
 {
 	
@@ -248,6 +251,7 @@ static void  Gimbal_Slave_Update(Gimbal_t* gimbal)
 }
 
 
+/* 主控模式：视觉/掉头/操作手更新 IMU 目标并处理底盘复位 */
 static void  Gimbal_Boss_Update(Gimbal_t* gimbal)
 {
 	//视觉模式上板直接用视觉包目标值，下板需要实时更新目标值防止退出视觉时目标值衔接错误导致头动
@@ -318,7 +322,7 @@ static void  Gimbal_Boss_Update(Gimbal_t* gimbal)
 }
 
 
-/* 云台离线状态刷新 */
+/* 从上板反馈同步云台设备在线状态 */
 static void Gimbal_Offline_Update(Gimbal_t* gimbal)
 {
 	gimbal->state.yaw_heart = board.rx_meg->state_meg.yaw_motor_state;
@@ -327,7 +331,7 @@ static void Gimbal_Offline_Update(Gimbal_t* gimbal)
 	
 }
 
-/* 云台失联处理 */
+/* 失联时清复位流程，并将目标回正 */
 static void Gimbal_Offline_Process(Gimbal_t* gimbal)
 {
 	gimbal->gimbal_reset_flag = false;
@@ -341,7 +345,7 @@ static void Gimbal_Offline_Process(Gimbal_t* gimbal)
 
 }
 
-/* 下发云台控制量 */
+/* 下发云台目标，计算底盘跟随误差与特殊姿态抑制 */
 static void Gimbal_Cmd_Transmit(Gimbal_t* gimbal)
 {
   board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = gimbal->target.yaw_mec_tar;
@@ -392,6 +396,7 @@ static void Gimbal_Cmd_Transmit(Gimbal_t* gimbal)
 }
 
 
+/* 周期顺序：刷新反馈 -> 选择模式 -> 执行模式 -> 下发 */
 static void Gimbal_Work(Gimbal_t* gimbal)
 {
 	Gimbal_Data_Update(gimbal);

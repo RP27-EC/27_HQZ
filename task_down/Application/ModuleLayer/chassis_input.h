@@ -5,7 +5,7 @@
 
 #include "chassis_control.h"
 
-extern chassis_cmd_t chassis_input_cmd;
+extern chassis_cmd_t chassis_input_cmd; /* 统一底盘输入 */
 
 void Chassis_Input_Init(void);
 void Chassis_Input_Update(void);
