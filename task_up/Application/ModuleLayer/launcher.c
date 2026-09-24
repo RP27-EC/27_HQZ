@@ -12,7 +12,7 @@
 launcher_t launcher;
 
 static uint16_t launcher_fric_ready_count;
-static uint8_t launcher_jam_count;
+uint8_t launcher_jam_count;
 static uint16_t launcher_fric_stop_count;
 static uint8_t launcher_dial_last_online;
 static pid_ctrl_t launcher_dial_angle_pid;
@@ -551,6 +551,7 @@ void Launcher_Work(void)
             launcher.jam_tick = now;
             launcher_jam_count = 0u;
         }
+#if LAUNCHER_DIAL_JAM_ENABLE
         else if ((jam_now != 0u) &&
                  ((now - launcher.jam_tick) >= LAUNCHER_DIAL_JAM_TIME_MS))
         {
@@ -569,6 +570,7 @@ void Launcher_Work(void)
             launcher.state_tick = now;
             launcher.jam_tick = now;
         }
+#endif
         else if ((now - launcher.state_tick) >= LAUNCHER_DIAL_SINGLE_TIMEOUT_MS)
         {
             Launcher_DialClearPid();
@@ -597,6 +599,7 @@ void Launcher_Work(void)
             launcher.jam_tick = now;
             launcher_jam_count = 0u;
         }
+#if LAUNCHER_DIAL_JAM_ENABLE
         else if ((jam_now != 0u) &&
                  ((now - launcher.jam_tick) >= LAUNCHER_DIAL_JAM_TIME_MS))
         {
@@ -615,6 +618,7 @@ void Launcher_Work(void)
             launcher.state_tick = now;
             launcher.jam_tick = now;
         }
+#endif
         else if (jam_now == 0u)
         {
             launcher.jam_tick = now;
