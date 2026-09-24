@@ -14,6 +14,64 @@
 #include "chassis_follow.h"
 #include "chassis_spin.h"
 #include "launch.h"
+#include "rp_math.h"
+
+#if BOARD_COMM_DEBUG
+static void Board_Debug_Gimbal_Command(void)
+{
+    static uint8_t mec_mode_active = 0u;
+    static float yaw_mec_target = 0.0f;
+    static float pitch_mec_target = 0.0f;
+    rc_data_t *rc_info = rc_dev.info;
+
+    if (rc_dev.work_state != DEV_ONLINE)
+    {
+        mec_mode_active = 0u;
+        board.tx_pkt->car_pkt.car_state = 0u;
+        board.tx_pkt->car_pkt.gimbal_mode = 0u;
+        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = 0.0f;
+        board.tx_pkt->gimbal_target_pkt.pitch_mec_tar = 0.0f;
+        board.tx_pkt->gimbal_target_pkt.yaw_imu_tar = 0.0f;
+        board.tx_pkt->gimbal_target_pkt.pitch_imu_tar = 0.0f;
+        return;
+    }
+
+    board.tx_pkt->car_pkt.car_state = 1u;
+    /* S1 下位保留控制使能，仅切换机械环 */
+    if (rc_info->s1.value == RC_SW_DOWN)
+    {
+        board.tx_pkt->car_pkt.gimbal_mode = 0u;
+        if (mec_mode_active == 0u)
+        {
+            yaw_mec_target = board.rx_meg->gimbal_meg.yaw_mec;
+            pitch_mec_target = board.rx_meg->gimbal_meg.pitch_mec;
+            mec_mode_active = 1u;
+        }
+
+        yaw_mec_target += BOARD_MEC_YAW_SIGN * (float)rc_info->ch0 /
+                          BOARD_RC_AXIS_MAX * BOARD_MEC_YAW_STEP_RAD;
+        yaw_mec_target = motor_half_cycle(yaw_mec_target, 2.0f * 3.14159265358979323846f);
+        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = yaw_mec_target;
+
+        pitch_mec_target += (float)rc_info->ch1 / BOARD_RC_AXIS_MAX *
+                            BOARD_MEC_PITCH_STEP_RAD;
+        if (pitch_mec_target > BOARD_MEC_PITCH_MAX_RAD)
+        {
+            pitch_mec_target = BOARD_MEC_PITCH_MAX_RAD;
+        }
+        else if (pitch_mec_target < BOARD_MEC_PITCH_MIN_RAD)
+        {
+            pitch_mec_target = BOARD_MEC_PITCH_MIN_RAD;
+        }
+        board.tx_pkt->gimbal_target_pkt.pitch_mec_tar = pitch_mec_target;
+    }
+    else
+    {
+        board.tx_pkt->car_pkt.gimbal_mode = 1u;
+        mec_mode_active = 0u;
+    }
+}
+#endif
 
 uint8_t open_ui = 0;
 
@@ -24,23 +82,7 @@ void StartCtrlTask(void const *argument)
     for (;;)
     {
 #if BOARD_COMM_DEBUG
-        /* S1 up: arm; middle/down: disarm and keep the board link alive. */
-        if ((rc_dev.work_state == DEV_ONLINE) &&
-            ((rc_dev.info->s1.value == RC_SW_UP) ||
-             (rc_dev.info->s1.value == RC_SW_MID)))
-        {
-            board.tx_pkt->car_pkt.car_state = 1u;
-            board.tx_pkt->car_pkt.gimbal_mode = 1u;
-        }
-        else
-        {
-            board.tx_pkt->car_pkt.car_state = 0u;
-            board.tx_pkt->car_pkt.gimbal_mode = 0u;
-            board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = 0.0f;
-            board.tx_pkt->gimbal_target_pkt.pitch_mec_tar = 0.0f;
-            board.tx_pkt->gimbal_target_pkt.yaw_imu_tar = 0.0f;
-            board.tx_pkt->gimbal_target_pkt.pitch_imu_tar = 0.0f;
-        }
+        Board_Debug_Gimbal_Command();
 
 #endif
 

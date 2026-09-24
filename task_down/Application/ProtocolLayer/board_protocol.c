@@ -211,7 +211,12 @@ void Board_Tx_Pkt_05(Board_t* board)
     {
         valid = 1u;
 #if CHASSIS_BRINGUP_ENABLE
-        if (Chassis_Follow_IsSelected() != 0u)
+        if (rc_dev.info->s1.value == RC_SW_DOWN)
+        {
+            yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
+                                                 BOARD_D5_YAW_RATE_MAX_DEG_S);
+        }
+        else if (Chassis_Follow_IsSelected() != 0u)
         {
             yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
                                                  BOARD_D5_YAW_RATE_MAX_DEG_S);

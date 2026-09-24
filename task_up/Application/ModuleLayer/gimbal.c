@@ -201,12 +201,12 @@ static void gimbal_pid_init(gimbal_t *gimbal)
 
     /* Yaw 机械编码器串级 */
     pid = &gimbal->pid_info.yaw_mec_outer;//下面的也是同理
-    pid->kp = 20.0f; pid->ki = 0.0f; pid->kd = 0.0f;
+    pid->kp = 1.0f; pid->ki = 0.0f; pid->kd = 0.0f;
     pid->integral_max = 0.0f; pid->out_max = 500.0f;
 
     pid = &gimbal->pid_info.yaw_mec_inner;
-    pid->kp = 0.1f; pid->ki = 0.0f; pid->kd = 0.0f;
-    pid->integral_max = 0.0f; pid->out_max = 10.0f;
+    pid->kp = 0.8f; pid->ki = 0.0f; pid->kd = 0.0f;
+    pid->integral_max = 0.0f; pid->out_max = 100.0f;
 
     /* Pitch 机械编码器串级 */
     pid = &gimbal->pid_info.pitch_mec_outer;
@@ -424,7 +424,8 @@ static void gimbal_update_targets(gimbal_t *gimbal)
         return;
     }
 
-    if (gimbal->gimbal_mode == G_RATE)
+    if ((gimbal->gimbal_mode == G_MEC) ||
+        (gimbal->gimbal_mode == G_RATE))
     {
         gimbal->init_info.mode_transition_active = 0;
         return;
@@ -602,10 +603,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
     {
     case G_INIT:
         gimbal_update_init(gimbal);
-        // 穿透至 G_MEC 闭环复用机械环运算
-        /* fall through */
-    case G_MEC:
-        // Pitch 机械环
+        // 上电归中仍使用机械角/速度串级
         gimbal->base_info.output_gimbal_p =
             all_pid_calc(&gimbal->pid_info.pitch_mec_outer,
                          &gimbal->pid_info.pitch_mec_inner,
@@ -616,7 +614,6 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          1.0f,
                          0) + gravity;
 
-        // Yaw 机械环
         gimbal->base_info.output_gimbal_y =
             all_pid_calc(&gimbal->pid_info.yaw_mec_outer,
                          &gimbal->pid_info.yaw_mec_inner,
@@ -624,10 +621,9 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          gimbal->base_info.yaw_mec_angle,
                          gimbal->base_info.yaw_mec_speed,
                          0.0f,
-                         1.0f, 
+                         1.0f,
                          3);
         break;
-
     case G_GYRO:
         // Pitch 陀螺仪环
         gimbal->base_info.output_gimbal_p =
@@ -675,6 +671,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
         break;
 
     case G_RATE:
+    case G_MEC:
         gimbal_update_rate_targets(gimbal);
 
         gimbal->base_info.output_gimbal_p =

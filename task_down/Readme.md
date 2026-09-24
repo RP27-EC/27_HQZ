@@ -71,6 +71,13 @@ car_state   = 1
 gimbal_mode = 1
 ```
 
+`S1` 下位发送：
+
+```text
+car_state   = 1
+gimbal_mode = 0
+```
+
 遥控离线时发送：
 
 ```text
@@ -79,6 +86,7 @@ gimbal_mode = 0
 ```
 
 `gimbal_mode = 1` 让上板进入 `G_RATE` 速控模式。
+`gimbal_mode = 0` 让上板进入 `G_MEC` 机械模式：Yaw 和 Pitch 均由右摇杆积分生成机械目标角。
 
 ## D5 手操角速度
 
@@ -94,6 +102,8 @@ byte6-7:    预留
 ```
 
 遥控器右摇杆左右控制 Yaw 角速度，上下控制 Pitch 角速度。遥控在线时 `valid = 1`，离线时为 `0`。
+`gimbal_mode = 1` 时上板使用 D5 角速度；`gimbal_mode = 0` 时使用 D2 机械目标，机械 Yaw/Pitch 仍由右摇杆生成。
+`S1` 下位时 D5 继续转发 Yaw 速度，机械模式复用上板 `G_RATE` 速控链路。
 
 当前 D5 只转发遥控器右摇杆，键鼠暂时不能控制云台。
 
