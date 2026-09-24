@@ -72,7 +72,10 @@
 #define GIMBAL_MOUSE_PITCH_RATE_GAIN       1.0f
 
 /* 键鼠输入：鼠标计数 -> 目标角度增量 / 角速度前馈 */
-#define GIMBAL_MOUSE_DEG_PER_COUNT         0.04f
+#define GIMBAL_MOUSE_YAW_DEG_PER_COUNT     0.06f
+#define GIMBAL_MOUSE_PITCH_DEG_PER_COUNT   0.025f
+#define GIMBAL_MOUSE_YAW_SIGN              (-1.0f)
+#define GIMBAL_MOUSE_PITCH_SIGN            (-1.0f)
 #define GIMBAL_MOUSE_RATE_FF_DPS_PER_COUNT 0.0f
 #define GIMBAL_MOUSE_DEADBAND_COUNT         1.0f
 #define GIMBAL_INPUT_RC                    0u
@@ -175,7 +178,10 @@ typedef struct
     volatile float yaw_manual_rate_max_deg_s;
     volatile float manual_pitch_sign;
     volatile float manual_yaw_sign;
-    volatile float mouse_deg_per_count;
+    volatile float mouse_yaw_deg_per_count;
+    volatile float mouse_pitch_deg_per_count;
+    volatile float mouse_yaw_sign;
+    volatile float mouse_pitch_sign;
     volatile float mouse_rate_ff_dps_per_count;
     volatile float mouse_deadband_count;
 } gimbal_tune_t;

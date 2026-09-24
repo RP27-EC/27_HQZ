@@ -551,21 +551,21 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
             pitch_delta = 0.0f;
         }
 
-        yaw_delta *= gimbal_tune.manual_yaw_sign;
-        pitch_delta *= gimbal_tune.manual_pitch_sign;
+        yaw_delta *= gimbal_tune.mouse_yaw_sign;
+        pitch_delta *= gimbal_tune.mouse_pitch_sign;
 
         if (yaw_delta != 0.0f)
         {
             gimbal->feedforward.yaw_hold_angle_deg = gimbal_wrap_deg(
                 gimbal->feedforward.yaw_hold_angle_deg +
-                yaw_delta * gimbal_tune.mouse_deg_per_count);
+                yaw_delta * gimbal_tune.mouse_yaw_deg_per_count);
             integral_to_zero(&gimbal->pid_info.yaw_hold);
         }
         if (pitch_delta != 0.0f)
         {
             gimbal->feedforward.pitch_hold_angle_deg = gimbal_clamp(
                 gimbal->feedforward.pitch_hold_angle_deg +
-                pitch_delta * gimbal_tune.mouse_deg_per_count,
+                pitch_delta * gimbal_tune.mouse_pitch_deg_per_count,
                 GIMBAL_PITCH_MIN_DEG,
                 GIMBAL_PITCH_MAX_DEG);
             integral_to_zero(&gimbal->pid_info.pitch_hold);
@@ -835,7 +835,10 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_tune.yaw_manual_rate_max_deg_s = GIMBAL_MANUAL_YAW_RATE_DEG_S;
     gimbal_tune.manual_pitch_sign = GIMBAL_MANUAL_PITCH_SIGN;
     gimbal_tune.manual_yaw_sign = GIMBAL_MANUAL_YAW_SIGN;
-    gimbal_tune.mouse_deg_per_count = GIMBAL_MOUSE_DEG_PER_COUNT;
+    gimbal_tune.mouse_yaw_deg_per_count = GIMBAL_MOUSE_YAW_DEG_PER_COUNT;
+    gimbal_tune.mouse_pitch_deg_per_count = GIMBAL_MOUSE_PITCH_DEG_PER_COUNT;
+    gimbal_tune.mouse_yaw_sign = GIMBAL_MOUSE_YAW_SIGN;
+    gimbal_tune.mouse_pitch_sign = GIMBAL_MOUSE_PITCH_SIGN;
     gimbal_tune.mouse_rate_ff_dps_per_count = GIMBAL_MOUSE_RATE_FF_DPS_PER_COUNT;
     gimbal_tune.mouse_deadband_count = GIMBAL_MOUSE_DEADBAND_COUNT;
 

@@ -12,7 +12,7 @@
 /* 键鼠输入参数。 */
 #define CHASSIS_KEY_SPEED_BOOST         1.5f
 #define CHASSIS_KEY_SPEED_SLOW          0.5f
-#define CHASSIS_KEY_VX_SIGN              1.0f
+#define CHASSIS_KEY_VX_SIGN             -1.0f
 #define CHASSIS_KEY_VY_SIGN              1.0f
 #define CHASSIS_KEY_WZ_SIGN              1.0f
 
