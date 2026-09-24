@@ -8,7 +8,7 @@ void kt_motor_class_pid_init(KT_motor_t *motor);
 
 
 void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf);  
-void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command);
+HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command);
 void tx_kt_motor_R_command(KT_motor_t *motor, uint8_t command);
 static void KT_Encoder_Sum_Cal(KT_motor_t *motor);
 
@@ -208,11 +208,11 @@ void kt_motor_multi_control(int16_t* iqControl, char kt_motor_num, motor_drive_e
 
 
 /* 鍐欏弬鏁版寚浠ゅ抚 */
-void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
+HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 {
 	
 	if( motor == NULL )
-		return;
+		return HAL_ERROR;
 	
 	KT_motor_pid_t       *pid      = &motor->KT_motor_info.pid_info;
 	
@@ -395,14 +395,14 @@ void tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 	
 	if(motor->KT_motor_info.id.drive_type == M_CAN1)
 	{
-		CAN_SendData(&hcan1, motor->KT_motor_info.id.tx_id, motor->tx_buff);
+		return CAN_SendData(&hcan1, motor->KT_motor_info.id.tx_id, motor->tx_buff);
 	}
 	else if(motor->KT_motor_info.id.drive_type == M_CAN2)
 	{
-		CAN_SendData(&hcan2, motor->KT_motor_info.id.tx_id, motor->tx_buff);
+		return CAN_SendData(&hcan2, motor->KT_motor_info.id.tx_id, motor->tx_buff);
 	}
-	else
-		return;
+
+	return HAL_ERROR;
 }
 	
 

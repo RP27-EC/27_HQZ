@@ -35,7 +35,6 @@ typedef struct
     uint8_t enabled;
     uint8_t fric_ready;
     uint8_t dial_online;
-    uint8_t single_pending;
     uint8_t last_shoot_level;
     uint8_t fault;
 } launcher_t;

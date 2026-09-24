@@ -200,7 +200,7 @@ typedef struct KT_motor_class_t
 	//W表示写，R表示读，cmd是命令
 	
 	void (*get_info)(struct KT_motor_class_t *motor, uint8_t *rxBuf);
-	void (*tx_W_cmd)(struct KT_motor_class_t *motor, uint8_t command);   //发送写命令
+	HAL_StatusTypeDef (*tx_W_cmd)(struct KT_motor_class_t *motor, uint8_t command);   //发送写命令
 	void (*tx_R_cmd)(struct KT_motor_class_t *motor, uint8_t command);		//发送主动读取信息命令
 	
 	
