@@ -746,6 +746,11 @@
               <FilePath>..\Application\DeviceLayer\cap.c</FilePath>
             </File>
             <File>
+              <FileName>supercap.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DeviceLayer\supercap.c</FilePath>
+            </File>
+            <File>
               <FileName>judge.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\DeviceLayer\judge.c</FilePath>
@@ -774,6 +779,11 @@
               <FileName>cap_protocol.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\ProtocolLayer\cap_protocol.c</FilePath>
+            </File>
+            <File>
+              <FileName>supercap_protocol.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ProtocolLayer\supercap_protocol.c</FilePath>
             </File>
             <File>
               <FileName>ui_protocol.c</FileName>
@@ -874,6 +884,11 @@
               <FileName>chassis_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Application\ConfigLayer\chassis_config.h</FilePath>
+            </File>
+            <File>
+              <FileName>supercap_config.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Application\ConfigLayer\supercap_config.h</FilePath>
             </File>
             <File>
               <FileName>rp_device_config.h</FileName>

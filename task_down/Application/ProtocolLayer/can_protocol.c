@@ -6,6 +6,7 @@
 #include "judge.h"
 #include "cap.h"
 #include "board_comm_config.h"
+#include "supercap.h"
 
 /* CAN1 接收分发 */
 /* 四轮、电容与无线充电接收分发 */
@@ -29,7 +30,11 @@ void CAN1_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 			wheel_motor[WHEEL_RB].rx(&wheel_motor[WHEEL_RB],rxBuf);
 			break;
 		
-#if BOARD_CAP_ENABLE
+#if SUPERCAP_BRINGUP_ENABLE
+		case SUPERCAP_CAN_RX_ID:
+			SuperCap_Rx(rxBuf);
+			break;
+#elif BOARD_CAP_ENABLE
 		case ID_SUPER_CAP_RX :
 			cap.rx(&cap,rxBuf);
 		  break;

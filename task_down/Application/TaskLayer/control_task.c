@@ -15,6 +15,7 @@
 #include "chassis_spin.h"
 #include "launch.h"
 #include "rp_math.h"
+#include "supercap.h"
 
 #if BOARD_COMM_DEBUG
 /* 调试模式下用遥控右摇杆生成云台机械角目标 */
@@ -116,6 +117,10 @@ void StartCtrlTask(void const *argument)
             Ui_Send();
         }
 #endif
+#endif
+
+#if SUPERCAP_BRINGUP_ENABLE
+        SuperCap_Tx();
 #endif
         osDelay(1);
     }

@@ -12,6 +12,7 @@
 #include "board_comm_config.h"
 #include "chassis_config.h"
 #include "launch.h"
+#include "supercap.h"
 
 void StartMonitorTask(void const *argument)
 {
@@ -28,6 +29,10 @@ void StartMonitorTask(void const *argument)
         imu_dev.heart_beat(&imu_dev.work_state);
 #endif
         board.heartbeat(&board);
+
+#if SUPERCAP_BRINGUP_ENABLE
+        SuperCap_Heartbeat();
+#endif
 
 #if BOARD_CAP_ENABLE
         cap.heartbeat(&cap);

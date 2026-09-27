@@ -16,8 +16,12 @@
 #include "chassis_follow.h"
 #include "chassis_spin.h"
 #include "chassis_input.h"
+#include "supercap.h"
 void DEVICE_Init(void)
 {
+#if SUPERCAP_BRINGUP_ENABLE
+    SuperCap_Init();
+#endif
 #if BOARD_COMM_DEBUG
     rc_dev.init(&rc_dev);
     board.init(&board);
