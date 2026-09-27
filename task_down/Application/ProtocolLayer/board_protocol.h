@@ -19,6 +19,10 @@
 #define BOARD_D5_CMD_RC_RATE            0u  /* 角速度控制量 */
 #define BOARD_D5_CMD_MOUSE_DELTA        1u  /* 鼠标增量控制量 */
 
+/* 鼠标计数值直通角速度；Pitch 符号保留当前修正方向。 */
+#define BOARD_D5_MOUSE_YAW_GAIN          3.0f
+#define BOARD_D5_MOUSE_PITCH_GAIN       -3.0f
+
 /* 下板发送报文 */
 #define  ID_PKT_01     0xD1  /* 整车状态与发射 */
 #define  ID_PKT_02     0xD2  /* 云台目标角度 */

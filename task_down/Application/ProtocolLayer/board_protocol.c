@@ -208,10 +208,9 @@ static float Board_Remote_Axis_To_Rate(int16_t axis, float max_rate)
     return value * max_rate;
 }
 
-/* 打包 D5：遥控角速度或键鼠增量 */
+/* 打包 D5：遥控/键鼠角速度 */
 void Board_Tx_Pkt_05(Board_t* board)
 {
-    static uint32_t last_mouse_seq; /* 鼠标更新序号 */
     float yaw_rate = 0.0f;   /* Yaw 角速度，deg/s */
     float pitch_rate = 0.0f; /* Pitch 角速度，deg/s */
     int16_t yaw_raw = 0;     /* Yaw 压缩值 */
@@ -228,24 +227,20 @@ void Board_Tx_Pkt_05(Board_t* board)
         if (Chassis_Input_IsKeyboardMode() != 0u)
         {
             ctrl_source = BOARD_D5_CTRL_KEYBOARD;
-            cmd_type = BOARD_D5_CMD_MOUSE_DELTA;
+            cmd_type = BOARD_D5_CMD_RC_RATE;
             button_bits = (uint8_t)((rc_dev.info->mouse_btn_l.value & 0x01u) |
                                     ((rc_dev.info->mouse_btn_r.value & 0x01u) << 1));
-
-        /* 鼠标增量按更新序号只取一次 */
-            if (rc_dev.info->update_seq != last_mouse_seq)
-            {
-                last_mouse_seq = rc_dev.info->update_seq;
-                yaw_raw = rc_dev.info->mouse_vx;
-                pitch_raw = rc_dev.info->mouse_vy;
-            }
+            yaw_rate = constrain(rc_dev.info->mouse_x * BOARD_D5_MOUSE_YAW_GAIN,
+                                 -BOARD_D5_YAW_RATE_MAX_DEG_S,
+                                 BOARD_D5_YAW_RATE_MAX_DEG_S);
+            pitch_rate = constrain(rc_dev.info->mouse_y * BOARD_D5_MOUSE_PITCH_GAIN,
+                                   -BOARD_D5_PITCH_RATE_MAX_DEG_S,
+                                   BOARD_D5_PITCH_RATE_MAX_DEG_S);
         }
         else
 #endif
         {
-        /* 遥控角速度或鼠标增量二选一装箱 */
-            /* 切回遥控时同步序号，防止旧增量被重放 */
-            last_mouse_seq = rc_dev.info->update_seq;
+        /* 遥控角速度装箱 */
 #if CHASSIS_BRINGUP_ENABLE
             if (rc_dev.info->s1.value == RC_SW_DOWN)
             {
@@ -277,10 +272,11 @@ void Board_Tx_Pkt_05(Board_t* board)
 #endif
             pitch_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch1,
                                                    BOARD_D5_PITCH_RATE_MAX_DEG_S);
-            yaw_raw = (int16_t)(yaw_rate / BOARD_D5_RATE_LSB_DEG_S);
-            pitch_raw = (int16_t)(pitch_rate / BOARD_D5_RATE_LSB_DEG_S);
         }
     }
+
+    yaw_raw = (int16_t)(yaw_rate / BOARD_D5_RATE_LSB_DEG_S);
+    pitch_raw = (int16_t)(pitch_rate / BOARD_D5_RATE_LSB_DEG_S);
 
     memset(pkt_05, 0, 8);
     /* D5 状态位，低位依次为有效、来源、类型 */
