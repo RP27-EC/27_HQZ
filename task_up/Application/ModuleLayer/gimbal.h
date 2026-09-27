@@ -88,8 +88,8 @@
 #define GIMBAL_MOUSE_PITCH_RATE_GAIN       1.0f
 
 /* 键鼠输入：鼠标计数 -> 目标角度增量 / 角速度前馈 */
-#define GIMBAL_MOUSE_YAW_DEG_PER_COUNT     0.06f
-#define GIMBAL_MOUSE_PITCH_DEG_PER_COUNT   0.025f
+#define GIMBAL_MOUSE_YAW_DEG_PER_COUNT     0.04f
+#define GIMBAL_MOUSE_PITCH_DEG_PER_COUNT   0.04f
 #define GIMBAL_MOUSE_YAW_SIGN              (-1.0f)
 #define GIMBAL_MOUSE_PITCH_SIGN            (-1.0f)
 #define GIMBAL_MOUSE_RATE_FF_DPS_PER_COUNT 0.0f

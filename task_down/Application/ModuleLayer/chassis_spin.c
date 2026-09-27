@@ -6,6 +6,7 @@
 #include <stddef.h>
 
 #include "board_protocol.h"
+#include "chassis_input.h"
 #include "main.h"
 #include "rc_sensor.h"
 #include "rp_math.h"
@@ -131,6 +132,13 @@ void Chassis_Spin_UpdateMode(void)
     uint8_t selected = 0u; /* 小陀螺档位选择 */
 
 #if CHASSIS_SPIN_ENABLE
+#if CHASSIS_KEYBOARD_INPUT_ENABLE
+    if (Chassis_Input_IsKeyboardMode() != 0u)
+    {
+        selected = (Chassis_Input_GetKeyboardChassisMode() == CHASSIS_KEY_MODE_SPIN) ? 1u : 0u;
+    }
+    else
+#endif
     if ((rc_dev.work_state == DEV_ONLINE) &&
         (rc_dev.info != NULL) &&
         (rc_dev.info->s1.value == RC_SW_UP) &&

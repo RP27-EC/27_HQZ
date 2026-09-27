@@ -13,7 +13,7 @@
 #define CHASSIS_KEY_SPEED_BOOST         1.5f
 #define CHASSIS_KEY_SPEED_SLOW          0.5f
 #define CHASSIS_KEY_VX_SIGN             -1.0f
-#define CHASSIS_KEY_VY_SIGN              1.0f
+#define CHASSIS_KEY_VY_SIGN             -1.0f
 #define CHASSIS_KEY_WZ_SIGN              1.0f
 
 /* 后续阶段保留，第一阶段默认关闭。 */
@@ -25,7 +25,7 @@
 
 #define CHASSIS_CONTROL_PERIOD_MS       1u
 
-/* 小陀螺参数。S1 上拨使能，S2 下拨选择小陀螺模式，ch0 控制旋转速度。 */
+/* 小陀螺参数。遥控 S2 下拨选择，键鼠按 C 选择，ch0 控制旋转速度。 */
 #define CHASSIS_SPIN_MAX_WZ              20.0f
 #define CHASSIS_SPIN_BASE_WZ             20.0f
 #define CHASSIS_SPIN_TRIM_WZ             0.0f
@@ -39,7 +39,7 @@
 #define CHASSIS_SPIN_GIMBAL_TIMEOUT_MS    50u
 #define CHASSIS_SPIN_TORQUE_LIMIT_NM     4.0f
 
-/* 底盘跟随云台参数。S1 上拨使能，S2 上拨选择跟随模式。 */
+/* 底盘跟随云台参数。遥控 S2 上/中拨选择，键鼠按 Z 选择。 */
 #define CHASSIS_FOLLOW_TRANSLATION_ENABLE 1u
 #define CHASSIS_FOLLOW_CENTER_RAD         0.0f
 #define CHASSIS_FOLLOW_YAW_ANGLE_SIGN     1.0f

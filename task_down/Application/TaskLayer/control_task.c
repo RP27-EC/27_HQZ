@@ -184,9 +184,9 @@ void StartCtrlTask(void const *argument)
 
     /* 第一阶段底盘调试链路 */
 #if CHASSIS_BRINGUP_ENABLE
+        Chassis_Input_Update();
         Chassis_Follow_UpdateMode();
         Chassis_Spin_UpdateMode();
-        Chassis_Input_Update();
         Chassis_Follow_Update(&chassis_input_cmd);
         Chassis_Spin_Update(&chassis_input_cmd);
         Chassis_Control_Update(&chassis_input_cmd);

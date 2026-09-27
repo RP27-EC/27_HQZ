@@ -9,6 +9,10 @@ chassis_cmd_t chassis_input_cmd; /* 输入解析后的底盘指令 */
 
 static uint8_t keyboard_source_active; /* 键鼠输入源已开启 */
 static uint8_t last_f_pressed; /* 上拍 F 键状态 */
+static chassis_key_mode_e keyboard_chassis_mode; /* 键鼠底盘模式 */
+static uint8_t last_z_pressed; /* Z 键上次状态 */
+static uint8_t last_x_pressed; /* X 键上次状态 */
+static uint8_t last_c_pressed; /* C 键上次状态 */
 
 /* 遥控通道归一化，含死区 */
 static float Chassis_RcAxisValue(int16_t axis)
@@ -47,6 +51,40 @@ uint8_t Chassis_Input_IsKeyboardMode(void)
 
     return (rc_dev.info->s1.value == RC_SW_UP) ? 1u : 0u;
 #endif
+}
+
+/* Z/X/C 选择键鼠底盘模式，只在键鼠源生效 */
+static void Chassis_Input_KeyboardModeUpdate(const rc_data_t *rc)
+{
+    uint8_t z_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_Z) != 0u) ? 1u : 0u;
+    uint8_t x_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_X) != 0u) ? 1u : 0u;
+    uint8_t c_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_C) != 0u) ? 1u : 0u;
+
+    if (Chassis_Input_IsKeyboardMode() != 0u)
+    {
+        if ((z_pressed != 0u) && (last_z_pressed == 0u))
+        {
+            keyboard_chassis_mode = CHASSIS_KEY_MODE_FOLLOW;
+        }
+        else if ((x_pressed != 0u) && (last_x_pressed == 0u))
+        {
+            keyboard_chassis_mode = CHASSIS_KEY_MODE_MECH;
+        }
+        else if ((c_pressed != 0u) && (last_c_pressed == 0u))
+        {
+            keyboard_chassis_mode = CHASSIS_KEY_MODE_SPIN;
+        }
+    }
+
+    last_z_pressed = z_pressed;
+    last_x_pressed = x_pressed;
+    last_c_pressed = c_pressed;
+}
+
+/* 获取键鼠选择的底盘模式 */
+chassis_key_mode_e Chassis_Input_GetKeyboardChassisMode(void)
+{
+    return keyboard_chassis_mode;
 }
 
 /* WASD 平移、QE 旋转，Shift/Ctrl 调速 */
@@ -108,6 +146,10 @@ void Chassis_Input_Init(void)
     chassis_input_cmd.source = CHASSIS_SRC_NONE;
     keyboard_source_active = 0u;
     last_f_pressed = 0u;
+    keyboard_chassis_mode = CHASSIS_KEY_MODE_FOLLOW;
+    last_z_pressed = 0u;
+    last_x_pressed = 0u;
+    last_c_pressed = 0u;
 }
 
 /* 上层模式覆盖输入来源 */
@@ -134,6 +176,10 @@ void Chassis_Input_Update(void)
     {
         keyboard_source_active = 0u;
         last_f_pressed = 0u;
+        keyboard_chassis_mode = CHASSIS_KEY_MODE_FOLLOW;
+        last_z_pressed = 0u;
+        last_x_pressed = 0u;
+        last_c_pressed = 0u;
         chassis_input_cmd = cmd;
         return;
     }
@@ -145,6 +191,8 @@ void Chassis_Input_Update(void)
         keyboard_source_active ^= 1u;
     }
     last_f_pressed = f_pressed;
+
+    Chassis_Input_KeyboardModeUpdate(rc);
 
     /* 键鼠模式优先于遥控摇杆 */
 #if CHASSIS_KEYBOARD_INPUT_ENABLE

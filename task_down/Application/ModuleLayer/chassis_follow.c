@@ -6,6 +6,7 @@
 #include <stddef.h>
 
 #include "board_protocol.h"
+#include "chassis_input.h"
 #include "main.h"
 #include "rc_sensor.h"
 #include "rp_math.h"
@@ -103,7 +104,7 @@ void Chassis_Follow_Init(void)
     follow_last_selected = 0u;
 }
 
-/* S1/S2 上拨选择跟随，云台失联则锁存故障 */
+/* S1 上拨且 S2 上/中拨选择跟随，云台失联则锁存故障 */
 void Chassis_Follow_UpdateMode(void)
 {
     uint8_t rc_ready;      /* 遥控器在线且数据有效 */
@@ -119,11 +120,19 @@ void Chassis_Follow_UpdateMode(void)
     }
 
 #if CHASSIS_GIMBAL_FOLLOW_ENABLE
+#if CHASSIS_KEYBOARD_INPUT_ENABLE
+    if (Chassis_Input_IsKeyboardMode() != 0u)
+    {
+        selected = (Chassis_Input_GetKeyboardChassisMode() == CHASSIS_KEY_MODE_FOLLOW) ? 1u : 0u;
+    }
+    else
+#endif
     if ((rc_ready != 0u) &&
         (rc_dev.info->s1.value == RC_SW_UP) &&
-        (rc_dev.info->s2.value == RC_SW_UP))
+        ((rc_dev.info->s2.value == RC_SW_UP) ||
+         (rc_dev.info->s2.value == RC_SW_MID)))
     {
-        selected = 1u; /* S1/S2 上拨 */
+        selected = 1u; /* S1 上拨且 S2 上/中拨 */
     }
 #else
     (void)rc_ready;
