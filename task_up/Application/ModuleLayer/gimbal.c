@@ -226,16 +226,20 @@ static void gimbal_pid_init(gimbal_t *gimbal)
 
     /* Yaw 机械编码器串级 */
     pid = &gimbal->pid_info.yaw_mec_outer;//下面的也是同理
-    pid->kp = 1.0f; pid->ki = 0.0f; pid->kd = 0.0f;
+    pid->kp = 1.0f; pid->ki = 0.0f; pid->kd = GIMBAL_MEC_OUTER_KD;
+    pid->deadband = GIMBAL_MEC_ERR_DEADBAND_DEG;
+    pid->d_filter_alpha = GIMBAL_MEC_OUTER_D_FILTER_ALPHA;
     pid->integral_max = 0.0f; pid->out_max = 500.0f;
 
     pid = &gimbal->pid_info.yaw_mec_inner;
-    pid->kp = 1.5f; pid->ki = 0.0f; pid->kd = 0.2f;
+    pid->kp = 3.5f; pid->ki = 0.0f; pid->kd = 0.0f;
     pid->integral_max = 0.0f; pid->out_max = 100.0f;
 
     /* Pitch 机械编码器串级 */
     pid = &gimbal->pid_info.pitch_mec_outer;
-    pid->kp = 1.6f; pid->ki = 0.0f; pid->kd = 0.0f;
+    pid->kp = 1.6f; pid->ki = 0.0f; pid->kd = GIMBAL_MEC_OUTER_KD;
+    pid->deadband = GIMBAL_MEC_ERR_DEADBAND_DEG;
+    pid->d_filter_alpha = GIMBAL_MEC_OUTER_D_FILTER_ALPHA;
     pid->integral_max = 500.0f; pid->out_max = 10.0f;
 
     pid = &gimbal->pid_info.pitch_mec_inner;
@@ -682,6 +686,85 @@ static float gimbal_gravity_compensation(gimbal_t *gimbal)
  */
 
 /*  PID 计算  力矩合成输出 */
+/* 机械位置环输出限速：按剩余角计算制动速度上限 */
+static float gimbal_mec_speed_limit(float error_deg,
+                                     float max_rate_deg_s,
+                                     float decel_rad_s2)
+{
+    float error_rad = gimbal_abs(error_deg) * GIMBAL_DEG_TO_RAD;
+    float max_rate_rad_s = max_rate_deg_s * GIMBAL_DEG_TO_RAD;
+    float brake_rate = sqrtf(2.0f * decel_rad_s2 * error_rad);
+
+    return (brake_rate < max_rate_rad_s) ? brake_rate : max_rate_rad_s;
+}
+
+/* 机械串级：位置 P/D -> 限速 -> 速度 PID -> 力矩 */
+/* 小误差保持力矩的权重：远距离为 0，近距离为 1 */
+static float gimbal_mec_hold_blend(float error_deg)
+{
+    float abs_error = gimbal_abs(error_deg);
+
+    if (abs_error <= GIMBAL_MEC_HOLD_FULL_ERR_DEG)
+    {
+        return 1.0f;
+    }
+    if (abs_error >= GIMBAL_MEC_HOLD_ENTER_ERR_DEG)
+    {
+        return 0.0f;
+    }
+
+    return (GIMBAL_MEC_HOLD_ENTER_ERR_DEG - abs_error) /
+           (GIMBAL_MEC_HOLD_ENTER_ERR_DEG -
+            GIMBAL_MEC_HOLD_FULL_ERR_DEG);
+}
+
+static float gimbal_mec_pid_calc(pid_ctrl_t *outer,
+                                pid_ctrl_t *inner,
+                                float target,
+                                float angle,
+                                float speed,
+                                float max_rate_deg_s,
+                                float decel_rad_s2,
+                                float hold_kp_nm_per_deg,
+                                float hold_kd_nm_per_rad_s,
+                                uint8_t wrap)
+{
+    float speed_loop_out;
+    float hold_torque;
+    float hold_blend;
+    float speed_limit;
+
+    outer->target = target;
+    outer->measure = angle;
+    outer->err = target - angle;
+    if (wrap != 0u)
+    {
+        outer->err = gimbal_wrap_deg(outer->err);
+    }
+    single_pid_ctrl(outer);
+
+    speed_limit = gimbal_mec_speed_limit(outer->err,
+                                          max_rate_deg_s,
+                                          decel_rad_s2);
+    outer->out = gimbal_clamp(outer->out, -speed_limit, speed_limit);
+
+    inner->target = outer->out;
+    inner->measure = speed;
+    inner->err = inner->target - inner->measure;
+    single_pid_ctrl(inner);
+
+    speed_loop_out = inner->out;
+    hold_torque = hold_kp_nm_per_deg * outer->err -
+                  hold_kd_nm_per_rad_s * speed;
+    hold_torque = gimbal_clamp(hold_torque,
+                               -GIMBAL_MEC_HOLD_TORQUE_LIMIT_NM,
+                               GIMBAL_MEC_HOLD_TORQUE_LIMIT_NM);
+    hold_blend = gimbal_mec_hold_blend(outer->err);
+
+    return (speed_loop_out * (1.0f - hold_blend)) +
+           (hold_torque * hold_blend);
+}
+
 /* 按当前模式计算两轴力矩并做硬件限幅 */
 static void gimbal_calc_output(gimbal_t *gimbal)
 {
@@ -694,8 +777,6 @@ static void gimbal_calc_output(gimbal_t *gimbal)
     case G_INIT: /* 上电归中 */
         gimbal_update_init(gimbal);
         // 上电归中仍使用机械角/速度串级
-        /* fall through */
-    case G_MEC: /* 机械模式：编码器位置环 */
         gimbal->base_info.output_gimbal_p =
             all_pid_calc(&gimbal->pid_info.pitch_mec_outer,
                          &gimbal->pid_info.pitch_mec_inner,
@@ -715,6 +796,31 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          0.0f,
                          1.0f,
                          3);
+        break;
+    case G_MEC: /* 机械模式：位置限速制动 */
+        gimbal->base_info.output_gimbal_p =
+            gimbal_mec_pid_calc(&gimbal->pid_info.pitch_mec_outer,
+                                &gimbal->pid_info.pitch_mec_inner,
+                                gimbal->pid_info.pitch_target,
+                                gimbal->base_info.pitch_mec_angle,
+                                gimbal->base_info.pitch_mec_speed,
+                                GIMBAL_MEC_PITCH_MAX_RATE_DEG_S,
+                                GIMBAL_MEC_PITCH_DECEL_RAD_S2,
+                                GIMBAL_MEC_PITCH_HOLD_KP_NM_PER_DEG,
+                                GIMBAL_MEC_PITCH_HOLD_KD_NM_PER_RAD_S,
+                                0u) + gravity;
+
+        gimbal->base_info.output_gimbal_y =
+            gimbal_mec_pid_calc(&gimbal->pid_info.yaw_mec_outer,
+                                &gimbal->pid_info.yaw_mec_inner,
+                                gimbal->pid_info.yaw_target,
+                                gimbal->base_info.yaw_mec_angle,
+                                gimbal->base_info.yaw_mec_speed,
+                                GIMBAL_MEC_YAW_MAX_RATE_DEG_S,
+                                GIMBAL_MEC_YAW_DECEL_RAD_S2,
+                                GIMBAL_MEC_YAW_HOLD_KP_NM_PER_DEG,
+                                GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S,
+                                1u);
         break;
     case G_GYRO:
         // Pitch 陀螺仪环

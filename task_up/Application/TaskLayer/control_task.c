@@ -67,6 +67,7 @@ static void gimbal_can_send(void)
 void StartControlTask(void const *argument)
 {
     (void)argument;
+    uint32_t next_tick = osKernelSysTick();
 
     for (;;)
     {
@@ -86,7 +87,10 @@ void StartControlTask(void const *argument)
         Launcher_Work();
         Send_To_Down_Board();
 
-        osDelay(1);
+        if (osDelayUntil(&next_tick, 1u) != osOK)
+        {
+            next_tick = osKernelSysTick();
+        }
     }
 }
 

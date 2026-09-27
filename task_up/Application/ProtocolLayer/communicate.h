@@ -109,6 +109,7 @@ typedef struct
 } Board_HeartBeat_t;
 
 extern Board_Rx_Info_t Board_Rx_Info;
+extern volatile uint8_t Board_Rx_Shoot_Flags;
 extern Board_Tx_Info_t Board_Tx_Info;
 extern Board_HeartBeat_t Board_HeartBeat;
 

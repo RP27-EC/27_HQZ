@@ -53,14 +53,14 @@ static float Chassis_Spin_Ramp(float current, float target, float step)
 /* 云台反馈未超时且有效才允许系变换 */
 static uint8_t Chassis_Spin_GimbalValid(void)
 {
-    uint32_t age; /* 云台反馈年龄，ms */
+    uint32_t age; /* 云台反馈 ms */
 
     if ((board.status == NULL) || (board.status->gimbal_data_valid == 0u))
     {
         return 0u;
     }
 
-    age = HAL_GetTick() - board.status->gimbal_rx_time_ms; /* 反馈年龄 */
+    age = HAL_GetTick() - board.status->gimbal_rx_time_ms; /* 反馈 */
     return (age <= CHASSIS_SPIN_GIMBAL_TIMEOUT_MS) ? 1u : 0u;
 }
 

@@ -14,6 +14,8 @@
 #include "chassis_follow.h"
 #include "chassis_spin.h"
 
+static volatile uint8_t board_tx_shoot_flags; /* 单字节发射状态快照 */
+
 
 Board_Tx_Pkt_t board_tx_pkt; /* 下板发送缓存 */
 Board_Rx_Meg_t board_rx_meg; /* 上板反馈缓存 */
@@ -35,6 +37,15 @@ Board_t board = /* 板间通信对象 */
 
 
 /* 绑定收发函数并复位链路状态 */
+void Board_Set_Shoot_Flags(uint8_t launch_state, uint8_t shoot_mode,
+                           uint8_t shoot_level)
+{
+    board_tx_shoot_flags =
+        (uint8_t)((launch_state & 0x01u) |
+                  ((shoot_mode & 0x01u) << 1) |
+                  ((shoot_level & 0x01u) << 2));
+}
+
 void Board_Init(Board_t* board)
 {
 	board->status->offline_cnt = board->status->offline_cnt_max;
@@ -102,9 +113,7 @@ void Board_Tx_Pkt_01(Board_t* board)
 	pkt_01[4] = t2;    /* v_y 低字节 */
 
 									 
-	pkt_01[5] |= (board->tx_pkt->shoot_pkt.launch_state & 0x01) << 0; /* 发射许可 */
-	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_mode & 0x01) << 1; /* 发射模式 */
-	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_level & 0x01) << 2; /* 触发电平 */
+	pkt_01[5] |= board_tx_shoot_flags & 0x07u;
 	pkt_01[5] |= (board->tx_pkt->gimbal_target_pkt.is_hole & 0x01) << 3; /* 过洞标志 */
 	
 

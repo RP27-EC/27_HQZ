@@ -36,6 +36,22 @@
 #define GIMBAL_PITCH_MIN_DEG       (-7.5f)
 /* Pitch 机械上限 */
 #define GIMBAL_PITCH_MAX_DEG       30.0f
+/* 机械模式：位置外环微分与制动整形 */
+#define GIMBAL_MEC_OUTER_KD              0.1f
+#define GIMBAL_MEC_OUTER_D_FILTER_ALPHA  0.85f
+#define GIMBAL_MEC_ERR_DEADBAND_DEG      0.1f
+#define GIMBAL_MEC_YAW_MAX_RATE_DEG_S    120.0f
+#define GIMBAL_MEC_PITCH_MAX_RATE_DEG_S  90.0f
+#define GIMBAL_MEC_YAW_DECEL_RAD_S2      8.0f
+#define GIMBAL_MEC_PITCH_DECEL_RAD_S2    6.0f
+/* 机械模式：小误差直接位置刚度与阻尼 */
+#define GIMBAL_MEC_YAW_HOLD_KP_NM_PER_DEG   0.8f
+#define GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S 0.08f
+#define GIMBAL_MEC_PITCH_HOLD_KP_NM_PER_DEG 0.5f
+#define GIMBAL_MEC_PITCH_HOLD_KD_NM_PER_RAD_S 0.06f
+#define GIMBAL_MEC_HOLD_FULL_ERR_DEG     1.0f
+#define GIMBAL_MEC_HOLD_ENTER_ERR_DEG    3.0f
+#define GIMBAL_MEC_HOLD_TORQUE_LIMIT_NM  3.0f
 /* 最终输出力矩限幅 */
 #define GIMBAL_TORQUE_LIMIT        6.0f
 /* 重力补偿开关：0 关闭，1 开启 */

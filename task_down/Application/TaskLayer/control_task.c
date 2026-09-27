@@ -80,6 +80,7 @@ uint8_t open_ui = 0; /* UI 首次发送延迟标志 */
 void StartCtrlTask(void const *argument)
 {
     (void)argument;
+    uint32_t next_tick = osKernelGetTickCount();
 
     for (;;)
     {
@@ -117,7 +118,11 @@ void StartCtrlTask(void const *argument)
         }
 #endif
 #endif
-        osDelay(1);
+        next_tick += 1u;
+        if (osDelayUntil(next_tick) != osOK)
+        {
+            next_tick = osKernelGetTickCount();
+        }
     }
 }
 
