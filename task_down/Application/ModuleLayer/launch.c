@@ -4,6 +4,7 @@
 #include "board_protocol.h"
 #include "rc_sensor.h"
 #include "chassis_input.h"
+#include "board_comm_config.h"
 
 static void Launch_Init(Launch_t *launch);
 static void Launch_Work(Launch_t *launch);
@@ -76,6 +77,18 @@ static void Launch_Data_Update(Launch_t *launch)
     launch->shoot_level = 0u;
     return;
     }
+
+#if BOARD_LIFT_ENABLE
+    if ((board.tx_pkt->gimbal_target_pkt.is_hole != 0u) ||
+        (board.rx_meg->state_meg.is_down != 2u))
+    {
+        Launch_Reset_Shoot_Arm();
+        launch->state = L_LOCK;
+        launch->mode = SINGLE_SHOT;
+        launch->shoot_level = 0u;
+        return;
+    }
+#endif
 
     s1 = (uint8_t)rc_dev.info->s1.value; /* 读取 S1 */
     s2 = (uint8_t)rc_dev.info->s2.value; /* 读取 S2 */

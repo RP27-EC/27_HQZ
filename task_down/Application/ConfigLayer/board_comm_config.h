@@ -12,6 +12,11 @@
 #define BOARD_COMM_D5_ENABLE            1u
 
 /* Temporarily bypassed vehicle modules during bring-up. */
+#define BOARD_LIFT_ENABLE               1u
+#define BOARD_HOLE_WHEEL_REVERSE        1u
+#define BOARD_HOLE_EXIT_TIMEOUT_MS      5000u
+#define BOARD_HOLE_PITCH_TARGET_RAD     0.0f
+
 #define BOARD_CAP_ENABLE                0u
 #define BOARD_JUDGE_ENABLE              0u
 #define BOARD_UI_ENABLE                 0u

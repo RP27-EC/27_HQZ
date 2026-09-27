@@ -17,7 +17,115 @@
 #include "rp_math.h"
 #include "supercap.h"
 
+typedef struct
+{
+    volatile uint8_t rc_state;
+    volatile uint8_t s1;
+    volatile uint8_t s2;
+    volatile int16_t wheel_value;
+    volatile uint8_t step[4];
+    volatile uint8_t rise[4];
+    volatile uint8_t wheel_event;
+    volatile uint8_t is_hole;
+    volatile uint8_t exit_pending;
+} board_lift_debug_t;
+
+volatile board_lift_debug_t board_lift_dbg;
+volatile uint8_t board_hole_request;
+volatile uint8_t board_hole_exit_pending;
+
 #if BOARD_COMM_DEBUG
+static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
+{
+    static uint8_t wheel_seen = 0u;
+    static uint8_t last_wheel_step[4];
+    static uint32_t hole_exit_tick = 0u;
+    uint32_t now = HAL_GetTick();
+    uint8_t wheel_event;
+
+    board_lift_dbg.rc_state = (uint8_t)rc_dev.work_state;
+    board_lift_dbg.s1 = (uint8_t)rc_info->s1.value;
+    board_lift_dbg.s2 = (uint8_t)rc_info->s2.value;
+    board_lift_dbg.wheel_value = rc_info->thumbwheel.value;
+    for (uint8_t i = 0u; i < 4u; i++)
+    {
+        board_lift_dbg.step[i] = rc_info->thumbwheel.step[i];
+        board_lift_dbg.rise[i] = rc_info->thumbwheel.step_rising_trigger[i];
+    }
+
+    if (rc_dev.work_state != DEV_ONLINE)
+    {
+        wheel_seen = 0u;
+        board_hole_request = 0u;
+        board_hole_exit_pending = 0u;
+        board_lift_dbg.is_hole = 0u;
+        board_lift_dbg.exit_pending = 0u;
+        board.tx_pkt->gimbal_target_pkt.is_hole = 0u;
+        return 0u;
+    }
+
+    if (wheel_seen == 0u)
+    {
+        for (uint8_t i = 0u; i < 4u; i++)
+        {
+            last_wheel_step[i] = rc_info->thumbwheel.step[i];
+        }
+        wheel_seen = 1u;
+    }
+
+    wheel_event = 0u;
+    for (uint8_t i = 0u; i < 4u; i++)
+    {
+        if ((rc_info->thumbwheel.step[i] != last_wheel_step[i]) ||
+            (rc_info->thumbwheel.step_rising_trigger[i] != 0u))
+        {
+            wheel_event = 1u;
+        }
+        last_wheel_step[i] = rc_info->thumbwheel.step[i];
+    }
+
+    if ((rc_info->s1.value == RC_SW_UP) &&
+        (rc_info->s2.value == RC_SW_MID) &&
+        (wheel_event != 0u))
+    {
+        board_hole_request ^= 1u;
+        if (board_hole_request != 0u)
+        {
+            board_hole_exit_pending = 0u;
+        }
+        else
+        {
+            board_hole_exit_pending = 1u;
+            hole_exit_tick = now;
+        }
+    }
+
+    board.tx_pkt->gimbal_target_pkt.is_hole = board_hole_request;
+    board_lift_dbg.wheel_event = wheel_event;
+    board_lift_dbg.is_hole = (uint8_t)board_hole_request;
+
+    if (board_hole_exit_pending != 0u)
+    {
+        if ((board.rx_meg->state_meg.is_down == 2u) ||
+            ((now - hole_exit_tick) >= BOARD_HOLE_EXIT_TIMEOUT_MS))
+        {
+            board_hole_exit_pending = 0u;
+        }
+    }
+
+    board_lift_dbg.exit_pending = (uint8_t)board_hole_exit_pending;
+    if ((board_hole_request != 0u) || (board_hole_exit_pending != 0u))
+    {
+        board.tx_pkt->car_pkt.gimbal_mode = 0u;
+        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = BOARD_MEC_YAW_FRONT_RAD;
+        board.tx_pkt->gimbal_target_pkt.pitch_mec_tar =
+            BOARD_HOLE_PITCH_TARGET_RAD;
+        return 1u;
+    }
+
+    return 0u;
+}
+
 /* 调试模式下用遥控右摇杆生成云台机械角目标 */
 static void Board_Debug_Gimbal_Command(void)
 {
@@ -34,10 +142,18 @@ static void Board_Debug_Gimbal_Command(void)
         board.tx_pkt->gimbal_target_pkt.pitch_mec_tar = 0.0f;
         board.tx_pkt->gimbal_target_pkt.yaw_imu_tar = 0.0f;
         board.tx_pkt->gimbal_target_pkt.pitch_imu_tar = 0.0f;
+        board.tx_pkt->gimbal_target_pkt.is_hole = 0u;
         return;
     }
 
     board.tx_pkt->car_pkt.car_state = 1u;
+#if BOARD_LIFT_ENABLE
+    if (Board_Debug_Hole_Command(rc_info) != 0u)
+    {
+        mec_mode_active = 0u;
+        return;
+    }
+#endif
     /* S1 下位保留控制使能，仅切换机械环 */
     /* S1 下拨：只切换云台机械环，底盘仍由底盘分支控制 */
     if (rc_info->s1.value == RC_SW_DOWN)

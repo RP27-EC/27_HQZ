@@ -3,6 +3,7 @@
 #include "communicate.h"
 #include "drv_can.h"
 #include "gimbal.h"
+#include "lift.h"
 #include "imu_sensor.h"
 #include "motor.h"
 
@@ -128,7 +129,7 @@ static void Board_Tx_Update(void)
         (dm_motor[YAW].state->status == DEV_ONLINE) ? 1 : 0;
     Board_Tx_Info.state_meg.pitch_motor_state =
         (dm_motor[PITCH].state->status == DEV_ONLINE) ? 1 : 0;
-    Board_Tx_Info.state_meg.lift_motor_state = 0;
+    Board_Tx_Info.state_meg.lift_motor_state = Lift_MotorOnline();
     Board_Tx_Info.state_meg.r_fric_state =
         (rm_motor[SHOOT_FRIC_R].state->status == DEV_ONLINE) ? 1 : 0;
     Board_Tx_Info.state_meg.l_fric_state =
@@ -136,7 +137,7 @@ static void Board_Tx_Update(void)
     Board_Tx_Info.state_meg.dial_motor_state =
         (dail_motor.KT_motor_info.state_info.work_state == M_ONLINE) ? 1 : 0;
     Board_Tx_Info.state_meg.vision_state = 0;
-    Board_Tx_Info.state_meg.lift_state = 0;
+    Board_Tx_Info.state_meg.lift_state = Lift_Get_Report_State();
 }
 
 /* 打包 C1：设备在线状态 */

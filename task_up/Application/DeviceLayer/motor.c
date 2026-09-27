@@ -197,6 +197,43 @@ rm_ctrl_t R_Fric_Ctrl =
     .speed_ctrl = &R_Fric_Speed_Ctrl,
 };
 
+/* 升降 RM2006，占用 0x200 组第 4 路 */
+rm_cfg_t Lift_Born =
+{
+    .rxId = 3,
+    .stdId = 0x200,
+    .type = _2006_Single,
+    .hcan = &hcan1,
+};
+
+rm_tx_t Lift_Tx;
+rm_rx_t Lift_Rx;
+rm_state_t Lift_State;
+
+pid_ctrl_t Lift_Speed_Ctrl =
+{
+    .kp = 0.0f,
+    .ki = 0.0f,
+    .kd = 0.0f,
+    .integral_max = 0.0f,
+    .out_max = 0.0f,
+};
+
+rm_ctrl_t Lift_Ctrl =
+{
+    .speed_ctrl = &Lift_Speed_Ctrl,
+};
+
+rm_motor_t lift_motor =
+{
+    .born_info = &Lift_Born,
+    .rx_info = &Lift_Rx,
+    .tx_info = &Lift_Tx,
+    .state = &Lift_State,
+    .ctrl = &Lift_Ctrl,
+    .single_init = rm_motor_init,
+};
+
 /* 摩擦轮索引表 */
 rm_motor_t rm_motor[SHOOT_FRIC_NUM] =
 {
@@ -225,6 +262,7 @@ rm_group_t RM_Group =
 {
     .motor[SHOOT_FRIC_L] = &rm_motor[SHOOT_FRIC_L],
     .motor[SHOOT_FRIC_R] = &rm_motor[SHOOT_FRIC_R],
+    .motor[3] = &lift_motor,
     .stdId = 0x200,
     .hcan = &hcan1,
     .group_init = rm_group_init,

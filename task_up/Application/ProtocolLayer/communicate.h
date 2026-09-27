@@ -55,7 +55,7 @@ typedef struct
     uint8_t launch_state; /* 发射机构使能 */
     uint8_t shoot_mode;   /* 0 = 单发，1 = 连发 */
     uint8_t shoot_level;  /* 发射触发电平 */
-    uint8_t is_hole;      /* 弹仓剩余检测 */
+    uint8_t is_hole;      /* 1 = 进入狗洞并压低 */
 } Board_Shoot_Pkt_t;
 
 /* 上板接收缓存 */

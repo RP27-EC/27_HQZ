@@ -59,7 +59,7 @@ typedef struct{
 	float yaw_imu_tar;   /* Yaw IMU 目标角 */
 	float pitch_mec_tar; /* Pitch 机械目标角 */
 	float pitch_imu_tar; /* Pitch IMU 目标角 */
-	uint8_t is_hole;     /* 弹仓剩余检测 */
+	uint8_t is_hole;     /* 1 = 请求进入狗洞 */
 }Board_Gimbal_Target_Pkt_t;
 
 /* 发射控制 */

@@ -18,6 +18,8 @@
 #define ID_FRIC_R 0x202 /* 右摩擦轮反馈 ID */
 #define ID_DIAL   0x141 /* 拨盘 KT 电机 ID */
 
+#define ID_LIFT   0x204 /* 升降 RM2006 反馈 ID */
+
 /* 云台 DM 电机索引 */
 typedef enum
 {
@@ -38,6 +40,7 @@ extern ht_motor_t L_Wheel;
 extern dm_motor_t dm_motor[2];              /* Yaw/Pitch DM 电机 */
 extern dm_group_t DM_Group;                 /* 云台 DM 电机组 */
 extern rm_motor_t rm_motor[SHOOT_FRIC_NUM]; /* 双摩擦轮 */
+extern rm_motor_t lift_motor;               /* 狗洞升降电机 */
 extern rm_group_t RM_Group;                 /* 摩擦轮电机组 */
 void rm_motor_list_init(void);
 void rm_motor_list_heart_beat(void);
