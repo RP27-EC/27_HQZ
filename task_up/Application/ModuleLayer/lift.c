@@ -567,6 +567,7 @@ void Lift_Work(void)
     uint32_t dt = lift_delta_ms(now, lift.last_tick);
     uint8_t is_hole;
     uint8_t raw_is_hole;
+    uint8_t cmd_changed;
 
     lift.last_tick = now;
 
@@ -599,6 +600,7 @@ void Lift_Work(void)
     }
 
     raw_is_hole = (Board_Rx_Info.shoot_pkt.is_hole != 0u) ? 1u : 0u;
+    cmd_changed = 0u;
     if (lift.cmd_seen == 0u)
     {
         lift.cmd_seen = 1u;
@@ -608,6 +610,7 @@ void Lift_Work(void)
     }
     else if (raw_is_hole != lift.last_is_hole)
     {
+        cmd_changed = 1u;
         lift.last_is_hole = raw_is_hole;
         lift.pending_is_hole = raw_is_hole;
         lift.pending_valid = 1u;
@@ -716,6 +719,27 @@ void Lift_Work(void)
         break;
 
     case LIFT_FAULT:
+        lift.motor->tx_info->torque = 0.0f;
+        if (cmd_changed == 0u)
+        {
+            break;
+        }
+
+        lift.fault_code = 0u;
+        if (lift.home_valid == 0u)
+        {
+            lift_enter_state(LIFT_HOMING_UP, now);
+        }
+        else if (is_hole != 0u)
+        {
+            lift_enter_state(LIFT_ALIGN_DOWN, now);
+        }
+        else
+        {
+            lift_enter_state(LIFT_MOVING_UP, now);
+        }
+        break;
+
     default:
         lift.motor->tx_info->torque = 0.0f;
         break;
