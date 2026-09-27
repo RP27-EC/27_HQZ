@@ -218,6 +218,8 @@ typedef struct
     pid_ctrl_t yaw_gyro_inner;     /* Yaw IMU 角速度内环 */
     pid_ctrl_t yaw_mec_outer;      /* Yaw 机械角度外环 */
     pid_ctrl_t yaw_mec_inner;      /* Yaw 电机速度内环 */
+    pid_ctrl_t yaw_init_outer;     /* Yaw 归中角度外环 */
+    pid_ctrl_t yaw_init_inner;     /* Yaw 归中速度内环 */
     pid_ctrl_t pitch_gyro_outer;   /* Pitch 陀螺角度外环 */
     pid_ctrl_t pitch_gyro_inner;   /* Pitch IMU 角速度内环 */
     pid_ctrl_t pitch_mec_outer;    /* Pitch 机械角度外环 */

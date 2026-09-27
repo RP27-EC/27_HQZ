@@ -22,10 +22,8 @@ typedef struct
     volatile uint8_t rc_state;
     volatile uint8_t s1;
     volatile uint8_t s2;
-    volatile int16_t wheel_value;
-    volatile uint8_t step[4];
-    volatile uint8_t rise[4];
-    volatile uint8_t wheel_event;
+    volatile uint8_t b_value;
+    volatile uint8_t button_event;
     volatile uint8_t is_hole;
     volatile uint8_t exit_pending;
 } board_lift_debug_t;
@@ -37,25 +35,19 @@ volatile uint8_t board_hole_exit_pending;
 #if BOARD_COMM_DEBUG
 static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
 {
-    static uint8_t wheel_seen = 0u;
-    static uint8_t last_wheel_step[4];
+    static uint8_t last_b_value = 0u;
     static uint32_t hole_exit_tick = 0u;
     uint32_t now = HAL_GetTick();
-    uint8_t wheel_event;
+    uint8_t b_now;
+    uint8_t button_event;
 
     board_lift_dbg.rc_state = (uint8_t)rc_dev.work_state;
     board_lift_dbg.s1 = (uint8_t)rc_info->s1.value;
     board_lift_dbg.s2 = (uint8_t)rc_info->s2.value;
-    board_lift_dbg.wheel_value = rc_info->thumbwheel.value;
-    for (uint8_t i = 0u; i < 4u; i++)
-    {
-        board_lift_dbg.step[i] = rc_info->thumbwheel.step[i];
-        board_lift_dbg.rise[i] = rc_info->thumbwheel.step_rising_trigger[i];
-    }
 
     if (rc_dev.work_state != DEV_ONLINE)
     {
-        wheel_seen = 0u;
+        last_b_value = 0u;
         board_hole_request = 0u;
         board_hole_exit_pending = 0u;
         board_lift_dbg.is_hole = 0u;
@@ -64,29 +56,13 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
         return 0u;
     }
 
-    if (wheel_seen == 0u)
-    {
-        for (uint8_t i = 0u; i < 4u; i++)
-        {
-            last_wheel_step[i] = rc_info->thumbwheel.step[i];
-        }
-        wheel_seen = 1u;
-    }
-
-    wheel_event = 0u;
-    for (uint8_t i = 0u; i < 4u; i++)
-    {
-        if ((rc_info->thumbwheel.step[i] != last_wheel_step[i]) ||
-            (rc_info->thumbwheel.step_rising_trigger[i] != 0u))
-        {
-            wheel_event = 1u;
-        }
-        last_wheel_step[i] = rc_info->thumbwheel.step[i];
-    }
+    b_now = (rc_info->B.value != 0u) ? 1u : 0u;
+    button_event = ((b_now != 0u) && (last_b_value == 0u)) ? 1u : 0u;
+    last_b_value = b_now;
 
     if ((rc_info->s1.value == RC_SW_UP) &&
         (rc_info->s2.value == RC_SW_MID) &&
-        (wheel_event != 0u))
+        (button_event != 0u))
     {
         board_hole_request ^= 1u;
         if (board_hole_request != 0u)
@@ -101,7 +77,8 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     }
 
     board.tx_pkt->gimbal_target_pkt.is_hole = board_hole_request;
-    board_lift_dbg.wheel_event = wheel_event;
+    board_lift_dbg.b_value = b_now;
+    board_lift_dbg.button_event = button_event;
     board_lift_dbg.is_hole = (uint8_t)board_hole_request;
 
     if (board_hole_exit_pending != 0u)

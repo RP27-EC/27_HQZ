@@ -192,6 +192,8 @@ static void gimbal_clear_all_pid(gimbal_t *gimbal)
     gimbal_pid_clear(&gimbal->pid_info.yaw_gyro_inner);
     gimbal_pid_clear(&gimbal->pid_info.yaw_mec_outer);
     gimbal_pid_clear(&gimbal->pid_info.yaw_mec_inner);
+    gimbal_pid_clear(&gimbal->pid_info.yaw_init_outer);
+    gimbal_pid_clear(&gimbal->pid_info.yaw_init_inner);
     gimbal_pid_clear(&gimbal->pid_info.pitch_gyro_outer);
     gimbal_pid_clear(&gimbal->pid_info.pitch_gyro_inner);
     gimbal_pid_clear(&gimbal->pid_info.pitch_mec_outer);
@@ -233,6 +235,17 @@ static void gimbal_pid_init(gimbal_t *gimbal)
 
     pid = &gimbal->pid_info.yaw_mec_inner;
     pid->kp = 3.5f; pid->ki = 0.0f; pid->kd = 0.0f;
+    pid->integral_max = 0.0f; pid->out_max = 100.0f;
+
+    /* Yaw 归中编码器串级 */
+    pid = &gimbal->pid_info.yaw_init_outer;
+    pid->kp = 1.0f; pid->ki = 0.0f; pid->kd = 0.0f;
+    pid->deadband = GIMBAL_MEC_ERR_DEADBAND_DEG;
+    pid->integral_max = 0.0f; pid->out_max = 500.0f;
+
+    pid = &gimbal->pid_info.yaw_init_inner;
+    pid->kp = 1.2f; pid->ki = 0.0f; pid->kd = 0.2f;
+    pid->d_filter_alpha = GIMBAL_MEC_OUTER_D_FILTER_ALPHA;
     pid->integral_max = 0.0f; pid->out_max = 100.0f;
 
     /* Pitch 机械编码器串级 */
@@ -788,8 +801,8 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          0) + gravity;
 
         gimbal->base_info.output_gimbal_y =
-            all_pid_calc(&gimbal->pid_info.yaw_mec_outer,
-                         &gimbal->pid_info.yaw_mec_inner,
+            all_pid_calc(&gimbal->pid_info.yaw_init_outer,
+                         &gimbal->pid_info.yaw_init_inner,
                          gimbal->pid_info.yaw_target,
                          gimbal->base_info.yaw_mec_angle,
                          gimbal->base_info.yaw_mec_speed,

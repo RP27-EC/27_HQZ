@@ -19,6 +19,7 @@ typedef enum
     LIFT_MOVING_UP,
     LIFT_READY_DOWN,
     LIFT_FAULT,
+    LIFT_STALL_STOP,
 } lift_state_e;
 
 typedef struct
@@ -29,9 +30,12 @@ typedef struct
     int32_t top_zero;
     int32_t top_target;
     int32_t bottom_target;
-    uint8_t cmd_ready;
+    uint8_t cmd_seen;
     uint8_t last_is_hole;
+    uint8_t pending_is_hole;
+    uint8_t pending_valid;
     uint8_t control_is_hole;
+    uint8_t fault_code;
     uint8_t home_valid;
 
     uint32_t state_enter_tick;
@@ -39,6 +43,8 @@ typedef struct
     uint32_t homing_confirm_ms;
     uint32_t stable_confirm_ms;
     uint32_t overcurrent_confirm_ms;
+    uint32_t stall_progress_tick;
+    int32_t stall_progress_count;
     int32_t home_start_count;
     int32_t home_window_count;
     uint32_t home_window_tick;
@@ -67,12 +73,16 @@ typedef struct
     volatile float move_speed_rpm;
     volatile float pos_kp;
     volatile float pos_out_max_rpm;
+    volatile float pos_min_speed_rpm;
     volatile float speed_kp;
     volatile float speed_direction_sign;
     volatile float speed_out_max_raw;
     volatile float over_current_down_raw;
     volatile float over_current_up_raw;
     volatile float over_current_confirm_ms;
+    volatile float down_over_current_confirm_ms;
+    volatile float up_over_current_confirm_ms;
+    volatile float stall_progress_counts;
 } lift_tune_t;
 
 extern lift_tune_t lift_tune;
