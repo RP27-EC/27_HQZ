@@ -454,8 +454,7 @@ static void gimbal_update_targets(gimbal_t *gimbal)
         return;
     }
 
-    if ((gimbal->gimbal_mode == G_MEC) ||
-        (gimbal->gimbal_mode == G_RATE))
+    if (gimbal->gimbal_mode == G_RATE)
     {
         gimbal->init_info.mode_transition_active = 0;
         return;
@@ -695,6 +694,8 @@ static void gimbal_calc_output(gimbal_t *gimbal)
     case G_INIT: /* 上电归中 */
         gimbal_update_init(gimbal);
         // 上电归中仍使用机械角/速度串级
+        /* fall through */
+    case G_MEC: /* 机械模式：编码器位置环 */
         gimbal->base_info.output_gimbal_p =
             all_pid_calc(&gimbal->pid_info.pitch_mec_outer,
                          &gimbal->pid_info.pitch_mec_inner,
@@ -762,7 +763,6 @@ static void gimbal_calc_output(gimbal_t *gimbal)
         break;
 
     case G_RATE:
-    case G_MEC:
         gimbal_update_rate_targets(gimbal);
 
         gimbal->base_info.output_gimbal_p =

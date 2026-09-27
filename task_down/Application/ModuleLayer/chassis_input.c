@@ -157,8 +157,9 @@ void Chassis_Input_Update(void)
 #endif
 
 #if CHASSIS_RC_INPUT_ENABLE
-    /* S1 上拨才允许遥控底盘直控 */
-    if (rc->s1.value == RC_SW_UP)
+    /* S1 上/下都允许底盘直控，机械模式也保留平移和转向 */
+    if ((rc->s1.value == RC_SW_UP) ||
+        (rc->s1.value == RC_SW_DOWN))
     {
         cmd.vx = -Chassis_RcAxisValue(rc->ch3) * CHASSIS_MAX_VX;
         cmd.vy = Chassis_RcAxisValue(rc->ch2) * CHASSIS_MAX_VY;

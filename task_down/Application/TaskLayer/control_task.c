@@ -21,7 +21,6 @@
 static void Board_Debug_Gimbal_Command(void)
 {
     static uint8_t mec_mode_active = 0u; /* 机械角模式已激活 */
-    static float yaw_mec_target = 0.0f;  /* Yaw 机械目标角，rad */
     static float pitch_mec_target = 0.0f;/* Pitch 机械目标角，rad */
     rc_data_t *rc_info = rc_dev.info;     /* 遥控数据源 */
 
@@ -46,15 +45,12 @@ static void Board_Debug_Gimbal_Command(void)
         /* 进入机械模式时从当前角度起调，避免跳变 */
         if (mec_mode_active == 0u)
         {
-            yaw_mec_target = board.rx_meg->gimbal_meg.yaw_mec;
             pitch_mec_target = board.rx_meg->gimbal_meg.pitch_mec;
             mec_mode_active = 1u;
         }
 
-        yaw_mec_target += BOARD_MEC_YAW_SIGN * (float)rc_info->ch0 /
-                          BOARD_RC_AXIS_MAX * BOARD_MEC_YAW_STEP_RAD;
-        yaw_mec_target = motor_half_cycle(yaw_mec_target, 2.0f * 3.14159265358979323846f);
-        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = yaw_mec_target;
+        /* Yaw 固定前方零位，ch0 留给底盘转向 */
+        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = BOARD_MEC_YAW_FRONT_RAD;
 
         pitch_mec_target += (float)rc_info->ch1 / BOARD_RC_AXIS_MAX *
                             BOARD_MEC_PITCH_STEP_RAD;
