@@ -11,6 +11,9 @@
 #define BOARD_COMM_D3D4_ENABLE          0u
 #define BOARD_COMM_D5_ENABLE            1u
 
+/* S2 档位软件消抖，单位：1 ms 控制周期。 */
+#define BOARD_LAUNCH_S2_DEBOUNCE_TICKS  15u
+
 /* Temporarily bypassed vehicle modules during bring-up. */
 #define BOARD_LIFT_ENABLE               1u
 #define BOARD_HOLE_WHEEL_REVERSE        1u

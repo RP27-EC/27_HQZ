@@ -19,13 +19,18 @@ static uint8_t launcher_dial_stopped; /* 1 = 拨盘已停机 */
 static uint32_t launcher_dial_stop_tick; /* 上次停机命令时刻 */
 static uint8_t launcher_dial_target_synced; /* 目标是否已对齐反馈 */
 static uint8_t launcher_dial_recovery_repeat; /* 恢复后是否回连发 */
+#if LAUNCHER_DIAL_JAM_ENABLE
 static int8_t launcher_dial_motion_direction; /* 拨盘运动方向 */
+#endif
 static int64_t launcher_dial_target; /* 拨盘绝对目标角度，count */
 static int64_t launcher_dial_feed_target; /* 退让前供弹目标，count */
 
 static pid_ctrl_t launcher_dial_angle_pid; /* 拨盘位置环 */
 static pid_ctrl_t launcher_dial_speed_pid; /* 拨盘单发速度环 */
 pid_ctrl_t launcher_dial_repeat_pid; /* 拨盘连发速度环 */
+static pid_ctrl_t launcher_dial_brake_pid; /* 拨盘释放制动环 */
+static uint8_t launcher_dial_braking; /* 1 = 正在主动制动 */
+static uint32_t launcher_dial_brake_tick; /* 制动开始时刻 */
 
 /* 按步长将当前值斜坡到目标值 */
 static float Launcher_Ramp(float current, float target, float step)
@@ -116,6 +121,12 @@ static void Launcher_DialClearPid(void)
     launcher_dial_repeat_pid.last_dout = 0.0f;
     launcher_dial_repeat_pid.dout = 0.0f;
     launcher_dial_repeat_pid.out = 0.0f;
+
+    launcher_dial_brake_pid.integral = 0.0f;
+    launcher_dial_brake_pid.last_err = 0.0f;
+    launcher_dial_brake_pid.last_dout = 0.0f;
+    launcher_dial_brake_pid.dout = 0.0f;
+    launcher_dial_brake_pid.out = 0.0f;
 }
 
 /* 安全停机，保留重试间隔 */
@@ -207,7 +218,36 @@ static void Launcher_DialSpeedControl(void)
     Launcher_DialApplyTorque(current_output);
 }
 
+/* 释放输入后用阻尼力矩刹车，速度降下来再断使能。 */
+static void Launcher_DialBrakeControl(void)
+{
+    int16_t current_output;
+
+    if (Launcher_DialOnline() == 0u)
+    {
+        Launcher_DialClearPid();
+        Launcher_DialApplyTorque(0);
+        return;
+    }
+
+    launcher_dial_brake_pid.target = 0.0f;
+    launcher_dial_brake_pid.measure =
+        LAUNCHER_DIAL_SPEED_SIGN *
+        (float)dail_motor.KT_motor_info.rx_info.speed;
+    launcher_dial_brake_pid.err =
+        launcher_dial_brake_pid.target -
+        launcher_dial_brake_pid.measure;
+    single_pid_ctrl(&launcher_dial_brake_pid);
+
+    current_output = (int16_t)constrain(
+        LAUNCHER_DIAL_OUTPUT_SIGN * launcher_dial_brake_pid.out,
+        -LAUNCHER_DIAL_CURRENT_LIMIT,
+        LAUNCHER_DIAL_CURRENT_LIMIT);
+    Launcher_DialApplyTorque(current_output);
+}
+
 /* 低速高电流连续确认后判定堵转 */
+#if LAUNCHER_DIAL_JAM_ENABLE
 static uint8_t Launcher_DialBlockCheck(uint8_t moving)
 {
     uint8_t blocked; /* 本拍是否疑似堵转 */
@@ -256,6 +296,7 @@ static void Launcher_DialEnterStuckRecovery(uint8_t continuous)
     launcher_jam_count++;
     Launcher_DialClearPid();
 }
+#endif
 
 /* 拨盘状态机：单发升沿、连发、退让与复位 */
 static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
@@ -304,13 +345,16 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
 
     /* 单发：堵转优先，其次到达或超时 */
     case LAUNCHER_SINGLE:
+#if LAUNCHER_DIAL_JAM_ENABLE
         if (Launcher_DialBlockCheck(
                 (Launcher_AbsInt64(launcher_dial_target - current_angle) >
                  (int64_t)LAUNCHER_DIAL_STOP_ERROR) ? 1u : 0u) != 0u)
         {
             Launcher_DialEnterStuckRecovery(0u);
         }
-        else if ((Launcher_DialAtTarget(launcher_dial_target) != 0u) || /* 到位 */
+        else
+#endif
+        if ((Launcher_DialAtTarget(launcher_dial_target) != 0u) || /* 到位 */
                  ((now - launcher.state_tick) >=
                   LAUNCHER_DIAL_SINGLE_TIMEOUT_MS))
         {
@@ -331,7 +375,7 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
             Launcher_DialClearPid();
             break;
         }
-#if LAUNCHER_REPEAT_ENABLE
+#if LAUNCHER_REPEAT_ENABLE && LAUNCHER_DIAL_JAM_ENABLE
         if (Launcher_DialBlockCheck(1u) != 0u)
         {
             Launcher_DialEnterStuckRecovery(1u);
@@ -402,19 +446,48 @@ static void Launcher_DialSafeStop(uint32_t now)
 /* 根据发射请求选择拨盘控制模式 */
 static void Launcher_DialControl(uint8_t shoot_active)
 {
-    /* 未发射时仅保留停机流程 */
-    if (shoot_active == 0u)
+    uint32_t now = HAL_GetTick();
+
+    /* 重新发射时取消制动。 */
+    if (shoot_active != 0u)
+    {
+        launcher_dial_braking = 0u;
+    }
+    else
     {
         if ((launcher.state != LAUNCHER_SLEEP) &&
             (launcher.state != LAUNCHER_STOPPING) &&
             (launcher.state != LAUNCHER_FAULT))
         {
             launcher.state = LAUNCHER_READY;
-            launcher.state_tick = HAL_GetTick();
+            launcher.state_tick = now;
             launcher.jam_tick = 0u;
             launcher_dial_target_synced = 0u;
         }
-        Launcher_DialSafeStop(HAL_GetTick());
+
+        if (launcher_dial_stopped == 0u)
+        {
+            if (launcher_dial_braking == 0u)
+            {
+                launcher_dial_braking = 1u;
+                launcher_dial_brake_tick = now;
+                Launcher_DialClearPid();
+            }
+
+            Launcher_DialBrakeControl();
+            if ((fabsf((float)dail_motor.KT_motor_info.rx_info.speed) <=
+                 (float)LAUNCHER_DIAL_BRAKE_STOP_SPEED_DPS) ||
+                ((now - launcher_dial_brake_tick) >=
+                 LAUNCHER_DIAL_BRAKE_TIMEOUT_MS))
+            {
+                launcher_dial_braking = 0u;
+                Launcher_DialSafeStop(now);
+            }
+            return;
+        }
+
+        launcher_dial_braking = 0u;
+        Launcher_DialSafeStop(now);
         return;
     }
 #if LAUNCHER_DIAL_ENABLE
@@ -539,10 +612,14 @@ void Launcher_Init(void)
     launcher_fric_stop_count = 0u;
     launcher_dial_last_online = 0u;
     launcher_dial_stopped = 1u;
+    launcher_dial_braking = 0u;
+    launcher_dial_brake_tick = 0u;
     launcher_dial_stop_tick = 0u;
     launcher_dial_target_synced = 0u;
     launcher_dial_recovery_repeat = 0u;
+#if LAUNCHER_DIAL_JAM_ENABLE
     launcher_dial_motion_direction = (int8_t)LAUNCHER_DIAL_DIRECTION;
+#endif
     launcher_dial_target = 0;
     launcher_dial_feed_target = 0;
 
@@ -591,6 +668,17 @@ void Launcher_Init(void)
     launcher_dial_repeat_pid.deadband = 0.0f;
     launcher_dial_repeat_pid.d_filter_alpha = 0.0f;
     launcher_dial_repeat_pid.out = 0.0f;
+
+    launcher_dial_brake_pid.kp = LAUNCHER_DIAL_BRAKE_KP;
+    launcher_dial_brake_pid.ki = LAUNCHER_DIAL_BRAKE_KI;
+    launcher_dial_brake_pid.kd = LAUNCHER_DIAL_BRAKE_KD;
+    launcher_dial_brake_pid.integral = 0.0f;
+    launcher_dial_brake_pid.integral_max =
+        LAUNCHER_DIAL_BRAKE_INTEGRAL_MAX;
+    launcher_dial_brake_pid.out_max = LAUNCHER_DIAL_BRAKE_OUT_MAX;
+    launcher_dial_brake_pid.deadband = 0.0f;
+    launcher_dial_brake_pid.d_filter_alpha = 0.0f;
+    launcher_dial_brake_pid.out = 0.0f;
 }
 
 /* 发射机构周期任务 */

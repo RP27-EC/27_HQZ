@@ -24,13 +24,13 @@
 #define LAUNCHER_DIAL_AUTO_RESET_ENABLE   0u
 #define LAUNCHER_DIAL_READY_HOLD_ENABLE   1u
 
-#define LAUNCHER_DIAL_ANGLE_KP            0.05f
+#define LAUNCHER_DIAL_ANGLE_KP            0.08f
 #define LAUNCHER_DIAL_ANGLE_KI            0.0f
 #define LAUNCHER_DIAL_ANGLE_KD            0.0f
 #define LAUNCHER_DIAL_ANGLE_INTEGRAL_MAX  0.0f
 #define LAUNCHER_DIAL_ANGLE_DEADBAND      0.0f
 
-#define LAUNCHER_DIAL_SPEED_KP            0.1f
+#define LAUNCHER_DIAL_SPEED_KP            0.15f
 #define LAUNCHER_DIAL_SPEED_KI            0.05f
 #define LAUNCHER_DIAL_SPEED_KD            0.0f
 #define LAUNCHER_DIAL_SPEED_INTEGRAL_MAX  500.0f
@@ -63,11 +63,20 @@
 #define LAUNCHER_DIAL_REPEAT_OUT_MAX      1500.0f
 
 /* 堵转后反向退让，再回到原供弹目标。 */
-#define LAUNCHER_DIAL_JAM_ENABLE          1u
+#define LAUNCHER_DIAL_JAM_ENABLE          0u
 #define LAUNCHER_DIAL_JAM_CURRENT_RAW     600
 #define LAUNCHER_DIAL_JAM_SPEED_DPS       10
 #define LAUNCHER_DIAL_JAM_CONFIRM_TICKS   200u
 
 #define LAUNCHER_DIAL_SAFE_STOP_RETRY_MS  50u
+
+/* 拨盘释放后的主动制动，避免直接断力后的惯性和回弹。 */
+#define LAUNCHER_DIAL_BRAKE_KP            0.2f
+#define LAUNCHER_DIAL_BRAKE_KI            0.0f
+#define LAUNCHER_DIAL_BRAKE_KD            0.0f
+#define LAUNCHER_DIAL_BRAKE_INTEGRAL_MAX  0.0f
+#define LAUNCHER_DIAL_BRAKE_OUT_MAX       1500.0f
+#define LAUNCHER_DIAL_BRAKE_STOP_SPEED_DPS 20u
+#define LAUNCHER_DIAL_BRAKE_TIMEOUT_MS    120u
 
 #endif

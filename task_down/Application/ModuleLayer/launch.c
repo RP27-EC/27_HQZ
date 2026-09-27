@@ -14,6 +14,11 @@ static uint8_t launch_shoot_switch_seen;     /* S2 已完成首次采样 */
 static uint8_t launch_shoot_previous_switch; /* 上拍 S2 原始值 */
 static uint8_t launch_shoot_armed;           /* 发射已由拨杆动作解锁 */
 
+static uint8_t launch_s2_filter_initialized;
+static uint8_t launch_s2_raw_last;
+static uint8_t launch_s2_filtered;
+static uint8_t launch_s2_stable_ticks;
+
 /* 发射机构全局对象 */
 
 Launch_t launch =
@@ -33,11 +38,51 @@ static void Launch_Reset_Shoot_Arm(void)
     launch_shoot_armed = 0u;           /* 清除解锁 */
 }
 
+/* 清除 S2 消抖状态，重新上线时先接受当前档位。 */
+static void Launch_Reset_S2_Filter(void)
+{
+    launch_s2_filter_initialized = 0u;
+    launch_s2_raw_last = 0u;
+    launch_s2_filtered = RC_SW_MID;
+    launch_s2_stable_ticks = 0u;
+}
+
+/* S2 连续稳定后才承认新档位，滤除回中位时的接触弹跳。 */
+static uint8_t Launch_Filter_S2(uint8_t raw)
+{
+    if (launch_s2_filter_initialized == 0u)
+    {
+        launch_s2_filter_initialized = 1u;
+        launch_s2_raw_last = raw;
+        launch_s2_filtered = raw;
+        launch_s2_stable_ticks = BOARD_LAUNCH_S2_DEBOUNCE_TICKS;
+        return launch_s2_filtered;
+    }
+
+    if (raw != launch_s2_raw_last)
+    {
+        launch_s2_raw_last = raw;
+        launch_s2_stable_ticks = 0u;
+    }
+    else if (launch_s2_stable_ticks < BOARD_LAUNCH_S2_DEBOUNCE_TICKS)
+    {
+        launch_s2_stable_ticks++;
+    }
+
+    if (launch_s2_stable_ticks >= BOARD_LAUNCH_S2_DEBOUNCE_TICKS)
+    {
+        launch_s2_filtered = raw;
+    }
+
+    return launch_s2_filtered;
+}
+
 /* 绑定周期任务与心跳接口 */
 static void Launch_Init(Launch_t *launch)
 {
     launch->work = Launch_Work;                 /* 绑定周期任务 */
     launch->heart_beat = Launch_Offline_Update; /* 绑定心跳任务 */
+    Launch_Reset_S2_Filter();
     Launch_Reset_Shoot_Arm();
 }
 
@@ -50,6 +95,7 @@ static void Launch_Data_Update(Launch_t *launch)
     if (Chassis_Input_IsKeyboardMode() != 0u)
     {
         Launch_Reset_Shoot_Arm();
+        Launch_Reset_S2_Filter();
         launch->state = L_UNLOCK; /* 键鼠直接解锁 */
 
         /* 键鼠：左键按下发射，长按切连发 */
@@ -72,6 +118,7 @@ static void Launch_Data_Update(Launch_t *launch)
     if (rc_dev.work_state != DEV_ONLINE)
     {
     Launch_Reset_Shoot_Arm(); /* 掉线清除解锁 */
+    Launch_Reset_S2_Filter();
     launch->state = L_LOCK;
     launch->mode = SINGLE_SHOT;
     launch->shoot_level = 0u;
@@ -83,6 +130,7 @@ static void Launch_Data_Update(Launch_t *launch)
         (board.rx_meg->state_meg.is_down != 2u))
     {
         Launch_Reset_Shoot_Arm();
+        Launch_Reset_S2_Filter();
         launch->state = L_LOCK;
         launch->mode = SINGLE_SHOT;
         launch->shoot_level = 0u;
@@ -91,7 +139,7 @@ static void Launch_Data_Update(Launch_t *launch)
 #endif
 
     s1 = (uint8_t)rc_dev.info->s1.value; /* 读取 S1 */
-    s2 = (uint8_t)rc_dev.info->s2.value; /* 读取 S2 */
+    s2 = Launch_Filter_S2((uint8_t)rc_dev.info->s2.value); /* 消抖后的 S2 */
 
     /* 小陀螺档位禁止发射，避免机构互锁 */
     if ((s1 == RC_SW_UP) && (s2 == RC_SW_DOWN))
