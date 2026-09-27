@@ -182,5 +182,3 @@ void Board_Rx_Meg_02(Board_t* board,uint8_t* rxbuf);
 
 
 
-void Board_Set_Shoot_Flags(uint8_t launch_state, uint8_t shoot_mode,
-                           uint8_t shoot_level);

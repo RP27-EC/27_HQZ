@@ -6,7 +6,6 @@
 
 void StartConnectTask(void const *argument)
 {
-    uint32_t next_tick = osKernelGetTickCount();
 #if BOARD_COMM_TX_ENABLE
     uint16_t d3d4_div = 0u;
 #endif
@@ -36,11 +35,7 @@ void StartConnectTask(void const *argument)
 #endif
 #endif
 
-        next_tick += BOARD_COMM_D1D2_PERIOD_MS;
-        if (osDelayUntil(next_tick) != osOK)
-        {
-            next_tick = osKernelGetTickCount();
-        }
+        osDelay(BOARD_COMM_D1D2_PERIOD_MS);
     }
 }
 

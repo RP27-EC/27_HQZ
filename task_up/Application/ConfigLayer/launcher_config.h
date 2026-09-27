@@ -24,7 +24,7 @@
 #define LAUNCHER_DIAL_AUTO_RESET_ENABLE   0u
 #define LAUNCHER_DIAL_READY_HOLD_ENABLE   1u
 
-#define LAUNCHER_DIAL_ANGLE_KP            0.2f
+#define LAUNCHER_DIAL_ANGLE_KP            0.05f
 #define LAUNCHER_DIAL_ANGLE_KI            0.0f
 #define LAUNCHER_DIAL_ANGLE_KD            0.0f
 #define LAUNCHER_DIAL_ANGLE_INTEGRAL_MAX  0.0f
@@ -32,7 +32,7 @@
 
 #define LAUNCHER_DIAL_SPEED_KP            0.1f
 #define LAUNCHER_DIAL_SPEED_KI            0.0f
-#define LAUNCHER_DIAL_SPEED_KD            0.005f
+#define LAUNCHER_DIAL_SPEED_KD            0.0f
 #define LAUNCHER_DIAL_SPEED_INTEGRAL_MAX  500.0f
 #define LAUNCHER_DIAL_SPEED_OUT_MAX       1500.0f
 
@@ -57,7 +57,7 @@
 /* 连发独立速度环：15 圈/s。 */
 #define LAUNCHER_DIAL_REPEAT_SPEED_DPS    5400u
 #define LAUNCHER_DIAL_REPEAT_KP           4.0f
-#define LAUNCHER_DIAL_REPEAT_KI           7.5f
+#define LAUNCHER_DIAL_REPEAT_KI           0.5f
 #define LAUNCHER_DIAL_REPEAT_KD           0.01f
 #define LAUNCHER_DIAL_REPEAT_INTEGRAL_MAX 500.0f
 #define LAUNCHER_DIAL_REPEAT_OUT_MAX      1500.0f

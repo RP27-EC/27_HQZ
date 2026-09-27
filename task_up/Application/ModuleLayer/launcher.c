@@ -598,7 +598,6 @@ void Launcher_Work(void)
 {
     uint32_t now = HAL_GetTick(); /* 本次调度时刻 */
     uint8_t launch_on;            /* 发射系统总使能 */
-    uint8_t shoot_flags;          /* 同一帧发射状态快照 */
     uint8_t shoot_level;          /* 发射触发电平 */
     uint8_t shoot_mode;           /* 0 = 单发，1 = 连发 */
     uint8_t shoot_active;         /* 发射保持状态 */
@@ -625,10 +624,8 @@ void Launcher_Work(void)
     dial_ready = 1u;
 #endif
 
-    shoot_flags = Board_Rx_Shoot_Flags;
-
     launch_on = ((Board_HeartBeat.status == DEV_ONLINE) &&
-                 ((shoot_flags & 0x01u) != 0u) &&
+                 (Board_Rx_Info.shoot_pkt.launch_state != 0u) &&
                  (Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
                  (Launcher_FricOnline(SHOOT_FRIC_R) != 0u) &&
                  (dial_ready != 0u)) ? 1u : 0u;
@@ -705,8 +702,8 @@ void Launcher_Work(void)
     launcher.fric_target_rpm = LAUNCHER_FRIC_TARGET_RPM; /* 目标转速 */
     Launcher_UpdateFrictionReady(1u);
 
-    shoot_level = (shoot_flags >> 2) & 0x01u;
-    shoot_mode = (shoot_flags >> 1) & 0x01u;
+    shoot_level = Board_Rx_Info.shoot_pkt.shoot_level;
+    shoot_mode = Board_Rx_Info.shoot_pkt.shoot_mode;
 #if !LAUNCHER_DIAL_ENABLE
     shoot_level = 0u;
     shoot_mode = 0u;

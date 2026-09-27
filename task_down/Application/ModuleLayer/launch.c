@@ -140,9 +140,9 @@ static void Launch_Offline_Update(Launch_t *launch)
 /* 将许可、模式和触发电平写入板间报文 */
 static void Launch_Cmd_Transmit(Launch_t *launch)
 {
-    Board_Set_Shoot_Flags((uint8_t)launch->state,
-                          (uint8_t)launch->mode,
-                          launch->shoot_level);
+    board.tx_pkt->shoot_pkt.launch_state = launch->state;  /* 发射许可 */
+    board.tx_pkt->shoot_pkt.shoot_mode = launch->mode;    /* 单发/连发 */
+    board.tx_pkt->shoot_pkt.shoot_level = launch->shoot_level; /* 触发 */
 }
 
 /* 发射机构周期任务 */
