@@ -16,22 +16,26 @@ volatile lift_debug_t lift_debug;
 #define LIFT_FAULT_STALL_CURRENT  4u
 #define LIFT_FAULT_STALL_PROGRESS 5u
 
+/* 取绝对值 */
 static float lift_abs(float value)
 {
     return (value >= 0.0f) ? value : -value;
 }
 
+/* 编码器计数换算成位置单位 */
 static float lift_encoder_units(void)
 {
     return (float)lift.motor->rx_info->encoder_sum /
            LIFT_POSITION_COUNTS_PER_UNIT;
 }
 
+/* rpm 转 rad/s */
 static float lift_rpm_to_rad_s(float rpm)
 {
     return rpm * 0.1047197551f;
 }
 
+/* 限幅 */
 static float lift_clamp(float value, float min_value, float max_value)
 {
     if (value > max_value) return max_value;
@@ -39,6 +43,7 @@ static float lift_clamp(float value, float min_value, float max_value)
     return value;
 }
 
+/* 角度归一化到正负180 */
 static float lift_wrap_deg(float angle)
 {
     while (angle >= 180.0f) angle -= 360.0f;
@@ -46,12 +51,14 @@ static float lift_wrap_deg(float angle)
     return angle;
 }
 
+/* 时间差, 处理 tick 溢出 */
 static uint32_t lift_delta_ms(uint32_t now, uint32_t last)
 {
     uint32_t delta = now - last;
     return (delta > 100u) ? 100u : delta;
 }
 
+/* 清 PID 状态 */
 static void lift_pid_clear(pid_ctrl_t *pid)
 {
     integral_to_zero(pid);
@@ -64,6 +71,7 @@ static void lift_pid_clear(pid_ctrl_t *pid)
     pid->last_err = 0.0f;
 }
 
+/* 切换状态并记录时刻 */
 static void lift_enter_state(lift_state_e state, uint32_t now)
 {
     lift.state = state;
@@ -87,6 +95,7 @@ static void lift_enter_state(lift_state_e state, uint32_t now)
     }
 }
 
+/* 速度模式输出 */
 static void lift_output_speed(float target_rpm, float output_limit)
 {
     float output;
@@ -147,6 +156,7 @@ static void lift_output_position(int32_t target_count)
                                  lift_tune.speed_out_max_raw);
 }
 
+/* 云台对齐到位检查 */
 static uint8_t lift_alignment_ok(void)
 {
     float yaw_error;
@@ -177,6 +187,7 @@ static uint8_t lift_alignment_ok(void)
     return 1u;
 }
 
+/* 进入故障并断输出 */
 static void lift_fault(uint8_t code)
 {
     lift.motor->tx_info->torque = 0.0f;
@@ -184,6 +195,7 @@ static void lift_fault(uint8_t code)
     lift_enter_state(LIFT_FAULT, HAL_GetTick());
 }
 
+/* 堵转与无进展判定 */
 static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
 {
     uint8_t high_current;
@@ -192,6 +204,7 @@ static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
     uint32_t confirm_ms;
     float over_current;
 
+    // 上/下行堵转电流阈值不同
     over_current = (moving_up != 0u) ?
                    lift_tune.over_current_up_raw :
                    lift_tune.over_current_down_raw;
@@ -199,8 +212,10 @@ static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
                  (uint32_t)lift_tune.up_over_current_confirm_ms :
                  (uint32_t)lift_tune.down_over_current_confirm_ms;
 
+    // 电流超限
     high_current = (lift_abs((float)lift.motor->rx_info->torque_current_raw) >=
                     over_current) ? 1u : 0u;
+    // 转速接近零
     low_speed = (lift_abs((float)lift.motor->rx_info->encoder_speed) <=
                  LIFT_SPEED_TOL_RPM) ? 1u : 0u;
 
@@ -213,6 +228,7 @@ static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
         lift.overcurrent_confirm_ms = 0u;
     }
 
+    // 位置长时间不动也判堵转
     no_progress = ((now - lift.stall_progress_tick) >= confirm_ms) &&
                   (lift_abs((float)(lift.motor->rx_info->encoder_sum -
                            lift.stall_progress_count)) <
@@ -224,6 +240,7 @@ static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
         return (lift.overcurrent_confirm_ms >= confirm_ms) ? 1u : 2u;
     }
 
+    // 定期刷新基准, 避免累计误差
     if ((now - lift.stall_progress_tick) >= confirm_ms)
     {
         lift.stall_progress_tick = now;
@@ -233,6 +250,7 @@ static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
     return 0u;
 }
 
+/* 上行找顶 */
 static void lift_homing_up_update(uint32_t now, uint32_t dt)
 {
     int32_t count = lift.motor->rx_info->encoder_sum;
@@ -245,9 +263,11 @@ static void lift_homing_up_update(uint32_t now, uint32_t dt)
         return;
     }
 
+    // 电流是找顶主判据
     lift.home_current_ok =
         (lift_abs((float)lift.motor->rx_info->torque_current_raw) >=
          lift_tune.home_current_raw) ? 1u : 0u;
+    // 低速作为辅助判据
     lift.home_speed_ok =
         (lift_abs((float)lift.motor->rx_info->encoder_speed) <=
          lift_tune.home_stall_speed_rpm) ? 1u : 0u;
@@ -258,6 +278,7 @@ static void lift_homing_up_update(uint32_t now, uint32_t dt)
         if ((now - lift.home_window_tick) >=
             LIFT_HOME_STATIONARY_WINDOW_MS)
         {
+            // 窗口内位移很小 -> 到顶
             lift.home_stationary_ok =
                 (lift_abs((float)(count - lift.home_window_count)) <=
                  LIFT_HOME_STATIONARY_COUNTS) ? 1u : 0u;
@@ -278,6 +299,7 @@ static void lift_homing_up_update(uint32_t now, uint32_t dt)
         ((lift.home_stationary_ok != 0u) ||
          (lift.home_speed_ok != 0u)))
     {
+        // 条件需持续成立
         lift.homing_confirm_ms += dt;
     }
     else
@@ -287,6 +309,7 @@ static void lift_homing_up_update(uint32_t now, uint32_t dt)
 
     if (lift.homing_confirm_ms >= (uint32_t)lift_tune.home_confirm_ms)
     {
+        // 记为顶部零点, 反推上下目标
         lift.top_zero = count_units;
         lift.top_target = lift.top_zero -
                           (int32_t)(LIFT_UP_DIRECTION *
@@ -303,6 +326,7 @@ static void lift_homing_up_update(uint32_t now, uint32_t dt)
     lift_output_speed(target_speed, lift_tune.home_output_limit_raw);
 }
 
+/* 到顶后回转 */
 static void lift_retract_update(uint32_t now, uint32_t dt)
 {
     float position_error = (float)lift.top_target - lift_encoder_units();
@@ -398,6 +422,7 @@ static void lift_move_update(uint32_t now, uint32_t dt, int32_t target,
     lift_output_position(target);
 } 
 
+/* 记录行程极值 */
 static void lift_debug_record(int32_t count)
 {
     if (lift_debug.stats_valid == 0u)
@@ -414,6 +439,7 @@ static void lift_debug_record(int32_t count)
     lift_debug.travel_counts = lift_debug.max_count - lift_debug.min_count;
 }
 
+/* 刷新调试数据 */
 static void lift_debug_update(uint32_t now, uint32_t dt)
 {
     int32_t count;
@@ -487,6 +513,7 @@ static void lift_debug_update(uint32_t now, uint32_t dt)
     }
 }
 
+/* 初始化 */
 void Lift_Init(void)
 {
     lift.motor = &lift_motor;
@@ -561,6 +588,7 @@ void Lift_Init(void)
     lift_pid_clear(&lift.speed_pid);
 }
 
+/* 升降主循环, 1ms */
 void Lift_Work(void)
 {
     uint32_t now = HAL_GetTick();
@@ -643,14 +671,17 @@ void Lift_Work(void)
 
     switch (lift.state)
     {
+    /* 上行找顶 */
     case LIFT_HOMING_UP:
         lift_homing_up_update(now, dt);
         break;
 
+    /* 到顶回转 */
     case LIFT_RETRACT_DOWN:
         lift_retract_update(now, dt);
         break;
 
+    /* 底部待命 */
     case LIFT_READY_DOWN:
         if (is_hole == 0u)
         {
@@ -662,6 +693,7 @@ void Lift_Work(void)
         }
         break;
 
+    /* 下降前对齐云台 */
     case LIFT_ALIGN_DOWN:
         if (is_hole == 0u)
         {
@@ -677,6 +709,7 @@ void Lift_Work(void)
         }
         break;
 
+    /* 下降中 */
     case LIFT_MOVING_DOWN:
         if (is_hole == 0u)
         {
@@ -688,6 +721,7 @@ void Lift_Work(void)
         }
         break;
 
+    /* 上升中 */
     case LIFT_MOVING_UP:
         if (is_hole != 0u)
         {
@@ -699,6 +733,7 @@ void Lift_Work(void)
         }
         break;
 
+    /* 顶部待命 */
     case LIFT_READY_UP:
         if (is_hole != 0u)
         {
@@ -710,6 +745,7 @@ void Lift_Work(void)
         }
         break;
 
+    /* 堵转停机, 等指令复位 */
     case LIFT_STALL_STOP:
         lift.motor->tx_info->torque = 0.0f;
         if (is_hole == 0u)
@@ -718,6 +754,7 @@ void Lift_Work(void)
         }
         break;
 
+    /* 故障锁定 */
     case LIFT_FAULT:
         lift.motor->tx_info->torque = 0.0f;
         if (cmd_changed == 0u)
@@ -746,6 +783,7 @@ void Lift_Work(void)
     }
 }
 
+/* 电机是否在线 */
 uint8_t Lift_MotorOnline(void)
 {
     if ((lift.motor == NULL) || (lift.motor->state == NULL))
@@ -756,6 +794,7 @@ uint8_t Lift_MotorOnline(void)
     return (lift.motor->state->status == DEV_ONLINE) ? 1u : 0u;
 }
 
+/* 上报给下板的状态字 */
 uint8_t Lift_Get_Report_State(void)
 {
     switch (lift.state)

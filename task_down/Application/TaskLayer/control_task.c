@@ -15,12 +15,12 @@
 
 typedef struct
 {
-    volatile uint8_t rc_state;
-    volatile uint8_t s1;
-    volatile uint8_t s2;
-    volatile uint8_t b_value;
-    volatile uint8_t button_event;
-    volatile uint8_t is_hole;
+    volatile uint8_t rc_state;  //在线否
+    volatile uint8_t s1;       // 遥控器 S1 
+    volatile uint8_t s2;        // 遥控器 S2
+    volatile uint8_t b_value;   // B键值
+    volatile uint8_t button_event;  // B键按下事件
+    volatile uint8_t is_hole;     // 狗洞模式
     volatile uint8_t exit_pending;
 } board_lift_debug_t;
 
@@ -59,6 +59,7 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
         (rc_info->s2.value == RC_SW_MID) &&
         (button_event != 0u))
     {
+        // B 键翻转狗洞请求
         board_hole_request ^= 1u;
         if (board_hole_request != 0u)
         {
@@ -66,6 +67,7 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
         }
         else
         {
+            // 退出狗洞, 等云台回中
             board_hole_exit_pending = 1u;
             hole_exit_tick = now;
         }
@@ -78,6 +80,7 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
 
     if (board_hole_exit_pending != 0u)
     {
+        // 云台回中或超时即结束退出等待
         if ((board.rx_meg->state_meg.is_down == 2u) ||
             ((now - hole_exit_tick) >= BOARD_HOLE_EXIT_TIMEOUT_MS))
         {
@@ -88,6 +91,7 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     board_lift_dbg.exit_pending = (uint8_t)board_hole_exit_pending;
     if ((board_hole_request != 0u) || (board_hole_exit_pending != 0u))
     {
+        // 狗洞期间锁机械模式
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
         board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = BOARD_MEC_YAW_FRONT_RAD;
         board.tx_pkt->gimbal_target_pkt.pitch_mec_tar =

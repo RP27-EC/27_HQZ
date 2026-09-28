@@ -20,30 +20,30 @@ typedef enum {
 } sys_state_t;
 
 typedef enum {
-	SYS_MODE_NORMAL,  // SYS模式NORMAL
+	SYS_MODE_NORMAL,  // 正常模式
 	SYS_MODE_CNT,
 } sys_mode_t;
 
 typedef struct {
-	uint8_t reset_start;
-	uint8_t reset_ok;
-	uint8_t turn_start;
-	uint8_t turn_ok;
+	uint8_t reset_start;  // 起立开始
+	uint8_t reset_ok;  // 起立完成
+	uint8_t turn_start;  // 转向开始
+	uint8_t turn_ok;  // 转向完成
 	uint8_t forward;  // 前进
-	uint8_t turn_right;
-	uint8_t turn_left;
+	uint8_t turn_right;  // 右转
+	uint8_t turn_left;  // 左转
 } gimbal_symbal_t;
 
 typedef struct __symbal_struct
 {
-	gimbal_symbal_t   gim_sym;
-	uint8_t 					rc_update;
-	uint8_t						slave_reset;
+	gimbal_symbal_t   gim_sym;  // 云台状态标志
+	uint8_t 					rc_update;  // 遥控更新
+	uint8_t						slave_reset;  // 下板复位
 } symbal_t;
 
 typedef struct {
-	remote_mode_t		remote_mode;  // remote模式
-	sys_state_t			state;
+	remote_mode_t		remote_mode;  // 控制方式
+	sys_state_t			state;  // 系统状态
 	sys_mode_t			mode;  // 模式
 } system_t;
 
@@ -51,4 +51,5 @@ extern symbal_t	symbal;
 extern system_t sys;
 
 #endif
+
 

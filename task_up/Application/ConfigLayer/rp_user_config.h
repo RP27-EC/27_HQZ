@@ -25,20 +25,20 @@ typedef enum {
 } sys_mode_t;
 
 typedef struct {
-	uint8_t reset_start;
-	uint8_t reset_ok;
-	uint8_t turn_start;
-	uint8_t turn_ok;
+	uint8_t reset_start;  // 起立开始
+	uint8_t reset_ok;  // 起立完成
+	uint8_t turn_start;  // 转向开始
+	uint8_t turn_ok;  // 转向完成
 	uint8_t forward;  // 1:车头为正 0:车尾为正
-	uint8_t turn_right;
-	uint8_t turn_left;
+	uint8_t turn_right;  // 右转
+	uint8_t turn_left;  // 左转
 } gimbal_symbal_t;
 
 typedef struct __symbal_struct
 {
-	gimbal_symbal_t   gim_sym;
-	uint8_t 					rc_update;
-	uint8_t						slave_reset;
+	gimbal_symbal_t   gim_sym;  // 云台状态标志
+	uint8_t 					rc_update;  // 遥控更新
+	uint8_t						slave_reset;  // 下板复位
 } symbal_t;
 
 typedef struct {

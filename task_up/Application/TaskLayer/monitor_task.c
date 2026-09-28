@@ -5,6 +5,7 @@
 #include "imu_sensor.h"
 #include "motor.h"
 
+/* 设备心跳任务, 1ms */
 void StartMonitorTask(void const *argument)
 {
     (void)argument;

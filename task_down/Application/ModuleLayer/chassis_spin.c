@@ -18,6 +18,7 @@ static uint8_t spin_last_selected; /* 上拍小陀螺选中状态 */
 
 /* 将遥控通道映射到 [-1, 1]，含死区 */
 
+/* 遥控通道归一化 */
 static float Chassis_Spin_AxisValue(int16_t axis)
 {
     float value = (float)axis; /* 去死区并归一化 */
@@ -34,6 +35,7 @@ static float Chassis_Spin_AxisValue(int16_t axis)
 }
 
 /* 按步长斜坡到目标角速度 */
+/* 限步斜坡, 防角速度跳变 */
 static float Chassis_Spin_Ramp(float current, float target, float step)
 {
     float diff = target - current; /* 剩余斜坡量 */
@@ -52,6 +54,7 @@ static float Chassis_Spin_Ramp(float current, float target, float step)
 }
 
 /* 云台反馈未超时且有效才允许系变换 */
+/* 云台数据有效性检查 */
 static uint8_t Chassis_Spin_GimbalValid(void)
 {
     uint32_t age; /* 云台反馈 ms */
@@ -66,6 +69,7 @@ static uint8_t Chassis_Spin_GimbalValid(void)
 }
 
 /* 小陀螺平移按云台朝向旋转 */
+/* 小陀螺下平移按云台方向旋转 */
 static void Chassis_Spin_UpdateTranslation(chassis_cmd_t *cmd)
 {
     float vx_gimbal; /* 旋转前纵向速度 */
@@ -115,6 +119,7 @@ static void Chassis_Spin_UpdateTranslation(chassis_cmd_t *cmd)
 }
 
 /* 初始化小陀螺状态 */
+/* 初始化 */
 void Chassis_Spin_Init(void)
 {
     chassis_spin.target_wz = 0.0f; /* 清目标 */
@@ -127,6 +132,7 @@ void Chassis_Spin_Init(void)
 }
 
 /* S1 上拨、S2 下拨选择小陀螺 */
+/* 档位选择与故障锁存 */
 void Chassis_Spin_UpdateMode(void)
 {
     uint8_t selected = 0u; /* 小陀螺档位选择 */
@@ -153,6 +159,7 @@ void Chassis_Spin_UpdateMode(void)
 }
 
 /* 根据 ch0 调节旋转速度并接管底盘指令 */
+/* 小陀螺输出 */
 void Chassis_Spin_Update(chassis_cmd_t *cmd)
 {
     float axis;     /* ch0 归一化输入 */
@@ -214,12 +221,14 @@ void Chassis_Spin_Update(chassis_cmd_t *cmd)
 }
 
 /* 小陀螺档位是否选中 */
+/* 档位是否选中 */
 uint8_t Chassis_Spin_IsSelected(void)
 {
     return chassis_spin.selected;
 }
 
 /* 小陀螺控制是否生效 */
+/* 是否已生效 */
 uint8_t Chassis_Spin_IsActive(void)
 {
     return chassis_spin.active;

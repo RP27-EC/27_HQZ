@@ -3,6 +3,7 @@
 #include "device.h"
 #include "imu_sensor.h"
 #include "launcher.h"
+/* 上电初始化所有设备 */
 void DEVICE_Init(void)
 {
 	imu_dev.init(&imu_dev);

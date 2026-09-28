@@ -6,8 +6,11 @@
 #include "chassis_input.h"
 #include "board_comm_config.h"
 
+/* 初始化 */
 static void Launch_Init(Launch_t *launch);
+/* 主循环 */
 static void Launch_Work(Launch_t *launch);
+/* 离线处理 */
 static void Launch_Offline_Update(Launch_t *launch);
 
 static uint8_t launch_shoot_switch_seen;     /* S2 已完成首次采样 */
@@ -31,6 +34,7 @@ Launch_t launch =
 };
 
 /* 清空拨杆解锁序列 */
+/* 复位发射状态 */
 static void Launch_Reset_Shoot_Arm(void)
 {
     launch_shoot_switch_seen = 0u;     /* 重新等待首次采样 */
@@ -39,6 +43,7 @@ static void Launch_Reset_Shoot_Arm(void)
 }
 
 /* 清除 S2 消抖状态，重新上线时先接受当前档位。 */
+/* 复位 S2 消抖 */
 static void Launch_Reset_S2_Filter(void)
 {
     launch_s2_filter_initialized = 0u;
@@ -48,6 +53,7 @@ static void Launch_Reset_S2_Filter(void)
 }
 
 /* S2 连续稳定后才承认新档位，滤除回中位时的接触弹跳。 */
+/* S2 档位消抖 */
 static uint8_t Launch_Filter_S2(uint8_t raw)
 {
     if (launch_s2_filter_initialized == 0u)
@@ -87,6 +93,7 @@ static void Launch_Init(Launch_t *launch)
 }
 
 /* 根据键鼠或遥控拨杆更新发射状态与模式 */
+/* 发射数据解析 */
 static void Launch_Data_Update(Launch_t *launch)
 {
     uint8_t s1; /* S1 档位 */
@@ -199,6 +206,7 @@ static void Launch_Offline_Update(Launch_t *launch)
 }
 
 /* 将许可、模式和触发电平写入板间报文 */
+/* 下发发射指令 */
 static void Launch_Cmd_Transmit(Launch_t *launch)
 {
     board.tx_pkt->shoot_pkt.launch_state = launch->state;  /* 发射许可 */

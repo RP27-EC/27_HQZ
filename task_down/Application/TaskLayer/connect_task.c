@@ -4,6 +4,7 @@
 #include "board_protocol.h"
 #include "board_comm_config.h"
 
+/* 板间发送任务, 周期见 board_comm_config.h */
 void StartConnectTask(void const *argument)
 {
     (void)argument;

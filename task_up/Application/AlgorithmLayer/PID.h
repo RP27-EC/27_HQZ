@@ -20,11 +20,11 @@ typedef struct
 
     float d_filter_alpha;    // 低通滤波系数
 
-    float target;
-    float measure;
-    float err;
-    float last_err;
-    float integral;
+    float target;     //目标值
+    float measure;    //实际值
+    float err;        
+    float last_err;  
+    float integral;   //积分累计
 
     /* 各项输出分量 */
     float pout;

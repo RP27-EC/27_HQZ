@@ -11,6 +11,7 @@
 #include "chassis_input.h"
 #include "supercap.h"
 
+/* 上电初始化所有设备 */
 void DEVICE_Init(void)
 {
     SuperCap_Init();

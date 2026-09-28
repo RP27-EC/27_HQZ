@@ -8,17 +8,17 @@
 #include "rp_driver_config.h"
 
 typedef enum {
-    DEV_ID_IMU = 0,
-    DEV_ID_CNT = 4,
+    DEV_ID_IMU = 0,  // IMU 设备 ID
+    DEV_ID_CNT = 4,  // 设备数量
 } dev_id_t;
 
 typedef enum {
-    GIMB_P = 0,
+    GIMB_P = 0,  // 云台 Pitch 电机
 } dev_rm_motor_list_e;
 
 typedef enum {
-    DEV_ONLINE = 0,
-    DEV_OFFLINE = 1,
+    DEV_ONLINE = 0,  // 在线
+    DEV_OFFLINE = 1,  // 离线
 } dev_work_state_t;
 
 #endif

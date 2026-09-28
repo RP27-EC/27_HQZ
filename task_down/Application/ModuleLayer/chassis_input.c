@@ -15,6 +15,7 @@ static uint8_t last_x_pressed; /* X 键上次状态 */
 static uint8_t last_c_pressed; /* C 键上次状态 */
 
 /* 遥控通道归一化，含死区 */
+/* 遥控通道归一化, 含死区 */
 static float Chassis_RcAxisValue(int16_t axis)
 {
     float value = (float)axis; /* 去死区输入 */
@@ -38,6 +39,7 @@ static float Chassis_RcAxisValue(int16_t axis)
 }
 
 /* 当前是否由键盘模式接管 */
+/* 当前是否键鼠模式 */
 uint8_t Chassis_Input_IsKeyboardMode(void)
 {
 #if !CHASSIS_KEYBOARD_INPUT_ENABLE
@@ -54,6 +56,7 @@ uint8_t Chassis_Input_IsKeyboardMode(void)
 }
 
 /* Z/X/C 选择键鼠底盘模式，只在键鼠源生效 */
+/* 键鼠档位切换 */
 static void Chassis_Input_KeyboardModeUpdate(const rc_data_t *rc)
 {
     uint8_t z_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_Z) != 0u) ? 1u : 0u;
@@ -88,6 +91,7 @@ chassis_key_mode_e Chassis_Input_GetKeyboardChassisMode(void)
 }
 
 /* WASD 平移、QE 旋转，Shift/Ctrl 调速 */
+/* 键鼠速度解算 */
 static void Chassis_Input_Keyboard(chassis_cmd_t *cmd, const rc_data_t *rc)
 {
     float forward = 0.0f; /* 前后输入 */
@@ -137,6 +141,7 @@ static void Chassis_Input_Keyboard(chassis_cmd_t *cmd, const rc_data_t *rc)
 }
 
 /* 初始化输入缓存与按键状态 */
+/* 初始化 */
 void Chassis_Input_Init(void)
 {
     chassis_input_cmd.vx = 0.0f;
@@ -153,12 +158,14 @@ void Chassis_Input_Init(void)
 }
 
 /* 上层模式覆盖输入来源 */
+/* 指定输入源 */
 void Chassis_Input_SetSource(chassis_source_e source)
 {
     chassis_input_cmd.source = source;
 }
 
 /* 周期解析键鼠或遥控，输出统一底盘指令 */
+/* 输入刷新, 1ms */
 void Chassis_Input_Update(void)
 {
     chassis_cmd_t cmd;                 /* 本周期输出 */

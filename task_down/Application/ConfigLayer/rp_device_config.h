@@ -8,14 +8,14 @@
 /* 设备层 --------------------------------------------------------------------*/
 /* enum */
 typedef enum {
-    DEV_ID_RC = 2,
-    DEV_ID_CNT = 4,
+    DEV_ID_RC = 2,  // 遥控器设备 ID
+    DEV_ID_CNT = 4,  // 设备数量
 } dev_id_t;
 
 /* enum */
 typedef enum {
-	DEV_OFFLINE,
-	DEV_ONLINE,
+	DEV_OFFLINE,  // 离线
+	DEV_ONLINE,  // 在线
 	
 } dev_work_state_t;
 

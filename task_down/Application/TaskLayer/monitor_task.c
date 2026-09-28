@@ -7,6 +7,7 @@
 #include "launch.h"
 #include "supercap.h"
 
+/* 设备心跳任务, 1ms */
 void StartMonitorTask(void const *argument)
 {
     (void)argument;

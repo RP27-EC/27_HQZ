@@ -248,6 +248,7 @@ static void Launcher_DialBrakeControl(void)
 
 /* 低速高电流连续确认后判定堵转 */
 #if LAUNCHER_DIAL_JAM_ENABLE
+/* 堵转判定: 旋转中低速高流且持续达阈值 */
 static uint8_t Launcher_DialBlockCheck(uint8_t moving)
 {
     uint8_t blocked; /* 本拍是否疑似堵转 */

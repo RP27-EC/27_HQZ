@@ -35,6 +35,7 @@ Board_t board = /* 板间通信对象 */
 
 
 /* 绑定收发函数并复位链路状态 */
+/* 初始化板间通信 */
 void Board_Init(Board_t* board)
 {
 	board->status->offline_cnt = board->status->offline_cnt_max;
@@ -54,6 +55,7 @@ void Board_Init(Board_t* board)
 
 
 /* 每次周期累加离线计数，收到报文时清零 */
+/* 离线看门狗 */
 void Board_Heart_Beat(Board_t* board)
 {
 	board->status->offline_cnt ++;
@@ -77,6 +79,7 @@ uint8_t pkt_05[8]; /* D5 遥控控制发送缓存 */
 
 /* 打包 D1：整车状态与发射状态 */
 
+/* 组 D1 包: 整车状态 + 发射指令 */
 void Board_Tx_Pkt_01(Board_t* board)
 {
 	memset(pkt_01, 0, 8); /* 清空缓存 */
@@ -95,6 +98,7 @@ void Board_Tx_Pkt_01(Board_t* board)
 }
 
 /* 打包 D2：云台目标角度 */
+/* 组 D2 包: 云台角度目标 */
 void Board_Tx_Pkt_02(Board_t* board)
 {
 	uint16_t t1,t2,t3,t4; /* 四个角度压缩值 */
@@ -121,6 +125,7 @@ void Board_Tx_Pkt_02(Board_t* board)
 
 }
 /* 摇杆原始值映射到最大角速度 */
+/* 摇杆归一化到角速度 */
 static float Board_Remote_Axis_To_Rate(int16_t axis, float max_rate)
 {
     float value = (float)axis;
@@ -146,6 +151,7 @@ static float Board_Remote_Axis_To_Rate(int16_t axis, float max_rate)
 }
 
 /* 打包 D5：遥控/键鼠角速度 */
+/* 组 D5 包: 遥控角速度 */
 void Board_Tx_Pkt_05(Board_t* board)
 {
     float yaw_rate = 0.0f;   /* Yaw 角速度，deg/s */
@@ -227,6 +233,7 @@ void Board_Tx_Pkt_05(Board_t* board)
 }
 
 /* 解析 C1：上板设备状态与云台姿态 */
+/* 解析 C1 */
 void Board_Rx_Meg_01(Board_t* board,uint8_t* rxbuf)
 {
 	board->rx_meg->state_meg.yaw_motor_state= (rxbuf[0] >> 0) & 0x01;
@@ -240,6 +247,7 @@ void Board_Rx_Meg_01(Board_t* board,uint8_t* rxbuf)
 
 
 /* 解析 C2：云台机械角与 IMU 角 */
+/* 解析 C2 */
 void Board_Rx_Meg_02(Board_t* board,uint8_t* rxbuf)
 {
   uint16_t t1 = ((uint16_t)rxbuf[0] << 8) | rxbuf[1]; /* Yaw 机械角原始值 */

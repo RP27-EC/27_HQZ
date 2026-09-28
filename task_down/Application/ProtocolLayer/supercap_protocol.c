@@ -3,11 +3,13 @@
 #include "supercap_protocol.h"
 #include <string.h>
 
+/* 大端读 int16 */
 static int16_t SuperCap_ReadInt16(const uint8_t *data)
 {
     return (int16_t)(((uint16_t)data[0] << 8) | data[1]);
 }
 
+/* 解析反馈帧 */
 void SuperCap_Protocol_Decode(const uint8_t *data, SuperCap_Feedback_t *feedback)
 {
     feedback->chassis_power = SuperCap_ReadInt16(&data[0]);
@@ -17,6 +19,7 @@ void SuperCap_Protocol_Decode(const uint8_t *data, SuperCap_Feedback_t *feedback
     feedback->pre_charge_mode = (data[6] >> 1) & 0x01u;
 }
 
+/* 组装控制帧 */
 void SuperCap_Protocol_Encode(const SuperCap_Control_t *control, uint8_t *data)
 {
     memset(data, 0, 8);

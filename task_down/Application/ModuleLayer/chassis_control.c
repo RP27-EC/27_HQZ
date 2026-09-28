@@ -14,12 +14,14 @@
 chassis_control_t chassis_ctrl; /* 底盘控制对象 */
 
 /* 防 NaN 和异常大值 */
+/* 数值有效性: 排除 NaN 与溢出 */
 static uint8_t Chassis_Control_ValueValid(float value)
 {
     return (value == value) && (value < 1000000.0f) && (value > -1000000.0f);
 }
 
 /* 检查四轮对象和在线状态 */
+/* 四轮在线检查 */
 static uint8_t Chassis_Control_CheckOnline(void)
 {
     if (chassis_ctrl.wheel == NULL)
@@ -50,6 +52,7 @@ static uint8_t Chassis_Control_CheckOnline(void)
 }
 
 /* 底盘运动学逆解，输出四轮速度目标 */
+/* 逆运动学: 车体速度 -> 四轮线速度 */
 static void Chassis_Control_KinematicsInverse(const chassis_cmd_t *cmd)
 {
     float front = cmd->vx; /* 前后分量 */
@@ -87,6 +90,7 @@ static void Chassis_Control_KinematicsInverse(const chassis_cmd_t *cmd)
 }
 
 /* 四轮速度环计算，按控制源限制力矩 */
+/* 四轮速度环 */
 static uint8_t Chassis_Control_PidUpdate(void)
 {
     float torque_limit = CHASSIS_TEST_TORQUE_LIMIT_NM; /* 默认调试限矩 */
@@ -147,6 +151,7 @@ static uint8_t Chassis_Control_PidUpdate(void)
 }
 
 /* 将四轮力矩写入电机并整组发送 */
+/* 四轮力矩下发 */
 static uint8_t Chassis_Control_Output(void)
 {
     if (chassis_ctrl.wheel == NULL || chassis_ctrl.wheel->group_set_torque == NULL)
@@ -174,6 +179,7 @@ static uint8_t Chassis_Control_Output(void)
 }
 
 /* 初始化底盘对象、四轮 PID 与安全状态 */
+/* 初始化 */
 void Chassis_Control_Init(void)
 {
     uint8_t init_ok = 1u; /* 四轮对象完整性 */
@@ -224,6 +230,7 @@ void Chassis_Control_Init(void)
 }
 
 /* 使能或关闭底盘，关闭时立即卸力 */
+/* 使能/失能底盘 */
 void Chassis_Control_SetEnable(uint8_t enable)
 {
     chassis_ctrl.state.enabled = enable;
@@ -235,6 +242,7 @@ void Chassis_Control_SetEnable(uint8_t enable)
 }
 
 /* 四轮输出清零 */
+/* 停机并清状态 */
 void Chassis_Control_Stop(void)
 {
     if (chassis_ctrl.wheel == NULL)
@@ -261,6 +269,7 @@ void Chassis_Control_Stop(void)
 }
 
 /* 底盘周期更新，任何异常均回到停机 */
+/* 控制主入口, 1ms */
 void Chassis_Control_Update(const chassis_cmd_t *cmd)
 {
     if (cmd == NULL)
