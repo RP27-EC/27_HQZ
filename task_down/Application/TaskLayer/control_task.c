@@ -1,10 +1,6 @@
 /* control_task.c - 控制任务 */
 
 #include "control_task.h"
-#include "cap.h"
-#include "ui.h"
-#include "priority_ui.h"
-#include "infantry.h"
 #include "board_protocol.h"
 #include "rc_sensor.h"
 #include "board_comm_config.h"
@@ -32,7 +28,6 @@ volatile board_lift_debug_t board_lift_dbg;
 volatile uint8_t board_hole_request;
 volatile uint8_t board_hole_exit_pending;
 
-#if BOARD_COMM_DEBUG
 static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
 {
     static uint8_t last_b_value = 0u;
@@ -165,10 +160,6 @@ static void Board_Debug_Gimbal_Command(void)
         mec_mode_active = 0u;
     }
 }
-#endif
-
-uint8_t open_ui = 0; /* UI 首次发送延迟标志 */
-
 /* 下板 1 kHz 控制任务，按调试阶段切换控制链路 */
 
 void StartCtrlTask(void const *argument)
@@ -177,13 +168,7 @@ void StartCtrlTask(void const *argument)
 
     for (;;)
     {
-#if BOARD_COMM_DEBUG
         Board_Debug_Gimbal_Command();
-
-#endif
-
-    /* 第一阶段底盘调试链路 */
-#if CHASSIS_BRINGUP_ENABLE
         Chassis_Input_Update();
         Chassis_Follow_UpdateMode();
         Chassis_Spin_UpdateMode();
@@ -191,30 +176,7 @@ void StartCtrlTask(void const *argument)
         Chassis_Spin_Update(&chassis_input_cmd);
         Chassis_Control_Update(&chassis_input_cmd);
         launch.work(&launch);
-#elif !BOARD_COMM_DEBUG
-        infantry.work(&infantry);
-
-#if BOARD_CAP_ENABLE
-        cap.tx();
-#endif
-
-#if BOARD_UI_ENABLE
-    /* 第一阶段 UI 首帧跳过后再持续刷新 */
-        if (open_ui == 0)
-        {
-            open_ui = 1;
-        }
-        else
-        {
-            Ui_Info_Update();
-            Ui_Send();
-        }
-#endif
-#endif
-
-#if SUPERCAP_BRINGUP_ENABLE
         SuperCap_Tx();
-#endif
         osDelay(1);
     }
 }

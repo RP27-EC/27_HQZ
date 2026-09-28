@@ -8,11 +8,8 @@
 /* 设备层 --------------------------------------------------------------------*/
 /* enum */
 typedef enum {
-	DEV_ID_IMU = 0,
-  DEV_ID_IMU_EX,
-	DEV_ID_RC,
-	DEV_ID_VISION,
-	DEV_ID_CNT,
+    DEV_ID_RC = 2,
+    DEV_ID_CNT = 4,
 } dev_id_t;
 
 /* enum */
@@ -23,14 +20,6 @@ typedef enum {
 } dev_work_state_t;
 
 
-/* enum */
-typedef enum DEV_RESET_STATE
-{
-	DEV_RESET_NO,
-	DEV_RESET_OK,
-}Dev_Reset_State_e;
-
-/* enum */
 typedef enum {
 	NONE_ERR,		// 正常(无错误)
 	DEV_ID_ERR,		// 设备ID错误

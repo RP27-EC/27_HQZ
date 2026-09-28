@@ -2,8 +2,6 @@
 
 #include "gimbal.h"
 #include "imu_sensor.h"
-#include "rc_sensor.h"
-#include "board_remote_config.h"
 #include "rp_math.h"
 #include <math.h> 
 
@@ -79,25 +77,6 @@ static float gimbal_wrap_deg(float angle)
 }
 
 
-/* 遥控器通道转换为目标角速度 */
-#if GIMBAL_LOCAL_RC_ENABLE
-static float gimbal_axis_to_rate(int16_t axis, float max_rate)
-{
-    float value = (float)axis;
-
-    if (gimbal_abs(value) <= GIMBAL_RC_AXIS_DEADBAND)
-    {
-        return 0.0f;
-    }
-
-    value -= (value > 0.0f) ? GIMBAL_RC_AXIS_DEADBAND : -GIMBAL_RC_AXIS_DEADBAND;
-    value /= (GIMBAL_RC_AXIS_MAX - GIMBAL_RC_AXIS_DEADBAND);
-    value = gimbal_clamp(value, -1.0f, 1.0f);
-
-    return value * max_rate;
-}
-#endif
-
 /* 更新遥控器和键鼠角速度前馈 不太清楚要用遥控还是键鼠，索性两个一起写了 */
 static void gimbal_manual_input_update(gimbal_t *gimbal)
 {
@@ -107,8 +86,6 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
 
     gimbal->feedforward.mouse_dx_counts = 0.0f;
     gimbal->feedforward.mouse_dy_counts = 0.0f;
-
-#if GIMBAL_DOWN_RC_ENABLE
     if ((Board_HeartBeat.offline_cnt_5 < Board_HeartBeat.offline_cnt_max) &&
         (Board_Rx_Info.remote_cmd_pkt.valid != 0u) &&
         (Board_Rx_Info.state_pkt.car_state != 0u))
@@ -132,29 +109,6 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
                                       gimbal_tune.pitch_manual_rate_max_deg_s);
         }
     }
-#elif GIMBAL_LOCAL_RC_ENABLE
-    if (rc_dev.work_state == DEV_ONLINE)
-    {
-        if (Board_Rx_Info.state_pkt.car_state == 1u)
-        {
-            yaw_rate = gimbal_axis_to_rate(RC_RIGH_CH_LR_VALUE,
-                                           gimbal_tune.yaw_manual_rate_max_deg_s);
-            pitch_rate = gimbal_axis_to_rate(RC_RIGH_CH_UD_VALUE,
-                                             gimbal_tune.pitch_manual_rate_max_deg_s);
-        }
-        else if (Board_Rx_Info.state_pkt.car_state == 2u)
-        {
-            yaw_rate = gimbal_clamp(rc_data.mouse_x * GIMBAL_MOUSE_YAW_RATE_GAIN,
-                                    -gimbal_tune.yaw_manual_rate_max_deg_s,
-                                    gimbal_tune.yaw_manual_rate_max_deg_s);
-            pitch_rate = gimbal_clamp(rc_data.mouse_y * GIMBAL_MOUSE_PITCH_RATE_GAIN,
-                                      -gimbal_tune.pitch_manual_rate_max_deg_s,
-                                      gimbal_tune.pitch_manual_rate_max_deg_s);
-        }
-    }
-#else
-    (void)gimbal;
-#endif
 
     /* Apply operator direction conventions after source decoding. */
     yaw_rate *= gimbal_tune.manual_yaw_sign;

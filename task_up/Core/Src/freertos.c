@@ -48,8 +48,6 @@
 
 /* USER CODE END Variables */
 osThreadId MonitorTaskHandle;
-/* CommunityTask is disabled: it had no business logic. */
-// osThreadId CommunityTaskHandle;
 osThreadId ControlTaskHandle;
 osThreadId LedTaskHandle;
 
@@ -59,7 +57,6 @@ osThreadId LedTaskHandle;
 /* USER CODE END FunctionPrototypes */
 
 void StartMonitorTask(void const * argument);
-// void StartCommunityTask(void const * argument);
 void StartControlTask(void const * argument);
 void StartLedTask(void const * argument);
 
@@ -112,14 +109,6 @@ void MX_FREERTOS_Init(void) {
   /* definition and creation of MonitorTask */
   osThreadDef(MonitorTask, StartMonitorTask, osPriorityRealtime, 0, 512);
   MonitorTaskHandle = osThreadCreate(osThread(MonitorTask), NULL);
-
-  /* definition and creation of CommunityTask */
-#if 0
-  /* CommunityTask is intentionally disabled. */
-  osThreadDef(CommunityTask, StartCommunityTask, osPriorityHigh, 0, 512);
-  CommunityTaskHandle = osThreadCreate(osThread(CommunityTask), NULL);
-#endif
-
   /* definition and creation of ControlTask */
   osThreadDef(ControlTask, StartControlTask, osPriorityRealtime, 0, 1024);
   ControlTaskHandle = osThreadCreate(osThread(ControlTask), NULL);
@@ -154,26 +143,6 @@ __weak void StartMonitorTask(void const * argument)
   }
   /* USER CODE END StartMonitorTask */
 }
-
-/* USER CODE BEGIN Header_StartCommunityTask */
-/**
-* @brief Function implementing the CommunityTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartCommunityTask */
-#if 0
-__weak void StartCommunityTask(void const * argument)
-{
-  /* USER CODE BEGIN StartCommunityTask */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartCommunityTask */
-}
-#endif
 
 /* USER CODE BEGIN Header_StartControlTask */
 /**

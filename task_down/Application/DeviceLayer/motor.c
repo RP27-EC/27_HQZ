@@ -240,23 +240,6 @@ void rm_motor_list_init()
 	wheel_group.group_init(&wheel_group);
 }
 
-void kt_motor_list_init()
-{
-	
-	
-	
-}
-void dm_motor_list_init()
-{
-	
-}
-
-void ht_motor_list_init()
-{
-	
-	
-}
-
 /* 四轮电机组心跳 */
 void rm_motor_list_heart_beat()
 {

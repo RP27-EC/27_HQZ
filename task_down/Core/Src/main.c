@@ -21,9 +21,6 @@
 #include "cmsis_os.h"
 #include "dma.h"
 #include "fdcan.h"
-#include "iwdg.h"
-#include "spi.h"
-#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -31,7 +28,6 @@
 /* USER CODE BEGIN Includes */
 #include "device.h"
 #include "driver.h"
-#include "ui.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -106,21 +102,9 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_DMA_Init();
-  MX_SPI2_Init();
   MX_FDCAN1_Init();
-  MX_SPI6_Init();
-  MX_TIM12_Init();
-  MX_USART2_UART_Init();
   MX_FDCAN2_Init();
-  MX_FDCAN3_Init();
-  MX_USART10_UART_Init();
   MX_UART5_Init();
-//  MX_IWDG1_Init();
-  MX_USART1_UART_Init();
-  MX_USART6_UART_Init();
-  MX_UART8_Init();
-  MX_UART9_Init();
-  MX_UART7_Init();
   /* USER CODE BEGIN 2 */
 	DEVICE_Init();
 	DRIVER_Init();

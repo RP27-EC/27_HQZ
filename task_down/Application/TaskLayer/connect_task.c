@@ -6,10 +6,6 @@
 
 void StartConnectTask(void const *argument)
 {
-#if BOARD_COMM_TX_ENABLE
-    uint16_t d3d4_div = 0u;
-#endif
-
     (void)argument;
 
     for (;;)
@@ -20,18 +16,6 @@ void StartConnectTask(void const *argument)
 
 #if BOARD_COMM_D5_ENABLE
         board.tx_05(&board);
-#endif
-
-#if BOARD_COMM_D3D4_ENABLE
-        d3d4_div++;
-        if (d3d4_div >= BOARD_COMM_D3D4_PERIOD_MS)
-        {
-            d3d4_div = 0u;
-            board.tx_03(&board);
-            board.tx_04(&board);
-        }
-#else
-        (void)d3d4_div;
 #endif
 #endif
 

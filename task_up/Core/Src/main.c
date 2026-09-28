@@ -19,12 +19,9 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
-#include "adc.h"
 #include "can.h"
 #include "dma.h"
 #include "spi.h"
-#include "tim.h"
-#include "usart.h"
 #include "usb_device.h"
 #include "gpio.h"
 
@@ -34,7 +31,6 @@
 #include "driver.h"
 #include "device.h"
 #include "module.h"
-#include "rc_protocol.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -101,27 +97,17 @@ int main(void)
   MX_GPIO_Init();
   MX_DMA_Init();
   MX_SPI1_Init();
-  MX_TIM10_Init();
   MX_CAN1_Init();
   MX_CAN2_Init();
-  MX_USART3_UART_Init();
-  MX_USART1_UART_Init();
-  MX_USART6_UART_Init();
-  MX_TIM4_Init();
-  MX_ADC1_Init();
-  MX_ADC3_Init();
-  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
 	
   
 	
   // MX_IWDG_Init();
-	 MX_USB_DEVICE_Init();
+	MX_USB_DEVICE_Init();
 	DEVICE_Init();
 	Module_Init();
 	DRIVER_Init();
-	/* CAN_Filter_Init() is already called by DRIVER_Init(). */
-	// CAN_Filter_Init();
 
 
   /* USER CODE END 2 */
@@ -206,10 +192,6 @@ void SystemClock_Config(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
-	if (htim->Instance == TIM4)
-	{
-	
-	}
   /* USER CODE END Callback 0 */
   if (htim->Instance == TIM2)
   {

@@ -3,7 +3,6 @@
 #ifndef __SUPERCAP_CONFIG_H
 #define __SUPERCAP_CONFIG_H
 
-#define SUPERCAP_BRINGUP_ENABLE        1u
 #define SUPERCAP_OFFLINE_TIMEOUT_MS    100u
 
 /* 仅保活通信，不让超电参与功率输出 */

@@ -29,9 +29,6 @@ extern rm_motor_t wheel_motor[WHEEL_CNT]; /* 四轮单电机对象 */
 extern rm_group_t wheel_group;            /* 四轮电机组对象 */
 void rm_motor_list_init(void);
 void rm_motor_list_heart_beat(void);
-void kt_motor_list_init(void);
-void ht_motor_list_init(void);
-void dm_motor_list_init(void);
 uint8_t rm_motor_list_workstate(void);
 
 #endif

@@ -7,7 +7,6 @@
 #include "can_protocol.h"
 #include "rm_motor.h"
 #include "KT_motor.h"
-#include "HT_motor.h"
 #include "DM_motor.h"
 #include "motor_def.h"
 #include "drv_can.h"
@@ -36,7 +35,6 @@ typedef enum
 } dev_shoot_rm_motor_list_e;
 
 extern KT_motor_t dail_motor;               /* 拨盘 KT 电机 */
-extern ht_motor_t L_Wheel;
 extern dm_motor_t dm_motor[2];              /* Yaw/Pitch DM 电机 */
 extern dm_group_t DM_Group;                 /* 云台 DM 电机组 */
 extern rm_motor_t rm_motor[SHOOT_FRIC_NUM]; /* 双摩擦轮 */
@@ -48,7 +46,6 @@ void rm_motor_list_sleep(void);
 void kt_motor_list_init(void);
 void kt_motor_list_heart_beat(void);
 void kt_motor_list_sleep(void);
-void ht_motor_list_init(void);
 void dm_motor_list_init(void);
 void dm_motor_list_heart_beat(void);
 uint8_t rm_motor_list_workstate(void);

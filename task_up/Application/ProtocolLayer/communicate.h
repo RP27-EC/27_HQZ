@@ -13,8 +13,6 @@
 /* 下板发给上板的报文 ID */
 #define ID_BOARD_RX1 0xD1  /* 整车状态与发射状态 */
 #define ID_BOARD_RX2 0xD2  /* 云台目标角度 */
-#define ID_BOARD_RX3 0xD3  /* 裁判系统射击信息 */
-#define ID_BOARD_RX4 0xD4  /* 血量数据 */
 #define ID_BOARD_RX5 0xD5  /* 遥控/键鼠控制量 */
 
 /* 整车状态报文 */
@@ -22,9 +20,6 @@ typedef struct
 {
     uint8_t car_state;   /* 底盘状态 */
     uint8_t gimbal_mode; /* 云台控制模式 */
-    uint8_t vision_mode; /* 视觉模式 */
-    uint8_t game_start;  /* 比赛开始标志 */
-    uint8_t my_color;    /* 己方颜色 */
 } Board_State_Pkt_t;
 
 /* 云台目标报文，机械角单位 rad，IMU 角单位 deg */
@@ -85,7 +80,6 @@ typedef struct
     uint8_t r_fric_state;      /* 右摩擦轮在线 */
     uint8_t l_fric_state;      /* 左摩擦轮在线 */
     uint8_t dial_motor_state;  /* 拨盘在线 */
-    uint8_t vision_state;      /* 视觉在线 */
     uint8_t lift_state;        /* 抬升机构状态 */
 } Board_State_Meg_t;
 
@@ -102,8 +96,6 @@ typedef struct
     dev_work_state_t status;   /* 板间综合在线状态 */
     uint16_t offline_cnt_1;    /* D1 离线计数 */
     uint16_t offline_cnt_2;    /* D2 离线计数 */
-    uint16_t offline_cnt_3;    /* D3 离线计数 */
-    uint16_t offline_cnt_4;    /* D4 离线计数 */
     uint16_t offline_cnt_5;    /* D5 离线计数 */
     uint16_t offline_cnt_max;  /* 离线判定阈值 */
 } Board_HeartBeat_t;
@@ -115,8 +107,6 @@ extern Board_HeartBeat_t Board_HeartBeat;
 
 void Board_Rx_01(uint8_t *rxbuf);
 void Board_Rx_02(uint8_t *rxbuf);
-void Board_Rx_03(uint8_t *rxbuf);
-void Board_Rx_04(uint8_t *rxbuf);
 void Board_Rx_05(uint8_t *rxbuf);
 void Send_To_Down_Board(void);
 void C_Board_Communicate_HeartBeat(void);

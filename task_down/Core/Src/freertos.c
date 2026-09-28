@@ -25,7 +25,6 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "board_comm_config.h"
 
 /* USER CODE END Includes */
 
@@ -46,8 +45,6 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
-osSemaphoreId_t semTaskObserveToCtrl;
-osSemaphoreId_t semTaskCtrlToObserve;
 /* USER CODE END Variables */
 /* Definitions for MonitorTask */
 osThreadId_t MonitorTaskHandle;
@@ -70,20 +67,6 @@ const osThreadAttr_t CommandTask_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityHigh,
 };
-/* Definitions for UpdataTask */
-osThreadId_t UpdataTaskHandle;
-const osThreadAttr_t UpdataTask_attributes = {
-  .name = "UpdataTask",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityBelowNormal,
-};
-/* Definitions for UITask */
-osThreadId_t UITaskHandle;
-const osThreadAttr_t UITask_attributes = {
-  .name = "UITask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityAboveNormal,
-};
 /* Definitions for ConnectTask */
 osThreadId_t ConnectTaskHandle;
 const osThreadAttr_t ConnectTask_attributes = {
@@ -100,8 +83,6 @@ const osThreadAttr_t ConnectTask_attributes = {
 void StartMonitorTask(void *argument);
 void StartCtrlTask(void *argument);
 void StartCommandTask(void *argument);
-void StartUpdataTask(void *argument);
-void StartUITask(void *argument);
 void StartConnectTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -141,16 +122,6 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of CommandTask */
   CommandTaskHandle = osThreadNew(StartCommandTask, NULL, &CommandTask_attributes);
-
-  /* creation of UpdataTask */
-#if !BOARD_COMM_DEBUG
-  UpdataTaskHandle = osThreadNew(StartUpdataTask, NULL, &UpdataTask_attributes);
-#endif
-
-  /* creation of UITask */
-#if BOARD_UI_ENABLE
-  UITaskHandle = osThreadNew(StartUITask, NULL, &UITask_attributes);
-#endif
 
   /* creation of ConnectTask */
   ConnectTaskHandle = osThreadNew(StartConnectTask, NULL, &ConnectTask_attributes);
@@ -218,43 +189,6 @@ __weak void StartCommandTask(void *argument)
   }
   /* USER CODE END StartCommandTask */
 }
-
-/* USER CODE BEGIN Header_StartUpdataTask */
-/**
-* @brief Function implementing the UpdataTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartUpdataTask */
-__weak void StartUpdataTask(void *argument)
-{
-  /* USER CODE BEGIN StartUpdataTask */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartUpdataTask */
-}
-
-/* USER CODE BEGIN Header_StartUITask */
-/**
-* @brief Function implementing the UITask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartUITask */
-__weak void StartUITask(void *argument)
-{
-  /* USER CODE BEGIN StartUITask */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartUITask */
-}
-
 /* USER CODE BEGIN Header_StartConnectTask */
 /**
 * @brief Function implementing the ConnectTask thread.

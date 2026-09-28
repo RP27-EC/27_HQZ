@@ -6,8 +6,6 @@
 static uint16_t CAN_01_GetMotorAngle(uint8_t *rxData);
 static int16_t CAN_23_GetMotorSpeed(uint8_t *rxData);
 static int16_t CAN_45_GetMotorCurrent(uint8_t *rxData);
-static int16_t CAN_23_GetMotorTorque(uint8_t *rxData);
-static int16_t CAN_45_GetMotorTorque(uint8_t *rxData);
 static uint8_t CAN_6_GetMotorTemperature(uint8_t *rxData);
 static void Torque_to_Raw_Current(rm_motor_t *motor);
 static void Angle_Sum_Cal(rm_motor_t *motor);
@@ -265,22 +263,6 @@ static int16_t CAN_45_GetMotorCurrent(uint8_t *rxData)
 	int16_t current; /* 原始电流 */
 	current = (int16_t)(rxData[4] << 8 | rxData[5]); /* 大端拼接 */
 	return current;
-}
-
-/* 解析力矩反馈帧 */
-static int16_t CAN_23_GetMotorTorque(uint8_t *rxData)
-{
-	int16_t torque;
-	torque = ((uint16_t)rxData[2] << 8 | rxData[3]);
-	return torque;
-}
-
-/* 解析力矩反馈帧 */
-static int16_t CAN_45_GetMotorTorque(uint8_t *rxData)
-{
-	int16_t torque;
-	torque = ((uint16_t)rxData[4] << 8 | rxData[5]);
-	return torque;
 }
 
 /* 解析温度反馈帧 */

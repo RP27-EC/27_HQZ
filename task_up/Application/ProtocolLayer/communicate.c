@@ -20,8 +20,6 @@ Board_HeartBeat_t Board_HeartBeat = /* 板间链路状态 */
     .offline_cnt_max = 100,
     .offline_cnt_1 = 100,
     .offline_cnt_2 = 100,
-    .offline_cnt_3 = 100,
-    .offline_cnt_4 = 100,
     .offline_cnt_5 = 100,
 };
 
@@ -60,9 +58,6 @@ static void Board_Rx_Pkt_01(uint8_t *rxbuf)
 {
     Board_Rx_Info.state_pkt.car_state = rxbuf[0] & 0x03;          /* 车辆状态 */
     Board_Rx_Info.state_pkt.gimbal_mode = (rxbuf[0] >> 2) & 0x01; /* 云台模式 */
-    Board_Rx_Info.state_pkt.vision_mode = (rxbuf[0] >> 3) & 0x07; /* 视觉模式 */
-    Board_Rx_Info.state_pkt.game_start = (rxbuf[0] >> 6) & 0x01;  /* 比赛开始 */
-    Board_Rx_Info.state_pkt.my_color = (rxbuf[0] >> 7) & 0x01;    /* 己方颜色 */
 
     Board_Rx_Shoot_Flags = rxbuf[5] & 0x0Fu;
     Board_Rx_Info.shoot_pkt.launch_state = rxbuf[5] & 0x01;       /* 发射许可 */
@@ -136,29 +131,20 @@ static void Board_Tx_Update(void)
         (rm_motor[SHOOT_FRIC_L].state->status == DEV_ONLINE) ? 1 : 0;
     Board_Tx_Info.state_meg.dial_motor_state =
         (dail_motor.KT_motor_info.state_info.work_state == M_ONLINE) ? 1 : 0;
-    Board_Tx_Info.state_meg.vision_state = 0;
     Board_Tx_Info.state_meg.lift_state = Lift_Get_Report_State();
 }
 
 /* 打包 C1：设备在线状态 */
 static void Board_Tx_Meg_01(uint8_t *txbuf)
 {
-    uint16_t zero = board_float_to_uint(0.0f, -360.0f, 360.0f);
-
     memset(txbuf, 0, 8);
     txbuf[0] = (Board_Tx_Info.state_meg.yaw_motor_state & 0x01) |
                ((Board_Tx_Info.state_meg.pitch_motor_state & 0x01) << 1) |
                ((Board_Tx_Info.state_meg.lift_motor_state & 0x01) << 2) |
                ((Board_Tx_Info.state_meg.r_fric_state & 0x01) << 3) |
                ((Board_Tx_Info.state_meg.l_fric_state & 0x01) << 4) |
-               ((Board_Tx_Info.state_meg.dial_motor_state & 0x01) << 5) |
-               ((Board_Tx_Info.state_meg.vision_state & 0x01) << 6);
+               ((Board_Tx_Info.state_meg.dial_motor_state & 0x01) << 5);
     txbuf[1] = Board_Tx_Info.state_meg.lift_state;
-    txbuf[2] = (uint8_t)(zero >> 8);
-    txbuf[3] = (uint8_t)zero;
-    txbuf[4] = (uint8_t)(zero >> 8);
-    txbuf[5] = (uint8_t)zero;
-    txbuf[6] = 0;
 
     CAN_SendData(&hcan2, ID_BOARD_TX1, txbuf);
 }
@@ -197,20 +183,6 @@ void Board_Rx_02(uint8_t *rxbuf)
     Board_HeartBeat.offline_cnt_2 = 0;
 }
 
-/* D3 暂无数据字段，仅维持心跳 */
-void Board_Rx_03(uint8_t *rxbuf)
-{
-    (void)rxbuf;
-    Board_HeartBeat.offline_cnt_3 = 0;
-}
-
-/* D4 暂无数据字段，仅维持心跳 */
-void Board_Rx_04(uint8_t *rxbuf)
-{
-    (void)rxbuf;
-    Board_HeartBeat.offline_cnt_4 = 0;
-}
-
 /* 收到 D5，刷新遥控/键鼠控制量 */
 void Board_Rx_05(uint8_t *rxbuf)
 {
@@ -236,14 +208,6 @@ void C_Board_Communicate_HeartBeat(void)
     if (Board_HeartBeat.offline_cnt_2 < Board_HeartBeat.offline_cnt_max)
     {
         Board_HeartBeat.offline_cnt_2++;
-    }
-    if (Board_HeartBeat.offline_cnt_3 < Board_HeartBeat.offline_cnt_max)
-    {
-        Board_HeartBeat.offline_cnt_3++;
-    }
-    if (Board_HeartBeat.offline_cnt_4 < Board_HeartBeat.offline_cnt_max)
-    {
-        Board_HeartBeat.offline_cnt_4++;
     }
 
     if (Board_HeartBeat.offline_cnt_5 < Board_HeartBeat.offline_cnt_max)

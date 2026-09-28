@@ -5,12 +5,10 @@
 
 #include "rp_config.h"
 #include "arm_math.h"
-#include "HT_Motor.h"
 #include "drv_can.h"
 #include "drv_tick.h"
 #include "motor_def.h"
 #include "rp_math.h"
-#ifndef __HT_MOTOR_H
 /* MIT 命令集 */
 typedef enum mit_cmd_enum_t
 {
@@ -19,7 +17,6 @@ typedef enum mit_cmd_enum_t
 	Zero_Position_Sensor,  // 把当前位置设为零点
 	
 }mit_cmd_t;
-#endif
 
 #define P_MIN -PI    // Radians
 #define P_MAX PI        

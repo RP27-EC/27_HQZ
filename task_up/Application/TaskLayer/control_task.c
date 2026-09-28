@@ -5,9 +5,7 @@
 #include "imu_sensor.h"
 #include "module.h"
 #include "motor.h"
-#include "rc_protocol.h"
 #include "rp_device_config.h"
-#include "board_remote_config.h"
 #include "launcher.h"
 
 volatile imu_debug_t imu_dbg; /* IMU 在线调试快照 */
@@ -79,9 +77,6 @@ void StartControlTask(void const *argument)
         }
 
         imu_debug_update();
-#if GIMBAL_LOCAL_RC_ENABLE
-        rc_interrupt_update(&rc_dev);
-#endif
         Module_Work();
         gimbal_can_send();
         Launcher_Work();

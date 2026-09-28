@@ -4,7 +4,6 @@
 #include "communicate.h"
 #include "imu_sensor.h"
 #include "motor.h"
-#include "rc_sensor.h"
 
 void StartMonitorTask(void const *argument)
 {
@@ -16,7 +15,6 @@ void StartMonitorTask(void const *argument)
         dm_motor_list_heart_beat();
         rm_motor_list_heart_beat();
         kt_motor_list_heart_beat();
-        rc_dev.heart_beat(&rc_dev);
         C_Board_Communicate_HeartBeat();
 
         osDelay(1);

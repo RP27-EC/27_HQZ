@@ -15,7 +15,6 @@
 
 #define   CAP_SWITCH             1
 
-#define   POWER_LIMIT_SWITCH     1
 
 #define   CHASSIS_SWITCH         1
 

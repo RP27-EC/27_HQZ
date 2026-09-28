@@ -51,14 +51,6 @@ void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
         Board_Rx_02(rxBuf);
         break;
 
-    case ID_BOARD_RX3:
-        Board_Rx_03(rxBuf);
-        break;
-
-    case ID_BOARD_RX4:
-        Board_Rx_04(rxBuf);
-        break;
-
     case ID_BOARD_RX5:
         Board_Rx_05(rxBuf);
         break;

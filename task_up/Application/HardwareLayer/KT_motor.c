@@ -1,6 +1,8 @@
 /* KT_motor.c - KT 鐢垫満椹卞姩 */
 
 #include "KT_motor.h"
+#include <string.h>
+#include "rp_math.h"
 extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
 void KT_motor_class_heartbeat(KT_motor_t *motor);

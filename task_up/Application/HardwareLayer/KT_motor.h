@@ -7,7 +7,6 @@
 #include "driver.h"
 #include "motor_def.h"
 #include "PID.h"
-#include "algo.h"
 
 #define OFFLINE_LINE_CNT_MAX 100
 #define SELFPROTECT_CNT_MAX  255

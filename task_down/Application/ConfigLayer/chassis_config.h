@@ -3,8 +3,6 @@
 #ifndef __CHASSIS_CONFIG_H
 #define __CHASSIS_CONFIG_H
 
-/* 第一阶段底盘调试开关。 */
-#define CHASSIS_BRINGUP_ENABLE          1u
 #define CHASSIS_RC_INPUT_ENABLE         1u
 #define CHASSIS_KEYBOARD_INPUT_ENABLE   1u
 #define CHASSIS_OWNS_RC_YAW             1u
@@ -16,12 +14,8 @@
 #define CHASSIS_KEY_VY_SIGN             -1.0f
 #define CHASSIS_KEY_WZ_SIGN              1.0f
 
-/* 后续阶段保留，第一阶段默认关闭。 */
-#define CHASSIS_PLANNER_ENABLE          0u
-#define CHASSIS_FEEDFORWARD_ENABLE      0u
 #define CHASSIS_GIMBAL_FOLLOW_ENABLE    1u
 #define CHASSIS_SPIN_ENABLE              1u
-#define CHASSIS_POWER_LIMIT_ENABLE      0u
 
 #define CHASSIS_CONTROL_PERIOD_MS       1u
 

@@ -1,7 +1,6 @@
 /* board_protocol.c - 板间通信协议 */
 
 #include "board_protocol.h"
-#include "judge.h"
 #include "rc_sensor.h"
 #include "string.h"
 #include <stdbool.h>
@@ -45,8 +44,6 @@ void Board_Init(Board_t* board)
 	
 	board->tx_01 = Board_Tx_Pkt_01;
 	board->tx_02 = Board_Tx_Pkt_02;
-	board->tx_03 = Board_Tx_Pkt_03;
-	board->tx_04 = Board_Tx_Pkt_04;
 	board->tx_05 = Board_Tx_Pkt_05;
 	
 	board->rx_01 = Board_Rx_Meg_01;
@@ -76,11 +73,9 @@ void Board_Heart_Beat(Board_t* board)
 
 uint8_t pkt_01[8]; /* D1 整车状态发送缓存 */
 uint8_t pkt_02[8]; /* D2 云台目标发送缓存 */
-uint8_t pkt_03[8]; /* D3 射击信息发送缓存 */
-uint8_t pkt_04[8]; /* D4 血量数据发送缓存 */
 uint8_t pkt_05[8]; /* D5 遥控控制发送缓存 */
 
-/* 打包 D1：整车状态、速度与发射状态 */
+/* 打包 D1：整车状态与发射状态 */
 
 void Board_Tx_Pkt_01(Board_t* board)
 {
@@ -88,21 +83,6 @@ void Board_Tx_Pkt_01(Board_t* board)
 	
 	pkt_01[0] |= (board->tx_pkt->car_pkt.car_state & 0x03) << 0;   /* 车辆状态 */
 	pkt_01[0] |= (board->tx_pkt->car_pkt.gimbal_mode & 0x01) << 2; /* 云台模式 */
-	pkt_01[0] |= (board->tx_pkt->car_pkt.vision_mode & 0x07) << 3; /* 视觉模式 */
-	pkt_01[0] |= (board->tx_pkt->car_pkt.game_start & 0x01) << 6;  /* 比赛开始 */
-	pkt_01[0] |= (board->tx_pkt->car_pkt.my_color & 0x01) << 7;    /* 己方颜色 */
-	
-	uint16_t t1,t2; /* 速度压缩值 */
-	
-	t1 = float_to_uint(board->tx_pkt->car_pkt.v_x,-8000.f,8000.f,16); /* v_x 压缩值 */
-	t2 = float_to_uint(board->tx_pkt->car_pkt.v_y,-8000.f,8000.f,16); /* v_y 压缩值 */
-	
-	pkt_01[1] = t1>>8; /* v_x 高字节 */
-	pkt_01[2] = t1;    /* v_x 低字节 */
-	pkt_01[3] = t2>>8; /* v_y 高字节 */
-	pkt_01[4] = t2;    /* v_y 低字节 */
-
-									 
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.launch_state & 0x01) << 0; /* 发射许可 */
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_mode & 0x01) << 1; /* 发射模式 */
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_level & 0x01) << 2; /* 触发电平 */
@@ -138,51 +118,8 @@ void Board_Tx_Pkt_02(Board_t* board)
 
 	
 //	board->status->offline_cnt ++;
-	
+
 }
-
-/* 打包 D3：射击热量与冷却信息 */
-void Board_Tx_Pkt_03(Board_t* board)
-{
-	uint16_t t1,t2; /* 弹速与射频压缩值 */
-	
-	t1 = float_to_uint(board->tx_pkt->judge_shoot_pkt.shoot_speed,-50.f,50.f,16);    
-	t2 = float_to_uint(board->tx_pkt->judge_shoot_pkt.shoot_freq,-50.f,50.f,16);  
-	
-	board->tx_pkt->judge_shoot_pkt.shoot_heat_err = judge.pkt->shooter_barrel_heat_limit - judge.pkt->shooter_17mm_1_barrel_heat;
-	
-	pkt_03[0] = t1>>8;
-	pkt_03[1] = t1;
-	pkt_03[2] = t2>>8;
-	pkt_03[3] = t2;
-	pkt_03[4] = board->tx_pkt->judge_shoot_pkt.shoot_heat_err>>8;
-	pkt_03[5] = board->tx_pkt->judge_shoot_pkt.shoot_heat_err;
-	pkt_03[6] = judge.info->robot_status.shooter_barrel_cooling_value>>8;
-	pkt_03[7] = judge.info->robot_status.shooter_barrel_cooling_value;
-	
-
-	CAN_SendData(&hfdcan2, ID_PKT_03, pkt_03);
-	
-//	board->status->offline_cnt ++;
-	
-}
-
-
-/* 打包 D4：透传血量字段 */
-void Board_Tx_Pkt_04(Board_t* board)
-{
-	for(uint8_t i = 0;i<8;i++)
-	{
-	  pkt_04[i] = board->tx_pkt->blood_pkt.blood[i];
-	}
-
-	CAN_SendData(&hfdcan2, ID_PKT_04, pkt_04);
-	
-//	board->status->offline_cnt ++;
-	
-}
-
-
 /* 摇杆原始值映射到最大角速度 */
 static float Board_Remote_Axis_To_Rate(int16_t axis, float max_rate)
 {
@@ -241,7 +178,6 @@ void Board_Tx_Pkt_05(Board_t* board)
 #endif
         {
         /* 遥控角速度装箱 */
-#if CHASSIS_BRINGUP_ENABLE
             if (rc_dev.info->s1.value == RC_SW_DOWN)
             {
                 yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
@@ -266,10 +202,6 @@ void Board_Tx_Pkt_05(Board_t* board)
                                                      BOARD_D5_YAW_RATE_MAX_DEG_S);
 #endif
             }
-#else
-            yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
-                                                 BOARD_D5_YAW_RATE_MAX_DEG_S);
-#endif
             pitch_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch1,
                                                    BOARD_D5_PITCH_RATE_MAX_DEG_S);
         }
@@ -299,23 +231,10 @@ void Board_Rx_Meg_01(Board_t* board,uint8_t* rxbuf)
 {
 	board->rx_meg->state_meg.yaw_motor_state= (rxbuf[0] >> 0) & 0x01;
 	board->rx_meg->state_meg.pitch_motor_state= (rxbuf[0] >> 1) & 0x01;
-	board->rx_meg->state_meg.height_motor_state= (rxbuf[0] >> 2) & 0x01;
 	board->rx_meg->state_meg.r_fric_state= (rxbuf[0] >> 3) & 0x01;
 	board->rx_meg->state_meg.l_fric_state= (rxbuf[0] >> 4) & 0x01;
 	board->rx_meg->state_meg.dial_motor_state= (rxbuf[0] >> 5) & 0x01;
-	board->rx_meg->state_meg.vision_state= (rxbuf[0] >> 6) & 0x01;
 	board->rx_meg->state_meg.is_down= rxbuf[1];
-	
-	uint16_t t1 = ((uint16_t)rxbuf[2] << 8) | rxbuf[3]; /* Yaw 目标原始值 */
-  uint16_t t2 = ((uint16_t)rxbuf[4] << 8) | rxbuf[5]; /* Pitch 目标原始值 */
-
-  board->rx_meg->vision_meg.vision_yaw_tar = uint_to_float(t1, -360.0f, 360.0f,16);
-  board->rx_meg->vision_meg.vision_pitch_tar = uint_to_float(t2, -360.0f, 360.0f,16);
-	board->rx_meg->vision_meg.is_find_target = (rxbuf[6] >> 0) & 0x01;
-	
-
- 
-	
 	board->status->offline_cnt = 0;
 }
 

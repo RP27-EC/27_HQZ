@@ -36,7 +36,6 @@ extern FDCAN_HandleTypeDef hfdcan1;
 
 extern FDCAN_HandleTypeDef hfdcan2;
 
-extern FDCAN_HandleTypeDef hfdcan3;
 
 /* USER CODE BEGIN Private defines */
 
@@ -44,7 +43,6 @@ extern FDCAN_HandleTypeDef hfdcan3;
 
 void MX_FDCAN1_Init(void);
 void MX_FDCAN2_Init(void);
-void MX_FDCAN3_Init(void);
 
 /* USER CODE BEGIN Prototypes */
 

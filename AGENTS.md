@@ -6,7 +6,6 @@
 
 - `task_up/`：上板控制，包含云台、发射机构、IMU、PID、电机驱动和板间协议。
 - `task_down/`：下板控制，包含底盘、任务调度、遥控输入和板间通信。
-- `01_LED/`：独立外设参考工程，不属于当前上下板主程序。
 - `Application/`：业务代码按 Config、Device、Driver、Hardware、Module、Protocol、Task 分层。
 - `MDK-ARM/`：Keil 工程与编译产物，不手工修改生成文件。
 
