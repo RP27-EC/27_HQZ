@@ -26,8 +26,8 @@
 #define CHASSIS_CONTROL_PERIOD_MS       1u
 
 /* 小陀螺参数。遥控 S2 下拨选择，键鼠按 C 选择，ch0 控制旋转速度。 */
-#define CHASSIS_SPIN_MAX_WZ              20.0f
-#define CHASSIS_SPIN_BASE_WZ             20.0f
+#define CHASSIS_SPIN_MAX_WZ              25.0f
+#define CHASSIS_SPIN_BASE_WZ             25.0f
 #define CHASSIS_SPIN_TRIM_WZ             0.0f
 #define CHASSIS_SPIN_STEP                0.1f
 #define CHASSIS_SPIN_DIRECTION           1.0f
@@ -46,16 +46,16 @@
 #define CHASSIS_FOLLOW_TRANSLATION_SIGN   1.0f
 #define CHASSIS_FOLLOW_WZ_SIGN            -1.0f
 #define CHASSIS_FOLLOW_KP                 20.0f
-#define CHASSIS_FOLLOW_MAX_WZ             20.0f
-#define CHASSIS_FOLLOW_WZ_STEP            0.2f
+#define CHASSIS_FOLLOW_MAX_WZ             30.0f
+#define CHASSIS_FOLLOW_WZ_STEP            0.4f
 #define CHASSIS_FOLLOW_FRICTION_FF        7.0f
-#define CHASSIS_FOLLOW_DEADBAND_DEG       7.0f
+#define CHASSIS_FOLLOW_DEADBAND_DEG       5.0f
 #define CHASSIS_FOLLOW_TURN_LOCK_DEG      150.0f
 #define CHASSIS_FOLLOW_TURN_UNLOCK_DEG    20.0f
-#define CHASSIS_FOLLOW_TORQUE_LIMIT_NM    3.0f
+#define CHASSIS_FOLLOW_TORQUE_LIMIT_NM    4.0f
 #define CHASSIS_FOLLOW_YAW_JUMP_LIMIT_DEG 30.0f
 #define CHASSIS_FOLLOW_TIMEOUT_MS         50u
-#define CHASSIS_FOLLOW_BLEND_TIME_MS      200u
+#define CHASSIS_FOLLOW_BLEND_TIME_MS      10u
 #define CHASSIS_FOLLOW_BLEND_STEP         ((float)CHASSIS_CONTROL_PERIOD_MS / (float)CHASSIS_FOLLOW_BLEND_TIME_MS)
 
 /* 原底盘代码参数。 */
@@ -63,10 +63,10 @@
 /* 架空调试阶段限速，稳定后再逐步恢复到 50/50/40。 */
 //直接映射到遥控器
 //50 50 40有点太快了，改小一点
-#define CHASSIS_MAX_VX                  35.0f
-#define CHASSIS_MAX_VY                  35.0f
-#define CHASSIS_MAX_WZ                  25.0f
-#define CHASSIS_TURN_CYCLE_SPEED        55.0f
+#define CHASSIS_MAX_VX                  25.0f
+#define CHASSIS_MAX_VY                  25.0f
+#define CHASSIS_MAX_WZ                  20.0f
+#define CHASSIS_TURN_CYCLE_SPEED        45.0f
 #define CHASSIS_RC_DEADBAND             30.0f
 #define CHASSIS_RC_AXIS_MAX             660.0f
 

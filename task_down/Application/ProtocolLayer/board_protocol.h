@@ -20,7 +20,7 @@
 #define BOARD_D5_CMD_MOUSE_DELTA        1u  /* 鼠标增量控制量 */
 
 /* 鼠标计数值直通角速度；Pitch 符号保留当前修正方向。 */
-#define BOARD_D5_MOUSE_YAW_GAIN          3.0f
+#define BOARD_D5_MOUSE_YAW_GAIN          5.0f
 #define BOARD_D5_MOUSE_PITCH_GAIN       -3.0f
 
 /* 下板发送报文 */
