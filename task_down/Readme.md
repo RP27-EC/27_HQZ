@@ -1,17 +1,30 @@
 # task_down 下板控制工程
 
-`task_down` 运行在 STM32H723VGTx 上，是整车输入、底盘、发射决策和超电通信主机。下板负责解析 DBUS 遥控器和键鼠，组合底盘模式，执行四轮速度环，生成 D1/D2/D5 发给上板，并接收 C1/C2 获取云台状态和姿态反馈。
+> STM32H723VGTx + FreeRTOS 的整车输入、底盘、发射决策和超电通信主机。
+
+`task_down` 负责接收遥控器和键鼠，统一生成本车控制命令，执行四轮底盘控制，并向上板发送 D1/D2/D5。上板只执行云台、发射和升降动作，下板则掌握整车状态、控制来源、发射许可和狗洞请求。
+
+这份 README 分成两层：
+
+- 前半部分讲职责边界、架构和设计取舍。
+- 后半部分展开输入映射、底盘、跟随、小陀螺、发射、超电、协议、问题复盘和调试方法。
+
+## 1. 工程定位
 
 ```text
 DBUS / 键鼠
     |
     v
-CommandTask 解析
+CommandTask
+  rc_interrupt_update
+  keyboard_update
     |
     v
 CtrlTask
   Board_Debug_Gimbal_Command
   Chassis_Input_Update
+  Chassis_Follow_UpdateMode
+  Chassis_Spin_UpdateMode
   Chassis_Follow_Update
   Chassis_Spin_Update
   Chassis_Control_Update
@@ -23,74 +36,189 @@ CtrlTask
     +<-- FDCAN2: C1/C2
 ```
 
-当前不启用自瞄、视觉串级、裁判系统、正式功率限制和下层本机 IMU 控制。超电当前只保活通信，不参与功率输出。
+下板当前是唯一的遥控器/键鼠主机。这样做是为了避免两个 MCU 同时解释同一套输入，减少控制权冲突和状态重复。
 
-## 1. 快速开始
+## 2. 当前职责
 
-### 1.1 硬件与工具
+下板负责：
 
-| 项目 | 当前配置 |
-|---|---|
-| 主控 | STM32H723VGTx |
-| HSE | 24 MHz |
-| 主频 | PLL1 480 MHz，HCLK 240 MHz |
-| FDCAN 时钟 | 代码配置 PLL2，当前参数见 CAN 章节 |
-| 调试器 | J-Link、ST-Link 或 DAPLink，SWD |
-| IDE | Keil MDK5 |
-| 工程 | `task_down/MDK-ARM/DM-MC02.uvprojx` |
-| Target | `DM-MC02` |
-| 编译环境 | ARM Compiler 5.06 update 7（Keil 日志记录） |
-| 遥控接收 | UART5，DBUS |
+- DBUS 18 字节帧解析。
+- 遥控器摇杆、拨杆、拨轮和键鼠状态。
+- RC/键盘控制源切换。
+- 底盘直控、跟随云台、小陀螺三种运动来源。
+- 四轮逆解和速度闭环。
+- 发射许可、S2 消抖、上电重新解锁和打符联锁。
+- 狗洞请求下发和云台机械模式命令。
+- 超电 CAN 保活和反馈解析。
+- D1/D2/D5 周期发送，C1/C2 接收。
 
-首次带电前必须架空底盘、拆弹，并准备急停和 CAN 分析仪。轮组方向、速度环和力矩限幅未标定时，不允许直接落地高速运行。
+下板不负责：
 
-### 1.2 编译
+- 云台电机 PID。
+- IMU 姿态闭环。
+- 发射摩擦轮和拨盘执行。
+- 升降电机执行。
+- 自瞄、视觉、裁判和正式功率限制。
+- 上层 UI。
 
-Keil 图形界面：
+## 3. 设计重点
 
-```text
-打开 task_down/MDK-ARM/DM-MC02.uvprojx
-Target: DM-MC02
-Build/Rebuild
-```
+### 3.1 单一遥控器主机
 
-命令行：
-
-```powershell
-UV4 -r task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o build_down.log
-```
-
-构建产物：
+输入链固定为：
 
 ```text
-task_down/MDK-ARM/DM-MC02/DM-MC02.axf
-task_down/MDK-ARM/DM-MC02/DM-MC02.hex
+遥控器 -> rc_dev
+键鼠   -> rc_dev
+        |
+        v
+下板统一决策
+        |
+        v
+D1/D2/D5 -> 上板执行
 ```
 
-工程内保留的 2026-09-28 构建日志结果：
+D5 不需要让上板重新判断“这是遥控器还是键鼠”。下板先把两种输入统一成 Yaw/Pitch 角速度，再按 `0.1 deg/s` 量化。
+
+### 3.2 所有底盘来源统一成 `chassis_cmd_t`
+
+底盘输入、跟随、小陀螺、键鼠最终都写入同一个命令结构：
+
+```c
+typedef struct
+{
+    float vx;
+    float vy;
+    float wz;
+    uint8_t valid;
+    chassis_source_e source;
+} chassis_cmd_t;
+```
+
+来源枚举：
 
 ```text
-Program Size: Code=55852 RO-data=1144 RW-data=1516 ZI-data=28408
-"DM-MC02\DM-MC02.axf" - 0 Error(s), 0 Warning(s).
+CHASSIS_SRC_NONE
+CHASSIS_SRC_RC
+CHASSIS_SRC_RC_FOLLOW
+CHASSIS_SRC_SPIN
+CHASSIS_SRC_KEYBOARD
 ```
 
-修改源码后必须重新执行目标 `DM-MC02` 的全量 rebuild。
+固定处理顺序：
 
-### 1.3 上电顺序
+```text
+输入解析
+  -> 跟随覆盖 wz / 平移参考系
+  -> 小陀螺覆盖 wz / 平移参考系
+  -> 四轮逆解
+  -> 速度环
+  -> 力矩输出
+```
 
-1. 整车断电，底盘架空，发射机构空载。
-2. 确认 FDCAN1/FDCAN2 终端电阻、CANH/CANL 和共地正确。
-3. 确认上下板 CAN 波特率一致。当前下板生成代码存在与上板 1 Mbps 不一致的风险，必须先用分析仪确认。
-4. 上电后先看遥控器是否在线，S1/S2 是否处于预期档位。
-5. 不接底盘动力时确认 D1/D2/D5 发送和 C1/C2 接收。
-6. 确认上板云台已归中、升降上报到上位后，再测试发射许可。
-7. 底盘先单轮、再四轮同向、再平移、旋转和斜向。
-8. 确认基础速度环稳定后，再启用跟随和小陀螺。
-9. 超电当前只验证通信，不让它参与输出。
+这样每个模式只需要接管自己关心的分量，不会各自直接操作电机。
 
-## 2. 启动与任务
+### 3.3 跟随模式把 C2 当作安全输入
 
-### 2.1 main 启动顺序
+跟随模式使用上板 C2 的 Yaw 机械角。代码不会无脑相信最后一帧：
+
+```text
+C2 曾经收到
++gimbal_rx_time_ms 距当前 <= 50 ms
++Yaw 数值有效
++相邻两拍 yaw_error 跳变 <= 30 deg
+```
+
+任一条件失败：
+
+- `fault_latched = 1`
+- `active = 0`
+- `cmd.valid = 0`
+- 底盘输出清零
+
+故障需要退出跟随档位再进入才能恢复。
+
+### 3.4 小陀螺平移使用云台参考系
+
+小陀螺旋转时，如果平移仍按车体坐标系解释，操作方向会随云台角度变化。当前实现：
+
+```text
+theta = yaw_mec
+vx' = cos(theta) * vx - sin(theta) * vy
+vy' = sin(theta) * vx + cos(theta) * vy
+```
+
+如果 C2 超过 50 ms：
+
+- 自转保留。
+- `vx/vy` 清零。
+
+这个策略是有意保守的：姿态不可信时，不进行方向相关平移。
+
+### 3.5 底盘控制优先检查“对象、数据、在线状态”
+
+底盘更新链：
+
+```text
+cmd != NULL
+enabled
+cmd.valid
+vx/vy/wz 非 NaN 且有限
+四轮对象完整
+四轮全部在线
+逆解
+速度环
+组帧发送
+```
+
+任何一步失败都调用停机：
+
+- 四轮目标清 0。
+- 发送 `0x200` 全零力矩。
+- `fault = 1`。
+
+这部分主要是提交 `770a417` 后补强的。之前底盘任务调用和空指针检查不够完整，容易出现“命令链还在跑，但对象状态不可信”的情况。
+
+### 3.6 发射许可独立于上板执行
+
+下板只把许可、模式和触发电平写入 D1：
+
+```text
+launch_state
+shoot_mode
+shoot_level
+```
+
+上板不需要知道 S1/S2 的原始值，也不需要知道打符请求背后的按键逻辑。
+
+发射安全条件：
+
+- 遥控在线。
+- S2 上电后发生过一次变化。
+- S2 经过 15 ms 消抖。
+- 打符期间禁止发射。
+- 升降不在上位时禁止发射。
+- 小陀螺档位禁止发射。
+
+### 3.7 超电先只做通信
+
+当前超电控制输出全部为 0：
+
+```c
+SUPERCAP_CAP_SWITCH         = 0u
+SUPERCAP_TURBO_MODE         = 0u
+SUPERCAP_PRE_CHARGE_ENABLE  = 0u
+SUPERCAP_POWER_BUFFER       = 0u
+SUPERCAP_POWER_LIMIT        = 0u
+SUPERCAP_POWER_OUT_LIMIT    = 0
+SUPERCAP_POWER_IN_LIMIT     = 0u
+```
+
+先验证 `0x222/0x211` 和电压电流反馈，再逐步启用预充、放电和功率协同。这是为了避免未验证超电把底盘调试变成不可复现问题。
+
+## 4. main 和任务模型
+
+### 4.1 main
 
 ```text
 SCB_EnableICache
@@ -109,7 +237,7 @@ MX_FREERTOS_Init
 osKernelStart
 ```
 
-`DEVICE_Init()` 顺序：
+`DEVICE_Init()`：
 
 ```text
 SuperCap_Init
@@ -131,86 +259,104 @@ CAN2_Filter_Init
 CAN1_Filter_Init
 ```
 
-### 2.2 FreeRTOS 任务
+### 4.2 任务
 
 系统 tick 为 1 kHz。
 
-| 任务 | 优先级 | 栈配置 | 周期 | 主要工作 |
+| 任务 | 优先级 | 栈 | 周期 | 职责 |
 |---|---:|---:|---:|---|
-| `CtrlTask` | `osPriorityHigh` | 2048 bytes (`512 * 4`) | 静态循环加 `osDelay(1)` | 整车控制主链 |
-| `ConnectTask` | `osPriorityHigh` | 2048 bytes (`512 * 4`) | `BOARD_COMM_D1D2_PERIOD_MS = 1` | 发 D1/D2/D5 |
-| `CommandTask` | `osPriorityHigh` | 1024 bytes (`256 * 4`) | `osDelay(1)` | 遥控和键盘状态更新 |
-| `MonitorTask` | `osPriorityAboveNormal` | 2048 bytes (`512 * 4`) | `osDelay(1)` | 电机、遥控、板间和超电心跳 |
+| `CtrlTask` | `osPriorityHigh` | 2048 bytes | 1 ms 循环 | 整车控制主链 |
+| `ConnectTask` | `osPriorityHigh` | 2048 bytes | 1 ms | D1/D2/D5 |
+| `CommandTask` | `osPriorityHigh` | 1024 bytes | 1 ms | 遥控和键鼠 |
+| `MonitorTask` | `osPriorityAboveNormal` | 2048 bytes | 1 ms | 电机、遥控、板间、超电 |
 
-`StartCtrlTask()` 固定顺序：
+`StartCtrlTask()` 顺序：
 
 ```text
 Board_Debug_Gimbal_Command
 Chassis_Input_Update
 Chassis_Follow_UpdateMode
 Chassis_Spin_UpdateMode
-Chassis_Follow_Update(&chassis_input_cmd)
-Chassis_Spin_Update(&chassis_input_cmd)
-Chassis_Control_Update(&chassis_input_cmd)
+Chassis_Follow_Update
+Chassis_Spin_Update
+Chassis_Control_Update
 launch.work
 SuperCap_Tx
 ```
 
-顺序会影响跟随、小陀螺和普通底盘输入的覆盖关系，不能随意交换。
+`StartConnectTask()`：
 
-### 2.3 任务函数重名问题
+```text
+D1
+D2
+D5
+osDelay(1)
+```
 
-`Core/Src/freertos.c` 中保留 `StartMonitorTask`、`StartCtrlTask`、`StartCommandTask`、`StartConnectTask` 的 weak 空壳，实际实现位于 `Application/TaskLayer`。禁止在应用层复制其他任务同名强定义，否则会再次出现 `L6200E` 重复符号。
+板间心跳、遥控心跳、RM 电机心跳和超电心跳放在 `MonitorTask`。
 
-## 3. 外设与通信
+### 4.3 weak 壳和强制定义
 
-### 3.1 外设映射
+`Core/Src/freertos.c` 中保留：
+
+```text
+StartMonitorTask
+StartCtrlTask
+StartCommandTask
+StartConnectTask
+```
+
+四个 weak 空壳。实际实现位于 `Application/TaskLayer`。禁止在应用层再复制其他任务名，否则会重新出现 `L6200E`。
+
+## 5. 外设和通信
+
+### 5.1 外设
 
 | 外设 | 引脚/参数 | 用途 |
 |---|---|---|
 | FDCAN1 | PD0/PD1，经典 CAN | 四轮和超电 |
-| FDCAN2 | PB5/PB6，经典 CAN | C1/C2 接收和 D1/D2/D5 发送 |
-| UART5 | TX PC12，RX PD2，100000 baud | DBUS 遥控器 |
-| UART5 格式 | 9 位数据、偶校验、2 停止位 | DBUS 原始帧 |
-| DMA1 Stream0 | 18 字节循环缓冲 | UART5 RxToIdle |
+| FDCAN2 | PB5/PB6，经典 CAN | D1/D2/D5 和 C1/C2 |
+| UART5 | TX PC12，RX PD2 | DBUS |
+| UART5 格式 | 100000 baud，9 位，偶校验，2 停止位 | DBUS 物理层 |
+| DMA1 Stream0 | 18 字节循环缓冲 | RxToIdle |
 | SWD | PA13/PA14 | 调试 |
-| 电源控制 | PC13/PC14/PC15 | 板载电源使能 |
-| 蜂鸣器 | PB15 | 预留输出 |
+| PWR_5V_EN | PC15 | 板载 5V 使能 |
+| PWR_OUT1_EN | PC14 | 外设电源 |
+| PWR_OUT2_EN | PC13 | 外设电源 |
+| BUZZER | PB15 | 预留 |
 
-FDCAN 过滤器当前全通，实际 ID 分发在 `CAN1_rxDataHandler()` 和 `CAN2_rxDataHandler()`。
+### 5.2 FDCAN1
 
-### 3.2 CAN1 映射
-
-| CAN ID | 方向 | 内容 |
+| ID | 方向 | 内容 |
 |---|---|---|
-| `0x200` | 下板发送 | 四轮组控制，槽位按 LF/LB/RF/RB |
-| `0x201` | 下板接收 | 左前轮反馈 |
-| `0x202` | 下板接收 | 左后轮反馈 |
-| `0x203` | 下板接收 | 右前轮反馈 |
-| `0x204` | 下板接收 | 右后轮反馈 |
-| `0x222` | 下板发送 | 超电控制帧 |
-| `0x211` | 下板接收 | 超电反馈帧 |
+| `0x200` | 下板发送 | 四轮组帧 |
+| `0x201` | 下板接收 | 左前 |
+| `0x202` | 下板接收 | 左后 |
+| `0x203` | 下板接收 | 右前 |
+| `0x204` | 下板接收 | 右后 |
+| `0x222` | 下板发送 | 超电控制 |
+| `0x211` | 下板接收 | 超电反馈 |
 
-### 3.3 CAN2 映射
+### 5.3 FDCAN2
 
-| CAN ID | 方向 | 内容 |
+| ID | 方向 | 内容 |
 |---|---|---|
-| `0xC1` | 下板接收 | 上板设备在线状态、升降状态 |
-| `0xC2` | 下板接收 | 云台机械角/IMU 角反馈 |
-| `0xD1` | 下板发送 | 整车状态、发射状态、狗洞请求 |
-| `0xD2` | 下板发送 | 云台目标角 |
+| `0xC1` | 下板接收 | 上板设备状态 |
+| `0xC2` | 下板接收 | 云台姿态 |
+| `0xD1` | 下板发送 | 整车和发射状态 |
+| `0xD2` | 下板发送 | 云台目标 |
 | `0xD5` | 下板发送 | 遥控/键鼠控制量 |
 
-### 3.4 CAN 波特率风险
+### 5.4 CAN 波特率风险
 
-`task_down/DM-MC02.ioc` 记录的 FDCAN 目标是：
+`.ioc` 目标：
 
 ```text
 FDCAN clock = 100 MHz
-Target baud = 1 Mbps
+Baud = 1 Mbps
 ```
 
-当前生成代码 `Core/Src/main.c`：
+生成代码当前参数：
 
 ```text
 HSE = 24 MHz
@@ -219,220 +365,111 @@ PLL2N = 200
 PLL2P = 4
 FDCAN clock = 50 MHz
 Prescaler = 5
-TQ = 1 + 14 + 5 = 20
-Baud = 50 MHz / 5 / 20 = 500 kbps
+TQ = 20
+Baud = 500 kbps
 ```
 
-上板 CAN1/CAN2 是按 1 Mbps 配置的。若双板收发出现“发送成功但对端没有有效帧”，先确认该时钟配置，不要先怀疑协议字段。修正时必须同时检查 `DM-MC02.ioc`、`Core/Src/main.c` 和上下板总线上其他设备。
+上板按 1 Mbps 配置。双板首次联调时，如果抓包发现一端有发送但另一端没有有效 ACK，先查这里，再查协议。
 
-### 3.5 DBUS 接收
+## 6. 遥控与键鼠输入
 
-UART5 使用 DMA Idle：
+### 6.1 DBUS 接收
+
+UART5 使用 DMA RxToIdle：
 
 ```text
-帧长 = 18 字节
-只有 IDLE 事件且 size == 18 才进入解析
-解析后立即重启 DMA 接收
-串口错误回调会重启接收
+只接受 IDLE 事件
+只接受 size == 18
+解析后立即重启接收
+错误回调也重启接收
 ```
 
-`rc_update()` 解析通道、S1/S2、鼠标、键盘位图和拨轮；`keyboard_update()` 更新短按、长按和边沿状态。
+`rc_update()` 解析：
 
-## 4. 板间协议
+```text
+ch0/ch1/ch2/ch3
+S1/S2
+拨轮
+鼠标 dx/dy/dz
+鼠标按键
+键盘 bitmap
+```
 
-本节与 `task_up/Readme.md` 必须同步维护。
+`keyboard_update()` 维护每个按键的状态：
 
-### 4.1 D1，下板到上板
+```text
+release
+release_to_press
+short_press
+long_press
+press_to_release
+```
 
-D1 固定 8 字节，发送前清零。
+### 6.2 遥控通道
 
-| 字节 | 位 | 含义 |
+| 通道 | 含义 | 当前用途 |
 |---|---|---|
-| `Byte 0` | bit 1:0 | `car_state` |
-| `Byte 0` | bit 2 | `gimbal_mode`，0 机械，1 速控 |
-| `Byte 5` | bit 0 | `launch_state` |
-| `Byte 5` | bit 1 | `shoot_mode` |
-| `Byte 5` | bit 2 | `shoot_level` |
-| `Byte 5` | bit 3 | `is_hole` |
+| `ch0` | 右横 | 底盘转向、小陀螺输入、部分 D5 Yaw |
+| `ch1` | 右纵 | D5 Pitch、机械模式 Pitch 微调 |
+| `ch2` | 左横 | 底盘 `vy` |
+| `ch3` | 左纵 | 底盘 `vx` |
+| `s1` | 左开关 | 控制源、跟随、小陀螺、发射模式 |
+| `s2` | 右开关 | 跟随、小陀螺、发射模式 |
+| 拨轮 | 左拨轮 | 预留，不参与当前主控 |
 
-### 4.2 D2，下板到上板
-
-D2 大端发送四个 16 位值：
-
-| 字节 | 字段 | 单位 | 量程 |
-|---|---|---|---|
-| `0..1` | Pitch IMU 目标 | deg | `-360..360` |
-| `2..3` | Yaw IMU 目标 | deg | `-360..360` |
-| `4..5` | Pitch 机械目标 | rad | `-4..4` |
-| `6..7` | Yaw 机械目标 | rad | `-4..4` |
-
-编码函数为：
+遥控直控：
 
 ```text
-raw = (value - min) / (max - min) * 65535
+vx = -ch3 * CHASSIS_MAX_VX / 660
+vy =  ch2 * CHASSIS_MAX_VY / 660
+wz =  ch0 * CHASSIS_MAX_WZ / 660
 ```
 
-当前 `float_to_uint()` 不主动限幅，写入前必须保证输入在量程内。
+输入先做死区，再归一化到 `[-1, 1]`。
 
-### 4.3 D5，下板到上板
+### 6.3 键鼠模式
 
-| 字节 | 含义 |
-|---|---|
-| `Byte 0` | bit0 有效，bit1 输入源，bit2 控制类型 |
-| `Byte 1` | 鼠标左右键位 |
-| `Byte 2..3` | Yaw 角速度 `int16_t`，0.1 deg/s/LSB |
-| `Byte 4..5` | Pitch 角速度 `int16_t`，0.1 deg/s/LSB |
-| `Byte 6..7` | 保留，当前为零 |
-
-当前 `cmd_type` 始终为 0，即角速度包。键鼠模式下鼠标速度先乘：
-
-```c
-BOARD_D5_MOUSE_YAW_GAIN    =  3.0f
-BOARD_D5_MOUSE_PITCH_GAIN  = -3.0f
-```
-
-再限制到：
+键鼠模式成立：
 
 ```text
-Yaw   ±300 deg/s
-Pitch ±150 deg/s
-```
-
-最后按 `0.1 deg/s` 量化。上板保留 `cmd_type = 1` 的鼠标增量分支，但下板当前不会发送该类型。
-
-### 4.4 C1，上板到下板
-
-上板定义：
-
-| 位 | 含义 |
-|---|---|
-| bit 0 | Yaw 电机在线 |
-| bit 1 | Pitch 电机在线 |
-| bit 2 | 升降电机在线 |
-| bit 3 | 右摩擦轮在线 |
-| bit 4 | 左摩擦轮在线 |
-| bit 5 | 拨盘在线 |
-
-`Byte 1` 为升降状态：
-
-```text
-0 = 下位或下行堵转停机
-1 = 运动中
-2 = 上位/未完成找零
-3 = 故障
-```
-
-下板当前只消费 Byte 0 的 bit 0/1/3/4/5 和 Byte 1。变量 `state_meg.is_down` 的名字容易误解，它表示上板升降状态。
-
-### 4.5 C2，上板到下板
-
-| 字节 | 字段 | 单位 | 量程 |
-|---|---|---|---|
-| `0..1` | Yaw 机械角 | rad | `-4..4` |
-| `2..3` | Pitch 机械角 | rad | `-4..4` |
-| `4..5` | Yaw IMU 角 | deg | `-360..360` |
-| `6..7` | Pitch IMU 角 | deg | `-360..360` |
-
-C2 数据用于：
-
-- 跟随模式的云台相对角。
-- 小陀螺的平移参考系。
-- 调试观测。
-
-### 4.6 心跳
-
-`BOARD_OFFLINE_CNT_MAX = 50`。
-
-- C1 或 C2 任一收到都会清零同一个 `board.status->offline_cnt`。
-- `MonitorTask` 每 1 ms 累加计数。
-- 连续 50 ms 没有 C1/C2，`board.status->status = DEV_OFFLINE`。
-- C2 额外记录 `gimbal_rx_time_ms` 并置 `gimbal_data_valid`。
-- 跟随和小陀螺各自检查 C2 年龄不超过 50 ms。
-- 注意综合离线只表示“至少收到了 C1/C2 之一”，并不分别判断两块报文是否都完整。
-
-## 5. 遥控与键鼠输入
-
-### 5.1 DBUS 通道
-
-| 变量 | 物理输入 | 当前用途 |
-|---|---|---|
-| `ch0` | 右摇杆左右 | 底盘 Yaw 速度、D5 Yaw 角速度或小陀螺调节 |
-| `ch1` | 右摇杆上下 | D5 Pitch 角速度，机械模式 Pitch 微调 |
-| `ch2` | 左摇杆左右 | 底盘左右平移 |
-| `ch3` | 左摇杆上下 | 底盘前后运动 |
-| `s1` | 左侧开关 | 控制来源、跟随/小陀螺、发射模式 |
-| `s2` | 右侧开关 | 跟随/小陀螺/发射 |
-| 拨轮 | 左拨轮 | 预留，当前不参与主控制 |
-
-档位定义：
-
-```text
-RC_SW_UP   = 1
-RC_SW_MID  = 3
-RC_SW_DOWN = 2
-```
-
-### 5.2 遥控底盘输入
-
-当 S1 为上或下时，允许底盘直控：
-
-```text
-vx = -ch3 / 660 * CHASSIS_MAX_VX
-vy =  ch2 / 660 * CHASSIS_MAX_VY
-wz =  ch0 / 660 * CHASSIS_MAX_WZ
-```
-
-输入先应用死区，再归一化到 `[-1, 1]`。
-
-当前参数：
-
-```c
-#define CHASSIS_MAX_VX       35.0f
-#define CHASSIS_MAX_VY       35.0f
-#define CHASSIS_MAX_WZ       25.0f
-#define CHASSIS_RC_DEADBAND  30.0f
-```
-
-### 5.3 键鼠模式
-
-键鼠模式成立条件：
-
-```text
-CHASSIS_KEYBOARD_INPUT_ENABLE = 1
-遥控器在线
+键盘输入开启
+遥控在线
 keyboard_source_active == 1
 S1 上位
 ```
 
-F 键在 S1 上位时切换 `keyboard_source_active`。
+F 键在 S1 上位时切换输入源。
 
-键鼠底盘模式：
+Z/X/C：
 
-| 按键 | 模式 |
+| 键 | 模式 |
 |---|---|
 | Z | 跟随 |
 | X | 机械/普通直控 |
 | C | 小陀螺 |
 
-运动映射：
+运动输入：
 
 ```text
 W/S      前后
 A/D      左右
 Q/E      旋转
-Shift    加速 1.5x
-Ctrl     减速 0.5x
+Shift    1.5x
+Ctrl     0.5x
 ```
 
-### 5.4 机械模式和打符
+鼠标控制量会先进入 `rc_interrupt_update()` 的 10 点移动平均，再由 D5 转换成角速度。
 
-S1 下拨时，`Board_Debug_Gimbal_Command()`：
+### 6.4 机械模式和打符
 
-- 发送 `gimbal_mode = 0`。
-- Yaw 机械目标固定为 `BOARD_MEC_YAW_FRONT_RAD = 0`。
-- Pitch 机械目标按 `ch1` 逐步累加，步长为 `0.002 rad`。
-- Pitch 范围限制为 `-7.5..30 deg`。
-- 底盘仍保留平移和转向输入。
+S1 下位时，下板发送：
+
+```text
+gimbal_mode = 0
+yaw_mec_tar = BOARD_MEC_YAW_FRONT_RAD = 0
+pitch_mec_tar += ch1 / 660 * 0.002 rad
+pitch_mec_tar 限幅 -7.5..30 deg
+```
 
 打符入口：
 
@@ -442,52 +479,17 @@ S2 中位
 B 键按下沿
 ```
 
-B 键翻转狗洞请求。请求置位时锁定机械模式并给出：
+打符期间：
 
-```text
-Yaw 机械目标 = 0
-Pitch 机械目标 = BOARD_HOLE_PITCH_TARGET_RAD = 0
-```
+- 云台锁机械模式。
+- Yaw 机械目标固定 0。
+- Pitch 目标固定 0。
+- 发射锁。
+- 退出时等待升降上报上位，或 5000 ms 超时。
 
-退出打符会等待上板升降上报 `is_down == 2`，或等待 `BOARD_HOLE_EXIT_TIMEOUT_MS = 5000 ms`。
+## 7. 底盘控制
 
-## 6. 底盘控制
-
-### 6.1 输入与模式链
-
-控制链固定为：
-
-```text
-Chassis_Input_Update
-  -> Chassis_Follow_Update
-  -> Chassis_Spin_Update
-  -> Chassis_Control_Update
-```
-
-`Chassis_Input_Update()` 只生成统一指令：
-
-```c
-typedef struct
-{
-    float vx;
-    float vy;
-    float wz;
-    uint8_t valid;
-    chassis_source_e source;
-} chassis_cmd_t;
-```
-
-来源：
-
-```text
-CHASSIS_SRC_NONE
-CHASSIS_SRC_RC
-CHASSIS_SRC_RC_FOLLOW
-CHASSIS_SRC_SPIN
-CHASSIS_SRC_KEYBOARD
-```
-
-### 6.2 四轮逆解
+### 7.1 四轮逆解
 
 ```text
 LF = -vx + vy + wz
@@ -496,54 +498,66 @@ RF =  vx + vy + wz
 RB =  vx - vy + wz
 ```
 
-当总速度超过 `CHASSIS_CTRL_MAX_SPEED = 80` 时：
-
-- 旋转保留量最高为总限幅的 60%。
-- 剩余量再按比例缩放平移。
-
-### 6.3 速度环
-
-当前为纯 P：
-
-```c
-#define CHASSIS_SPEED_KP   0.8f
-#define CHASSIS_SPEED_KI   0.0f
-#define CHASSIS_SPEED_KD   0.0f
-```
-
-力矩限幅按来源切换：
-
-| 来源 | 限幅 |
-|---|---:|
-| 普通遥控/键鼠 | `CHASSIS_TEST_TORQUE_LIMIT_NM = 2.0 N*m` |
-| 云台跟随 | `CHASSIS_FOLLOW_TORQUE_LIMIT_NM = 3.0 N*m` |
-| 小陀螺 | `CHASSIS_SPIN_TORQUE_LIMIT_NM = 4.0 N*m` |
-
-零速区域：
+总速度限幅使用 Manhattan 近似：
 
 ```text
-目标绝对值 < 0.5
-反馈绝对值 < 1.0
+trans = abs(vx) + abs(vy)
+rotate = abs(wz)
+total = trans + rotate
 ```
 
-进入零速区域时清空 PID 状态并输出 0，避免静止时来回抽动。
+超过 `CHASSIS_CTRL_MAX_SPEED = 80` 时：
 
-### 6.4 底盘安全
+- 旋转最多占 60%。
+- 平移按剩余量缩放。
 
-底盘输出前检查：
+### 7.2 速度环
 
-- `cmd != NULL`。
-- `enabled != 0`。
-- `cmd.valid != 0`。
-- `vx/vy/wz` 非 NaN 且绝对值小于 1000000。
-- 四个轮对象、状态、控制器、速度环全部存在。
-- 四轮全部在线。
+```c
+CHASSIS_SPEED_KP = 0.8f
+CHASSIS_SPEED_KI = 0.0f
+CHASSIS_SPEED_KD = 0.0f
+```
 
-任一条件失败都会调用 `Chassis_Control_Stop()`，四轮力矩清零并发送 `0x200` 组帧。
+当前是纯 P。这样调参快，但抗负载能力有限。正式高速运动前应该重新评估积分和功率限制。
 
-## 7. 跟随模式
+力矩上限：
 
-### 7.1 选择条件
+| 来源 | 上限 |
+|---|---:|
+| 普通 | 2 N*m |
+| 跟随 | 3 N*m |
+| 小陀螺 | 4 N*m |
+
+### 7.3 零速区域
+
+```text
+|target| < 0.5
+|feedback| < 1.0
+```
+
+同时落入时：
+
+- 清空 PID。
+- 输出 0。
+
+避免静止时速度环反复抽搐。
+
+### 7.4 底盘安全
+
+底盘整组停输出条件：
+
+- 命令空。
+- 控制未使能。
+- 命令无效。
+- 浮点 NaN 或超过安全范围。
+- 四轮对象不完整。
+- 四轮任一离线。
+- 输出接口为空。
+
+## 8. 跟随模式
+
+### 8.1 选择
 
 遥控：
 
@@ -558,39 +572,44 @@ S2 上位或中位
 Z 键选择跟随
 ```
 
-### 7.2 有效条件
-
-- C2 数据必须接收过。
-- C2 距当前时间不超过 `CHASSIS_FOLLOW_TIMEOUT_MS = 50 ms`。
-- Yaw 机械角必须是有效数值且绝对值不超过 `pi + 0.01`。
-- 连续两拍 Yaw 误差跳变不能超过 `CHASSIS_FOLLOW_YAW_JUMP_LIMIT_DEG = 30 deg`。
-
-任一条件失败会锁存跟随故障，四轮输出清零。退出跟随档位后清除故障锁存。
-
-### 7.3 控制参数
-
-```c
-#define CHASSIS_FOLLOW_KP                 20.0f
-#define CHASSIS_FOLLOW_MAX_WZ             20.0f
-#define CHASSIS_FOLLOW_WZ_STEP            0.2f
-#define CHASSIS_FOLLOW_FRICTION_FF        7.0f
-#define CHASSIS_FOLLOW_DEADBAND_DEG       7.0f
-#define CHASSIS_FOLLOW_TURN_LOCK_DEG      150.0f
-#define CHASSIS_FOLLOW_TURN_UNLOCK_DEG    20.0f
-#define CHASSIS_FOLLOW_BLEND_TIME_MS      200u
-```
-
-跟随误差为：
+### 8.2 跟随误差
 
 ```text
 yaw_error = wrap_pi(yaw_mec - CHASSIS_FOLLOW_CENTER_RAD)
 ```
 
-平移分量会按 `yaw_error` 旋转，使操作手在云台坐标系下控制。进入跟随时有 200 ms 融合，退出时斜坡回手动角速度。
+平移按误差旋转，语义为“在云台坐标系下控制底盘”。
 
-## 8. 小陀螺模式
+### 8.3 参数
 
-### 8.1 选择条件
+```c
+CHASSIS_FOLLOW_KP                  = 20.0f
+CHASSIS_FOLLOW_MAX_WZ              = 20.0f
+CHASSIS_FOLLOW_WZ_STEP             = 0.2f
+CHASSIS_FOLLOW_FRICTION_FF         = 7.0f
+CHASSIS_FOLLOW_DEADBAND_DEG        = 7.0f
+CHASSIS_FOLLOW_TURN_LOCK_DEG       = 150.0f
+CHASSIS_FOLLOW_TURN_UNLOCK_DEG     = 20.0f
+CHASSIS_FOLLOW_YAW_JUMP_LIMIT_DEG  = 30.0f
+CHASSIS_FOLLOW_TIMEOUT_MS          = 50u
+CHASSIS_FOLLOW_BLEND_TIME_MS       = 200u
+CHASSIS_FOLLOW_TORQUE_LIMIT_NM     = 3.0f
+```
+
+大误差锁定旋转方向，小误差释放，用于抑制中心点来回抖。进入跟随时 200 ms 融合，退出时回手动角速度。
+
+### 8.4 故障
+
+- C2 年龄超过 50 ms。
+- C2 从未收到。
+- Yaw 为 NaN 或越界。
+- Yaw 误差跳变超过 30 deg。
+
+故障锁存后退出跟随档位再进入，避免异常反馈反复触发。
+
+## 9. 小陀螺模式
+
+### 9.1 选择
 
 遥控：
 
@@ -602,222 +621,348 @@ S2 下位
 键鼠：
 
 ```text
-C 键选择小陀螺
+C 键选择
 ```
 
-### 8.2 参数
+### 9.2 参数
 
 ```c
-#define CHASSIS_SPIN_MAX_WZ               20.0f
-#define CHASSIS_SPIN_BASE_WZ              20.0f
-#define CHASSIS_SPIN_TRIM_WZ              0.0f
-#define CHASSIS_SPIN_STEP                 0.1f
-#define CHASSIS_SPIN_RC_DEADBAND          30.0f
-#define CHASSIS_SPIN_GIMBAL_TIMEOUT_MS    50u
+CHASSIS_SPIN_MAX_WZ       = 20.0f
+CHASSIS_SPIN_BASE_WZ      = 20.0f
+CHASSIS_SPIN_TRIM_WZ      = 0.0f
+CHASSIS_SPIN_STEP         = 0.1f
+CHASSIS_SPIN_RC_DEADBAND  = 30.0f
+CHASSIS_SPIN_TORQUE_LIMIT = 4.0f
 ```
 
-当前 `CHASSIS_SPIN_TRIM_WZ = 0`，所以 `ch0` 对旋转速度没有实际调节作用，小陀螺以基础角速度 20 旋转。
+`TRIM_WZ = 0` 表示当前小陀螺以固定基础角速度自转，`ch0` 不参与调节。
 
-### 8.3 平移参考系
+### 9.3 平移安全
 
-```c
-#define CHASSIS_SPIN_TRANSLATION_ENABLE       1u
-#define CHASSIS_SPIN_TRANSLATION_FRAME_GIMBAL 1u
+```text
+C2 有效
+  -> 按 yaw_mec 旋转 vx/vy
+C2 超时
+  -> 清 vx/vy
+  -> 保留自转
 ```
 
-C2 有效且未超过 50 ms 时，平移按云台 Yaw 机械角旋转。C2 超时后：
+这是实际调试中很重要的一个取舍：不因为云台反馈异常就让底盘完全停机，但也不允许用旧姿态做平移。
 
-- 平移 `vx/vy` 清零。
-- 自转角速度仍由小陀螺状态机输出。
+## 10. 发射决策
 
-## 9. 发射决策
+### 10.1 键鼠
 
-### 9.1 键鼠
+键鼠模式：
 
-键鼠模式下发射直接解锁：
+```text
+左键按下 -> 发射
+左键长按 -> 连发
+松开     -> 单发模式并取消触发
+```
 
-- 鼠标左键按下时 `shoot_level = 1`。
-- 短按单发。
-- 左键长按切换连发。
+### 10.2 遥控
 
-### 9.2 遥控
+S2 上电后必须先变化一次：
 
-安全解锁：
+```text
+launch_shoot_switch_seen
+launch_shoot_armed
+```
 
-- 上电后必须先让 S2 档位发生一次变化。
-- 防止上电时 S2 已经在上位直接发射。
+否则上电时 S2 已经在上位会直接发射。
 
 S2 消抖：
 
 ```c
-#define BOARD_LAUNCH_S2_DEBOUNCE_TICKS 15u
+BOARD_LAUNCH_S2_DEBOUNCE_TICKS = 15u
 ```
 
-发射状态：
+档位组合：
 
 | S1 | S2 | 结果 |
 |---|---|---|
 | 上位 | 上位 | 连发 |
 | 中位 | 上位 | 单发 |
-| 上位/中位 | 中位 | 已解锁但不出弹 |
-| 上位 | 下位 | 小陀螺，发射锁定 |
-| 其他 | 任意 | 发射锁定 |
+| 上位/中位 | 中位 | 解锁但无触发 |
+| 上位 | 下位 | 小陀螺，锁发射 |
+| 其他 | 任意 | 锁发射 |
 
-### 9.3 打符和升降联锁
-
-当狗洞请求有效，或上板升降状态不是 `is_down == 2` 时：
+### 10.3 联锁
 
 ```text
-launch_state = L_LOCK
-shoot_mode = SINGLE_SHOT
-shoot_level = 0
+is_hole != 0
+或
+is_down != 2
 ```
 
-即未完成找零、不在上位或正在打符时禁止发射。
+时发射锁定。
 
-### 9.4 D1 输出
+这里的 `is_down` 表示上板升降状态，不是“上板是否在线”。
 
-每拍把决策写入：
+## 11. 超电通信
 
-```text
-board.tx_pkt->shoot_pkt.launch_state
-board.tx_pkt->shoot_pkt.shoot_mode
-board.tx_pkt->shoot_pkt.shoot_level
-```
+### 11.1 帧
 
-## 10. 超电通信
-
-### 10.1 CAN
-
-| 方向 | ID |
-|---|---|
-| 下板发送 | `0x222` |
-| 下板接收 | `0x211` |
-
-控制帧：
+控制：
 
 | 字节 | 内容 |
 |---|---|
-| `0` | `power_buffer` |
-| `1..2` | `power_limit` 大端 |
-| `3..4` | `power_out_limit` 大端 |
-| `5..6` | `power_in_limit` 大端 |
-| `7` | bit0 `cap_switch`，bit1 `turbo_mode`，bit2 `pre_charge_enable` |
+| 0 | buffer |
+| 1..2 | power_limit |
+| 3..4 | power_out_limit |
+| 5..6 | power_in_limit |
+| 7 | cap_switch、turbo、pre_charge |
 
-反馈帧：
+反馈：
 
-```text
-chassis_power = int16 big-endian
-voltage_raw   = int16 big-endian
-current_raw   = int16 big-endian
-ability, pre_charge_mode 位于 Byte 6
-```
+| 字节 | 内容 |
+|---|---|
+| 0..1 | chassis_power |
+| 2..3 | voltage_raw |
+| 4..5 | current_raw |
+| 6 | ability、pre_charge_mode |
 
-### 10.2 当前行为
+### 11.2 当前策略
 
-`supercap_config.h` 当前：
+超电只保证链路存活：
+
+- `SuperCap_Tx()` 周期发送控制帧。
+- `SuperCap_Rx()` 刷新电压、电流、底盘功率。
+- 100 ms 无反馈判离线。
+- 所有输出开关和功率上限保持 0。
+
+## 12. 板间协议
+
+### 12.1 D1
+
+| 字节 | 位 | 含义 |
+|---|---|---|
+| 0 | 1:0 | `car_state` |
+| 0 | 2 | `gimbal_mode` |
+| 5 | 0 | `launch_state` |
+| 5 | 1 | `shoot_mode` |
+| 5 | 2 | `shoot_level` |
+| 5 | 3 | `is_hole` |
+
+### 12.2 D2
+
+| 字节 | 字段 | 单位 | 量程 |
+|---|---|---|---|
+| 0..1 | Pitch IMU | deg | -360..360 |
+| 2..3 | Yaw IMU | deg | -360..360 |
+| 4..5 | Pitch 机械 | rad | -4..4 |
+| 6..7 | Yaw 机械 | rad | -4..4 |
+
+### 12.3 D5
+
+| 字节 | 含义 |
+|---|---|
+| 0 | valid、ctrl_source、cmd_type |
+| 1 | 鼠标按键 |
+| 2..3 | Yaw 角速度，0.1 deg/s/LSB |
+| 4..5 | Pitch 角速度，0.1 deg/s/LSB |
+| 6..7 | 保留 |
+
+键鼠鼠标量先乘：
 
 ```c
-#define SUPERCAP_CAP_SWITCH            0u
-#define SUPERCAP_TURBO_MODE            0u
-#define SUPERCAP_PRE_CHARGE_ENABLE     0u
-#define SUPERCAP_POWER_BUFFER          0u
-#define SUPERCAP_POWER_LIMIT           0u
-#define SUPERCAP_POWER_OUT_LIMIT       0
-#define SUPERCAP_POWER_IN_LIMIT        0u
+Yaw gain   =  3.0f
+Pitch gain = -3.0f
 ```
 
-因此超电只做周期通信保活，不让超电参与功率输出。`rp_config.h` 的 `CAP_SWITCH` 是旧总开关宏，不改变上述实际发送值。
-
-离线超时：
-
-```c
-#define SUPERCAP_OFFLINE_TIMEOUT_MS 100u
-```
-
-反馈换算：
+后限制：
 
 ```text
-cap_voltage = scale(voltage_raw, 0.0, 25.0)
-cap_current = scale(current_raw, -16.0, 16.0)
+Yaw   ±300 deg/s
+Pitch ±150 deg/s
 ```
 
-## 11. 安全与故障
+### 12.4 C1/C2
 
-- 遥控离线时底盘输入清零，发射锁定，D5 `valid = 0`。
-- 四轮任一离线时底盘全部停输出。
-- 跟随模式 C2 超时或 Yaw 异常时锁存故障并停底盘。
-- 小陀螺 C2 超时时保留自转但清除平移。
-- 板间 C1/C2 连续 50 ms 无帧时板间状态离线。
-- 发射需要云台归中、升降在上位、S2 已完成上电后的首次动作。
-- 修改 CAN ID、字节序或协议布局时必须同步上下板。
-- 看门狗未配置，当前异常保护主要依赖任务、遥控和 CAN 心跳。
+C1 提供云台、摩擦轮、拨盘在线位和升降状态。C2 提供云台机械角和 IMU 角。
 
-## 12. 调参入口
+板间心跳：
 
-### 12.1 输入与底盘
+- C1 或 C2 任一收到都清零 `offline_cnt`。
+- `MonitorTask` 每 1 ms 累加。
+- 50 ms 没有 C1/C2 判离线。
+- C2 单独记录 `gimbal_rx_time_ms`，供跟随和小陀螺判断反馈新鲜度。
 
-参数文件：
+## 13. 问题复盘
+
+### 13.1 底盘任务调用和指针检查
+
+提交：`770a417 修复底盘任务调用和指针安全检查`
+
+问题：
+
+- 底盘控制链调用关系和对象安全检查不完整。
+- `Chassis_Control_PidUpdate()`、`Chassis_Control_Output()` 原来是 `void`，出现空对象也无法阻止继续执行。
+- 初始化时没有检查四轮对象的 `ctrl`、`speed_ctrl` 和 `tx_info`。
+
+处理：
+
+- 关键函数返回成功/失败。
+- 初始化失败时 `enabled = 0`、`fault = 1`。
+- 失败直接整组停机。
+- 删除旧 observe 任务的信号量调用，避免底盘任务被无效同步阻塞。
+
+### 13.2 小陀螺平移参考系
+
+提交：`c325662 小陀螺平移的实现以及解放yaw轴`
+
+问题：
+
+- 早期小陀螺只做纯旋转，平移语义不完整。
+- Yaw 被底盘占用后，小陀螺平移还按车体坐标系，操作手感不稳定。
+
+处理：
+
+- 新增 `CHASSIS_SPIN_TRANSLATION_*` 配置。
+- 使用 C2 Yaw 机械角做平移旋转。
+- C2 超时只清平移，保留自转。
+- `CHASSIS_SPIN_TRIM_WZ` 从 5 改为 0，明确当前以固定基础速度自转。
+
+### 13.3 机械模式和发射时序
+
+提交：`078980a 机械模式的调整以及发射机构的时序问题解决`
+
+问题：
+
+- 机械模式调整后，发射状态在同一控制周期出现前后不一致。
+- 发射许可、模式和触发位如果分开读取，可能在切换瞬间读到混合状态。
+
+处理：
+
+- 使用同一拍发射状态快照。
+- 下板 `Launch_Cmd_Transmit()` 统一写 D1。
+- 上板用 `Board_Rx_Shoot_Flags` 读取同一字节。
+
+### 13.4 升降 fault 退出
+
+提交：`8ecb25f 修复进入fault`
+
+问题：
+
+- 升降进入 fault 后没有可靠退出边沿。
+- 上电或静止检测误入 fault 后无法继续动作。
+
+处理：
+
+- 只有 `cmd_changed` 才允许恢复。
+- 保持 fault 时持续输出 0。
+- 恢复时根据 `home_valid` 和 `is_hole` 决定重新找零、下降或上升。
+
+### 13.5 S2 回中弹跳和上电误发射
+
+问题：
+
+- S2 回中时机械触点抖动，发射档位瞬间跳变。
+- 上电时如果 S2 已经在上位，会被首次采样直接当成发射。
+
+处理：
+
+- 15 ms 软件消抖。
+- 上电后必须先发生一次档位变化，才允许解锁。
+- 遥控离线或板间条件不满足时清除解锁状态。
+
+### 13.6 跟随故障反复触发
+
+问题：
+
+- C2 偶发丢帧或 Yaw 跳变时，如果每拍自行恢复，底盘会在安全与运动间抖动。
+- 旧姿态用于平移会引发不可预测方向。
+
+处理：
+
+- 50 ms 超时。
+- Yaw 跳变超过 30 deg 锁存故障。
+- 必须退出跟随档位后重新进入。
+- 小陀螺 C2 超时清平移。
+
+### 13.7 超电接入顺序
+
+提交：`754aa0a 超电通信测试未验证`
+
+问题：
+
+- 超电控制和底盘功率限制同时接入会让调试问题难定位。
+- 超电反馈异常可能直接影响底盘输出。
+
+处理：
+
+- 先只保活通信。
+- 所有功率输出开关为 0。
+- 先验证 0x222/0x211，再考虑预充和功率协同。
+
+## 14. 调试顺序
+
+### 14.1 遥控和键鼠
+
+- 先确认 DBUS 18 字节帧。
+- 确认 S1/S2 档位定义。
+- 确认右摇杆、左摇杆、鼠标方向。
+- 确认 F/Z/X/C 模式切换。
+- 确认遥控离线后所有输入归零。
+
+### 14.2 底盘
+
+1. 单轮低速正反转。
+2. 四轮同向。
+3. 四轮平移。
+4. 原地旋转。
+5. 斜向运动。
+6. 速度环阶跃。
+7. 零速区域。
+8. 低限矩跟随。
+
+### 14.3 跟随
+
+- 先确认 C2 的 Yaw 机械角符号。
+- 确认 7 deg 死区和方向。
+- 确认 150/20 deg 锁向阈值。
+- 拔掉 CAN 或暂停上板发送，确认 50 ms 后底盘停机。
+- 制造超过 30 deg 的 Yaw 跳变，确认故障锁存。
+
+### 14.4 小陀螺
+
+- 先只转不平移。
+- 确认 20 rad/s 基础角速度的实际效果。
+- 再打开云台参考系平移。
+- 断开 C2，确认平移清零但自转保留。
+
+### 14.5 发射
+
+- 不装弹，确认 S2 消抖。
+- 上电时把 S2 放上位，确认不会直接发射。
+- 确认 S1 中位单发、S1 上位连发。
+- 确认打符和升降条件能锁发射。
+
+### 14.6 超电
+
+- 只抓 0x222/0x211。
+- 确认电压电流换算。
+- 确认 100 ms 离线检测。
+- 暂时不要打开功率输出。
+
+## 15. 编译
+
+```powershell
+UV4 -r task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o build_down.log
+```
+
+当前保留日志：
 
 ```text
-Application/ConfigLayer/chassis_config.h
+Code=55852
+RO-data=1144
+RW-data=1516
+ZI-data=28408
+0 Error(s), 0 Warning(s)
 ```
 
-常用参数：
-
-```text
-CHASSIS_MAX_VX
-CHASSIS_MAX_VY
-CHASSIS_MAX_WZ
-CHASSIS_RC_DEADBAND
-CHASSIS_SPEED_KP
-CHASSIS_TEST_TORQUE_LIMIT_NM
-CHASSIS_ZERO_TARGET_BAND
-CHASSIS_STOP_SPEED_BAND
-CHASSIS_FOLLOW_*
-CHASSIS_SPIN_*
-```
-
-部分宏当前是预留或旧阶段参数：
-
-```text
-CHASSIS_TURN_CYCLE_SPEED
-CHASSIS_FIXED_CURRENT_LIMIT_A
-CHASSIS_FIXED_TORQUE_LIMIT_NM
-CHASSIS_CTRL_MAX_SPEED 仅用于逆解限幅
-CHASSIS_LENGTH_M / WIDTH / DIAGONAL / MASS / WHEEL_RADIUS
-```
-
-几何质量参数当前不参与这套简化四轮速度环。
-
-### 12.2 遥控和板间
-
-```text
-Application/ConfigLayer/board_comm_config.h
-Application/ProtocolLayer/board_protocol.h
-```
-
-当前关键值：
-
-```text
-BOARD_COMM_D1D2_PERIOD_MS       1
-BOARD_COMM_D5_ENABLE            1
-BOARD_LAUNCH_S2_DEBOUNCE_TICKS  15
-BOARD_LIFT_ENABLE               1
-BOARD_OFFLINE_CNT_MAX           50
-BOARD_D5_YAW_RATE_MAX_DEG_S     300
-BOARD_D5_PITCH_RATE_MAX_DEG_S   150
-```
-
-### 12.3 超电
-
-```text
-Application/ConfigLayer/supercap_config.h
-```
-
-恢复超电输出前，必须先验证通信帧、电压电流反馈、预充逻辑和功率保护。当前配置不应直接用于正式功率控制。
-
-## 13. Keil Watch 调试变量
+## 16. Keil Watch 建议
 
 ```text
 rc_dev.work_state
@@ -828,74 +973,39 @@ chassis_follow
 chassis_spin
 chassis_ctrl
 wheel_motor
-wheel_group
 launch.state
 launch.mode
 launch.heart
-launch.shoot_level
 board.status
 board.tx_pkt
 board.rx_meg
 board_lift_dbg
-board_hole_request
-board_hole_exit_pending
 supercap
 hfdcan1.Instance->ECR
 hfdcan2.Instance->ECR
 ```
 
-常用判断：
+排障优先级：
 
-- 底盘不动：看 `rc_dev.work_state`、`chassis_input_cmd.valid`、`chassis_ctrl.state.fault`、四轮在线位。
-- 单轮反了：检查对应 `rxId`、左/右前定义和轮组反馈 ID。
-- 底盘抽搐：看零速区域、速度环 Kp 和反馈速度。
-- 跟随失效：看 `chassis_follow.selected`、`active`、`fault_latched`、`board.status->gimbal_rx_time_ms`。
-- 小陀螺不平移：看 C2 是否在 50 ms 内。
-- 发射不动作：看 S1/S2、S2 是否解锁、`launch.shoot_level`、`launch.state`、`is_down`。
-- 板间离线：看 `board.status->offline_cnt`、FDCAN2 波特率和 CAN2 过滤器。
-- 超电离线：看 `supercap.state`、`rx_count`、`last_rx_ms`。
+1. 遥控在线和通道值。
+2. 底盘命令来源和有效位。
+3. 四轮在线和力矩输出。
+4. C2 时间戳与 Yaw 跳变。
+5. D1 发射位和升降状态。
+6. 超电在线状态。
 
-## 14. 历史问题与对策
+## 17. 当前边界
 
-| 问题 | 当前处理 |
-|---|---|
-| `StartUITask` 重名导致 `L6200E` | `connect_task.c` 改为 `StartConnectTask`，保留 weak 壳 |
-| `ConnectTask` 没有发送 D1/D2 | 增加 1 ms 发送任务 |
-| D1/D2 发送缓存有脏数据 | 发送前 `memset` |
-| D3/D4、裁判、视觉、UI 等旧链路残留 | 当前从活动代码删除，只保留 D1/D2/D5 和 C1/C2 |
-| 旧整车模块一次性初始化风险大 | `DEVICE_Init()` 改为当前底盘、遥控、发射、超电和板间模块 |
-| 底盘任务调用和指针安全 | 四轮对象、控制器和发送接口逐级判空 |
-| 四轮反馈 C2 超时导致跟随危险 | 50 ms 超时和 Yaw 跳变故障锁存 |
-| 小陀螺平移参考系错误 | 有效时按云台 Yaw 旋转，超时清平移 |
-| S2 回中接触弹跳 | 15 ms 软件消抖 |
-| 上电 S2 已在上位误发射 | 上电后先动作一次才解锁 |
-| 打符时云台和发射冲突 | 打符锁机械模式，升降未到上位时禁发 |
-| 超电尚未完成正式联调 | 所有输出开关保持 0，只保活通信 |
-| 下板本机 IMU 残留 | 当前活动链不使用本机 IMU |
-| 上下板 CAN 波特率不一致风险 | `.ioc` 目标 1 Mbps，生成代码计算 500 kbps，需仪器确认 |
+- 上下板 CAN 波特率存在配置不一致风险。
+- 超电只保活，不参与功率。
+- 正式功率限制未实现。
+- 裁判、视觉和自瞄未接入。
+- 底盘速度环是纯 P，高速负载下需要复核。
+- 升降临时行程影响发射许可条件。
+- 看门狗未启用。
+- 没有实车验证时只能说明编译和逻辑检查通过。
 
-## 15. 常见问题排查
-
-| 现象 | 优先检查 |
-|---|---|
-| 遥控离线 | DBUS 接线、UART5 PD2、波特率、9 位偶校验、18 字节帧、DMA Idle 回调 |
-| 板间无 C1/C2 | FDCAN2 波特率、终端电阻、ID、过滤器、上板发送任务 |
-| D1/D2/D5 无帧 | `BOARD_COMM_TX_ENABLE`、`StartConnectTask` 是否强定义、FDCAN2 发送 |
-| 底盘输入无效 | S1 档位、遥控在线、死区、`cmd.source`、`cmd.valid` |
-| 键鼠切不过来 | F 键、S1 是否上位、`keyboard_source_active` |
-| 四轮只动一部分 | 反馈 ID 与槽位、FDCAN1 终端、电机离线计数 |
-| 底盘方向错误 | 逆解符号、`CHASSIS_KEY_*_SIGN`、单轮接线 |
-| 原地零速抖动 | 零速区域、Kp、轮速反馈噪声、力矩限幅 |
-| 跟随不接管 | S1/S2 档位、C2 数据年龄、Yaw 跳变故障 |
-| 跟随退出跳变 | 200 ms 融合、`WZ_STEP` |
-| 小陀螺不自转 | S1/S2 档位或 C 键、`CHASSIS_SPIN_ENABLE` |
-| 小陀螺平移无效 | C2 超时、`CHASSIS_SPIN_GIMBAL_TIMEOUT_MS` |
-| 发射锁死 | S2 是否动作解锁、升降是否 `is_down == 2`、是否打符 |
-| 发射档位乱 | S1/S2 组合、15 ms 消抖、遥控帧稳定性 |
-| 超电不参与输出 | 当前设计如此，所有输出参数为 0 |
-| 超电离线 | `0x211` 反馈、FDCAN1、100 ms 超时、`supercap.rx_count` |
-
-## 16. 目录结构
+## 18. 目录
 
 ```text
 task_down/
@@ -904,28 +1014,27 @@ task_down/
     ConfigLayer/      底盘、通信、超电、设备参数
     DeviceLayer/      遥控、超电、电机对象
     DriverLayer/      FDCAN、UART、DWT、GPIO
-    HardwareLayer/    RM 电机协议
+    HardwareLayer/    RM 电机驱动
     ModuleLayer/      输入、跟随、小陀螺、底盘、发射
     ProtocolLayer/    板间、遥控、超电、CAN 分发
-    TaskLayer/        Command、Ctrl、Connect、Monitor 任务
-  Core/               CubeMX 生成的内核和中断
+    TaskLayer/        Command、Ctrl、Connect、Monitor
+  Core/               CubeMX 主程序和中断
   Drivers/            STM32H7 HAL/CMSIS
   Middlewares/        FreeRTOS
-  MDK-ARM/            Keil 工程与产物
+  MDK-ARM/            Keil 工程和产物
 ```
 
-## 17. 验收清单
+## 19. 验收清单
 
 - `DM-MC02` 全量 rebuild 为 0 errors。
-- DBUS 18 字节帧稳定解析，遥控离线后所有输入归零。
+- DBUS 18 字节帧稳定，遥控掉线后输入归零。
 - 上下板 CAN 波特率经仪器确认一致。
-- D1/D2/D5 能按 1 ms 周期发送。
-- C1/C2 50 ms 内无持续离线。
-- 四轮单轮方向、四轮同向、平移、旋转、斜向均通过台架测试。
-- 普通速度环、跟随、小陀螺分别完成限矩验证。
-- 跟随 C2 超时和 Yaw 跳变能锁存故障并停车。
-- 小陀螺自转稳定，C2 超时后平移清零。
-- S2 消抖有效，上电不会因 S2 已在上位直接发射。
-- 打符期间禁止发射，升降不在上位时禁止发射。
+- C1/C2 50 ms 内没有持续离线。
+- 四轮单轮、同向、平移、旋转和斜向均通过。
+- 普通底盘、跟随、小陀螺分别完成限矩验证。
+- 跟随 C2 超时和 Yaw 跳变能锁存故障。
+- 小陀螺 C2 超时后平移清零。
+- S2 消抖和上电重新解锁有效。
+- 打符和升降不在上位时禁止发射。
 - 超电通信正常，但输出仍保持关闭。
-- 所有 CAN ID、协议字段或数据方向改动同步检查 `task_up`。
+- 所有协议和 CAN ID 改动同步检查 `task_up`。
