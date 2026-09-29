@@ -24,7 +24,7 @@
 #define BOARD_JUDGE_ENABLE              0u
 #define BOARD_UI_ENABLE                 0u
 
-/* S1 下位机械模式：右摇杆目标步长与 Pitch 限位。 */
+/* S1 下位机械模式：目标步长与 Pitch 限位，不参与上电归中。 */
 #define BOARD_MEC_YAW_FRONT_RAD         0.0f
 #define BOARD_MEC_PITCH_STEP_RAD        0.002f
 #define BOARD_MEC_PITCH_MIN_RAD         (-7.5f * 0.01745329251994329577f)

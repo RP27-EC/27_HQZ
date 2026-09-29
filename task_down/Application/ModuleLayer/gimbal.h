@@ -6,6 +6,7 @@
 #include "stdint.h"
 #include <stdbool.h>
 
+/* NOTE: 旧整车链归中，调试链由上板 G_INIT 统一负责 */
 #define   YAW_MEC_ZERO_ANGLE          -0.387884378 /* Yaw 机械零点，rad */
 #define   PITCH_MEC_ZERO_ANGLE        0.f          /* Pitch 机械零点，rad */
 #define   PITCH_MEC_MAX_ANGLE         30.f*PI/180  /* Pitch 机械上限，rad */

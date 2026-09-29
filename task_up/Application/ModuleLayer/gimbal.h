@@ -9,6 +9,7 @@
 #include "communicate.h"
 #include "motor.h"
 #include "rp_device_config.h"
+#include "gimbal_config.h"
 
 /*
  * 云台控制层对外接口。
@@ -27,31 +28,41 @@
 #define GIMBAL_DEG_TO_RAD          (GIMBAL_PI / 180.0f)
 #define GIMBAL_RAD_TO_DEG          (180.0f / GIMBAL_PI)
 
-/* Yaw 机械中值 */
-#define GIMBAL_YAW_MIDDLE_DEG      (-22.224138f)
-/* Pitch 机械中值 */
-#define GIMBAL_PITCH_MIDDLE_DEG    148.573157f
 
 /* Pitch 机械下限 */
 #define GIMBAL_PITCH_MIN_DEG       (-7.5f)
 /* Pitch 机械上限 */
 #define GIMBAL_PITCH_MAX_DEG       30.0f
 /* 机械模式：位置外环微分与制动整形 */
-#define GIMBAL_MEC_OUTER_KD              0.1f
+#define GIMBAL_MEC_OUTER_KD              0.2f
 #define GIMBAL_MEC_OUTER_D_FILTER_ALPHA  0.85f
-#define GIMBAL_MEC_ERR_DEADBAND_DEG      0.1f
+#define GIMBAL_MEC_ERR_DEADBAND_DEG     2.0f
+#define GIMBAL_MEC_YAW_SPEED_DEADBAND_RAD_S 0.05f
 #define GIMBAL_MEC_YAW_MAX_RATE_DEG_S    120.0f
 #define GIMBAL_MEC_PITCH_MAX_RATE_DEG_S  90.0f
-#define GIMBAL_MEC_YAW_DECEL_RAD_S2      8.0f
+#define GIMBAL_MEC_YAW_DECEL_RAD_S2      20.0f
 #define GIMBAL_MEC_PITCH_DECEL_RAD_S2    6.0f
 /* 机械模式：小误差直接位置刚度与阻尼 */
-#define GIMBAL_MEC_YAW_HOLD_KP_NM_PER_DEG   0.8f
-#define GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S 0.08f
-#define GIMBAL_MEC_PITCH_HOLD_KP_NM_PER_DEG 0.5f
+#define GIMBAL_MEC_YAW_HOLD_KP_NM_PER_DEG   0.05f
+#define GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S 0.5f
+#define GIMBAL_MEC_PITCH_HOLD_KP_NM_PER_DEG 0.0f
 #define GIMBAL_MEC_PITCH_HOLD_KD_NM_PER_RAD_S 0.06f
 #define GIMBAL_MEC_HOLD_FULL_ERR_DEG     1.0f
 #define GIMBAL_MEC_HOLD_ENTER_ERR_DEG    3.0f
 #define GIMBAL_MEC_HOLD_TORQUE_LIMIT_NM  3.0f
+/* Yaw 机械小误差保持修正开关：0 关闭，1 开启 */
+#define GIMBAL_MEC_YAW_HOLD_ENABLE       0u
+/* Yaw 机械小角度静默区，抑制目标附近持续修正 */
+#define GIMBAL_MEC_YAW_QUIET_ENABLE       1u
+#define GIMBAL_MEC_YAW_QUIET_ENTER_ERR_DEG 0.5f
+#define GIMBAL_MEC_YAW_QUIET_EXIT_ERR_DEG  1.0f
+#define GIMBAL_MEC_YAW_QUIET_ENTER_SPEED_DEG_S 5.0f
+#define GIMBAL_MEC_YAW_QUIET_EXIT_SPEED_DEG_S  15.0f
+/* 保持环仅在低速接管，避免带着速度直接切位置力 */
+#define GIMBAL_MEC_HOLD_ENTER_SPEED_DEG_S 5.0f
+#define GIMBAL_MEC_HOLD_EXIT_SPEED_DEG_S  15.0f
+/* 机械模式输出力矩斜坡，每周期 Nm */
+#define GIMBAL_MEC_TORQUE_STEP_NM        0.10f
 /* 最终输出力矩限幅 */
 #define GIMBAL_TORQUE_LIMIT        6.0f
 /* 重力补偿开关：0 关闭，1 开启 */
@@ -138,8 +149,8 @@ typedef struct
     uint16_t init_time_max;            /* 初始化超时时间 */
     float pitch_angle_tolerance;       /* Pitch 到位误差阈值 */
     float yaw_angle_tolerance;         /* Yaw 到位误差阈值 */
-    float pitch_ramp_step;             /* 归中时 Pitch 目标变化步长 */
-    float yaw_ramp_step;               /* 归中时 Yaw 目标变化步长 */
+    float init_pitch_ramp_step;        /* 归中时 Pitch 目标变化步长 */
+    float init_yaw_ramp_step;          /* 归中时 Yaw 目标变化步长 */
     uint8_t mode_transition_active;    /* 模式切换目标斜坡是否进行 */
     float mode_pitch_ramp_step;        /* 模式切换时 Pitch 步长 */
     float mode_yaw_ramp_step;          /* 模式切换时 Yaw 步长 */
@@ -178,6 +189,20 @@ typedef struct
     volatile float gravity_middle_deg;
     volatile float pitch_torque_limit_nm;
     volatile float yaw_torque_limit_nm;
+    /* 机械模式保持环：Keil Watch 在线可改 */
+    volatile float mec_yaw_hold_kp_nm_per_deg;
+    volatile float mec_yaw_hold_kd_nm_per_rad_s;
+    volatile uint8_t mec_yaw_hold_enable;
+    volatile uint8_t mec_yaw_quiet_enable;
+    volatile float mec_yaw_quiet_enter_err_deg;
+    volatile float mec_yaw_quiet_exit_err_deg;
+    volatile float mec_yaw_quiet_enter_speed_deg_s;
+    volatile float mec_yaw_quiet_exit_speed_deg_s;
+    volatile float mec_pitch_hold_kp_nm_per_deg;
+    volatile float mec_pitch_hold_kd_nm_per_rad_s;
+    volatile float mec_hold_enter_speed_deg_s;
+    volatile float mec_hold_exit_speed_deg_s;
+    volatile float mec_torque_step_nm;
     /* 速控松杆保持环：两轴独立 PI，Keil Watch 在线可改 */
     volatile float yaw_hold_kp;
     volatile float yaw_hold_ki;
@@ -212,6 +237,9 @@ typedef struct
 
     float yaw_target;              /* Yaw 当前限幅和斜坡后的控制目标 */
     float pitch_target;            /* Pitch 当前限幅和斜坡后的控制目标 */
+    float yaw_mec_torque_cmd_nm;   /* Yaw 机械模式斜坡输出 */
+    float pitch_mec_torque_cmd_nm; /* Pitch 机械模式斜坡输出 */
+    uint8_t yaw_mec_quiet_latched; /* Yaw 机械小角度静默锁存 */
 
 
     pid_ctrl_t yaw_gyro_outer;     /* Yaw 陀螺角度外环 */
