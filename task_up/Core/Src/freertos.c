@@ -49,7 +49,6 @@
 /* USER CODE END Variables */
 osThreadId MonitorTaskHandle;
 osThreadId ControlTaskHandle;
-osThreadId LedTaskHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -58,7 +57,6 @@ osThreadId LedTaskHandle;
 
 void StartMonitorTask(void const * argument);
 void StartControlTask(void const * argument);
-void StartLedTask(void const * argument);
 
 extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -113,10 +111,6 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(ControlTask, StartControlTask, osPriorityRealtime, 0, 1024);
   ControlTaskHandle = osThreadCreate(osThread(ControlTask), NULL);
 
-  /* definition and creation of LedTask */
-  osThreadDef(LedTask, StartLedTask, osPriorityAboveNormal, 0, 256);
-  LedTaskHandle = osThreadCreate(osThread(LedTask), NULL);
-
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
   /* USER CODE END RTOS_THREADS */
@@ -160,25 +154,6 @@ __weak void StartControlTask(void const * argument)
     osDelay(1);
   }
   /* USER CODE END StartControlTask */
-}
-
-/* USER CODE BEGIN Header_StartLedTask */
-/**
-* @brief Function implementing the LedTask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartLedTask */
-__weak void StartLedTask(void const * argument)
-{
-  /* USER CODE BEGIN StartLedTask */
-  /* Infinite loop */
-  for(;;)
-  {	
-    
-    osDelay(1);
-  }
-  /* USER CODE END StartLedTask */
 }
 
 /* Private application code --------------------------------------------------*/

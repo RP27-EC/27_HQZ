@@ -445,11 +445,6 @@
               <FilePath>..\Application\TaskLayer\control_task.c</FilePath>
             </File>
             <File>
-              <FileName>led_task.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\TaskLayer\led_task.c</FilePath>
-            </File>
-            <File>
               <FileName>monitor_task.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\TaskLayer\monitor_task.c</FilePath>
@@ -494,11 +489,6 @@
               <FileName>device.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\DeviceLayer\device.c</FilePath>
-            </File>
-            <File>
-              <FileName>led.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\DeviceLayer\led.c</FilePath>
             </File>
             <File>
               <FileName>motor.c</FileName>
