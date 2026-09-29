@@ -162,6 +162,7 @@ typedef struct Board_Struct_t{
 
 
 extern  Board_t  board;
+extern volatile float board_manual_yaw_rate_deg_s;
 
 void Board_Init(Board_t* board);
 

@@ -14,6 +14,8 @@ typedef struct
     float yaw_error_rad;  /* 相对跟随中心误差，rad */
     float wz_target;      /* 自动旋转目标，rad/s */
     float wz_output;      /* 融合后旋转输出，rad/s */
+    float manual_yaw_rate;/* 统一 Yaw 操作量，deg/s */
+    float command_ff;     /* 指令前馈 */
     float blend;          /* 自动控制融合系数 */
     int8_t turn_direction;/* -1/0/1，防抖转向 */
 

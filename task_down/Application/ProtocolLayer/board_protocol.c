@@ -18,6 +18,7 @@
 
 Board_Tx_Pkt_t board_tx_pkt; /* 下板发送缓存 */
 Board_Rx_Meg_t board_rx_meg; /* 上板反馈缓存 */
+volatile float board_manual_yaw_rate_deg_s;
 
 Board_Status_t board_status = /* 板间链路状态 */
 {
@@ -276,6 +277,7 @@ void Board_Tx_Pkt_05(Board_t* board)
     }
 
     yaw_raw = (int16_t)(yaw_rate / BOARD_D5_RATE_LSB_DEG_S);
+    board_manual_yaw_rate_deg_s = (valid != 0u) ? yaw_rate : 0.0f;
     pitch_raw = (int16_t)(pitch_rate / BOARD_D5_RATE_LSB_DEG_S);
 
     memset(pkt_05, 0, 8);

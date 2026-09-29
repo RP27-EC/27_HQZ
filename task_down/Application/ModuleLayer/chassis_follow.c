@@ -91,6 +91,8 @@ void Chassis_Follow_Init(void)
     chassis_follow.yaw_error_rad = 0.0f;
     chassis_follow.wz_target = 0.0f;
     chassis_follow.wz_output = 0.0f;
+    chassis_follow.manual_yaw_rate = 0.0f;
+    chassis_follow.command_ff = 0.0f;
     chassis_follow.blend = 0.0f;
     chassis_follow.selected = 0u;
     chassis_follow.data_valid = 0u;
@@ -175,6 +177,8 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     float manual_wz; /* 退出时保留的手动旋转 */
     float vx_gimbal; /* 旋转前纵向速度 */
     float vy_gimbal; /* 旋转前横向速度 */
+    float feedback_wz; /* 角度反馈项 */
+    float command_ff; /* 指令前馈项 */
 
     if (cmd == NULL)
     {
@@ -205,6 +209,8 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
         }
 
         chassis_follow.wz_output = cmd->wz;
+        chassis_follow.manual_yaw_rate = 0.0f;
+        chassis_follow.command_ff = 0.0f;
         follow_have_last_yaw = 0u;
         return;
     }
@@ -221,6 +227,8 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
 
         chassis_follow.wz_output = 0.0f;
         follow_last_wz = 0.0f;
+        chassis_follow.manual_yaw_rate = 0.0f;
+        chassis_follow.command_ff = 0.0f;
         chassis_follow.turn_direction = 0;
         follow_have_last_yaw = 0u;
         return;
@@ -229,6 +237,10 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     yaw_mec = board.rx_meg->gimbal_meg.yaw_mec; /* 云台相对角 */
     yaw_error = Chassis_Follow_WrapPi( /* 跟随误差 */
         (CHASSIS_FOLLOW_YAW_ANGLE_SIGN * yaw_mec) - CHASSIS_FOLLOW_CENTER_RAD);
+    chassis_follow.manual_yaw_rate = board_manual_yaw_rate_deg_s;
+    command_ff = CHASSIS_FOLLOW_RATE_FF * CHASSIS_FOLLOW_RATE_PER_DEG_S *
+                 chassis_follow.manual_yaw_rate;
+    chassis_follow.command_ff = command_ff;
     cmd->source = CHASSIS_SRC_RC_FOLLOW; /* 标记跟随源 */
 
     if (follow_have_last_yaw != 0u)
@@ -247,6 +259,8 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
             cmd->wz = 0.0f;
             cmd->valid = 0u;
             follow_last_wz = 0.0f;
+            chassis_follow.manual_yaw_rate = 0.0f;
+            chassis_follow.command_ff = 0.0f;
             chassis_follow.turn_direction = 0;
             follow_have_last_yaw = 0u;
             return;
@@ -275,7 +289,7 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
       if (fabsf(yaw_error) < (CHASSIS_FOLLOW_DEADBAND_DEG * CHASSIS_FOLLOW_DEG_TO_RAD))
     {
         chassis_follow.turn_direction = 0;
-        auto_wz = 0.0f;
+        feedback_wz = 0.0f;
     }
     else
     {
@@ -299,21 +313,21 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
 
         if (chassis_follow.turn_direction != 0)
         {
-            auto_wz = CHASSIS_FOLLOW_WZ_SIGN *
-                      (float)chassis_follow.turn_direction *
-                      ((CHASSIS_FOLLOW_KP * abs_error) + CHASSIS_FOLLOW_FRICTION_FF);
+            feedback_wz = (float)chassis_follow.turn_direction *
+                          ((CHASSIS_FOLLOW_KP * abs_error) + CHASSIS_FOLLOW_FRICTION_FF);
         }
         else
         {
-            auto_wz = CHASSIS_FOLLOW_WZ_SIGN *
-                      ((CHASSIS_FOLLOW_KP * yaw_error) +
-                       (CHASSIS_FOLLOW_FRICTION_FF * (float)error_direction));
+            feedback_wz = (CHASSIS_FOLLOW_KP * yaw_error) +
+                          (CHASSIS_FOLLOW_FRICTION_FF * (float)error_direction);
         }
 
-        auto_wz = constrain(auto_wz, /* 输出限幅 */
-                            -CHASSIS_FOLLOW_MAX_WZ,
-                            CHASSIS_FOLLOW_MAX_WZ);
     }
+
+    auto_wz = CHASSIS_FOLLOW_WZ_SIGN * (feedback_wz + command_ff);
+    auto_wz = constrain(auto_wz,
+                        -CHASSIS_FOLLOW_MAX_WZ,
+                        CHASSIS_FOLLOW_MAX_WZ);
 
     chassis_follow.blend += CHASSIS_FOLLOW_BLEND_STEP; /* 逐步接管 */
     if (chassis_follow.blend > 1.0f)
