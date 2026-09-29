@@ -24,22 +24,23 @@ typedef struct
     volatile uint8_t exit_pending;
 } board_lift_debug_t;
 
-volatile board_lift_debug_t board_lift_dbg;
-volatile uint8_t board_hole_request;
-volatile uint8_t board_hole_exit_pending;
+volatile board_lift_debug_t board_lift_dbg;  //debug
+volatile uint8_t board_hole_request;     // 狗洞请求
+volatile uint8_t board_hole_exit_pending;  // 狗洞退出等待中
 
+//过洞函数
 static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
 {
     static uint8_t last_b_value = 0u;
-    static uint32_t hole_exit_tick = 0u;
+    static uint32_t hole_exit_tick = 0u;  // 退出狗洞等待起始时间
     uint32_t now = HAL_GetTick();
     uint8_t b_now;
     uint8_t button_event;
-
+  //调试参数
     board_lift_dbg.rc_state = (uint8_t)rc_dev.work_state;
     board_lift_dbg.s1 = (uint8_t)rc_info->s1.value;
     board_lift_dbg.s2 = (uint8_t)rc_info->s2.value;
-
+  //关控
     if (rc_dev.work_state != DEV_ONLINE)
     {
         last_b_value = 0u;
@@ -50,7 +51,7 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
         board.tx_pkt->gimbal_target_pkt.is_hole = 0u;
         return 0u;
     }
-
+    //处理B键按下事件
     b_now = (rc_info->B.value != 0u) ? 1u : 0u;
     button_event = ((b_now != 0u) && (last_b_value == 0u)) ? 1u : 0u;
     last_b_value = b_now;
@@ -108,7 +109,7 @@ static void Board_Debug_Gimbal_Command(void)
     static uint8_t mec_mode_active = 0u; /* 机械角模式已激活 */
     static float pitch_mec_target = 0.0f;/* Pitch 机械目标角，rad */
     rc_data_t *rc_info = rc_dev.info;     /* 遥控数据源 */
-
+    //关控
     if (rc_dev.work_state != DEV_ONLINE)
     {
         mec_mode_active = 0u;
@@ -130,12 +131,11 @@ static void Board_Debug_Gimbal_Command(void)
         return;
     }
 #endif
-    /* S1 下位保留控制使能，仅切换机械环 */
-    /* S1 下拨：只切换云台机械环，底盘仍由底盘分支控制 */
+    /* S1 下拨：切换云台机械环，底盘仍由底盘分支控制 */
     if (rc_info->s1.value == RC_SW_DOWN)
     {
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
-        /* 进入机械模式时从当前角度起调，避免跳变 */
+        /* 进入机械模式时从当前角度起调 */
         if (mec_mode_active == 0u)
         {
             pitch_mec_target = board.rx_meg->gimbal_meg.pitch_mec;
@@ -145,6 +145,7 @@ static void Board_Debug_Gimbal_Command(void)
         /* Yaw 固定前方零位，ch0 留给底盘转向 */
         board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = BOARD_MEC_YAW_FRONT_RAD;
 
+        // Pitch 机械角目标由遥控器 ch1 控制，积分式
         pitch_mec_target += (float)rc_info->ch1 / BOARD_RC_AXIS_MAX *
                             BOARD_MEC_PITCH_STEP_RAD;
         if (pitch_mec_target > BOARD_MEC_PITCH_MAX_RAD)

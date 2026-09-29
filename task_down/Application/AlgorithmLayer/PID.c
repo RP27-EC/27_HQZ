@@ -1,8 +1,8 @@
-/* PID.c - 鍗曠幆 PID */
+/* PID.c - 单环 PID */
 
 #include "pid.h"
 #include "rp_math.h"
-/* 鍗曠幆 PID 璁＄畻 */
+/* 单环 PID 计算 */
 void single_pid_ctrl(pid_ctrl_t *pid)
 {
 
@@ -27,7 +27,7 @@ float  all_pid_calc (pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,
 {
 	if(inn == NULL)return 0;
 	
-	 else if(out == NULL&&inn!=NULL)  // 杈撳嚭
+	 else if(out == NULL&&inn!=NULL)  // 输出
 	{
 		inn->target=target;
 		inn->measure=mea_in;
@@ -41,7 +41,7 @@ float  all_pid_calc (pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,
 		
 		out->target=target;
 		out->measure=mea_out;
-		out->err=out->target-out->measure;  // 璇樊
+		out->err=out->target-out->measure;  // 误差
 		switch(err_cal_mode)
 		{
 			
@@ -72,12 +72,12 @@ float  all_pid_calc (pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,
 				break;
 		}
 		
-		single_pid_ctrl(out);  // 杈撳嚭
-		inn->target=out->out;  // 鐩爣
+		single_pid_ctrl(out);  // 输出
+		inn->target=out->out;  // 目标
 		inn->measure=mea_in*inner_kp;
-		inn->err=inn->target+inn->measure;  // 璇樊
+		inn->err=inn->target+inn->measure;  // 误差
 		single_pid_ctrl(inn);
-		return inn->out;  // 杈撳嚭
+		return inn->out;  // 输出
 	}
 	else
 	{
@@ -86,7 +86,7 @@ float  all_pid_calc (pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,
 }
 
 
-/* 鍓嶉+PID 璁＄畻 */
+/* 前馈 + PID 计算 */
 float feedforward_pid_calc(float K_ff,pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,float mea_in,float inner_kp,uint8_t err_cal_mode)
 {
 	float target_now;

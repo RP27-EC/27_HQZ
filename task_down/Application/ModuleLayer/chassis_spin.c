@@ -14,9 +14,9 @@
 chassis_spin_state_t chassis_spin; /* 小陀螺状态 */
 
 static float spin_ramp_wz; /* 旋转斜坡输出，rad/s */
-static uint8_t spin_last_selected; /* 上拍小陀螺选中状态 */
+static uint8_t spin_last_selected; /* 上次小陀螺选中状态 */
 
-/* 将遥控通道映射到 [-1, 1]，含死区 */
+/* 将遥控通道映射到 [-1, 1] */
 
 /* 遥控通道归一化 */
 static float Chassis_Spin_AxisValue(int16_t axis)
@@ -35,7 +35,6 @@ static float Chassis_Spin_AxisValue(int16_t axis)
 }
 
 /* 按步长斜坡到目标角速度 */
-/* 限步斜坡, 防角速度跳变 */
 static float Chassis_Spin_Ramp(float current, float target, float step)
 {
     float diff = target - current; /* 剩余斜坡量 */
@@ -53,7 +52,6 @@ static float Chassis_Spin_Ramp(float current, float target, float step)
     return target;
 }
 
-/* 云台反馈未超时且有效才允许系变换 */
 /* 云台数据有效性检查 */
 static uint8_t Chassis_Spin_GimbalValid(void)
 {
@@ -68,7 +66,6 @@ static uint8_t Chassis_Spin_GimbalValid(void)
     return (age <= CHASSIS_SPIN_GIMBAL_TIMEOUT_MS) ? 1u : 0u;
 }
 
-/* 小陀螺平移按云台朝向旋转 */
 /* 小陀螺下平移按云台方向旋转 */
 static void Chassis_Spin_UpdateTranslation(chassis_cmd_t *cmd)
 {
@@ -85,7 +82,7 @@ static void Chassis_Spin_UpdateTranslation(chassis_cmd_t *cmd)
 #if !CHASSIS_SPIN_TRANSLATION_ENABLE
     cmd->vx = 0.0f;
     cmd->vy = 0.0f;
-    /* 云台数据缺失时零平移，只保留自转 */
+    /* 云台数据缺失时只保留自转 */
 #elif CHASSIS_SPIN_TRANSLATION_FRAME_GIMBAL
     if (Chassis_Spin_GimbalValid() == 0u)
     {
@@ -118,7 +115,6 @@ static void Chassis_Spin_UpdateTranslation(chassis_cmd_t *cmd)
 #endif
 }
 
-/* 初始化小陀螺状态 */
 /* 初始化 */
 void Chassis_Spin_Init(void)
 {
@@ -132,7 +128,6 @@ void Chassis_Spin_Init(void)
 }
 
 /* S1 上拨、S2 下拨选择小陀螺 */
-/* 档位选择与故障锁存 */
 void Chassis_Spin_UpdateMode(void)
 {
     uint8_t selected = 0u; /* 小陀螺档位选择 */
@@ -158,7 +153,6 @@ void Chassis_Spin_UpdateMode(void)
     chassis_spin.active = selected;   /* 小陀螺生效 */
 }
 
-/* 根据 ch0 调节旋转速度并接管底盘指令 */
 /* 小陀螺输出 */
 void Chassis_Spin_Update(chassis_cmd_t *cmd)
 {
@@ -170,7 +164,7 @@ void Chassis_Spin_Update(chassis_cmd_t *cmd)
         return;
     }
 
-    /* 退出档位后斜坡归零，不瞬间切断旋转 */
+    /* 退出档位后斜坡归零 */
     if (chassis_spin.selected == 0u)
     {
         if (spin_last_selected != 0u)
@@ -194,10 +188,10 @@ void Chassis_Spin_Update(chassis_cmd_t *cmd)
         return;
     }
 
-    /* 进入档位时承接当前角速度，避免跳变 */
+    /* 进入档位时承接当前角速度 */
     if (spin_last_selected == 0u)
     {
-        spin_ramp_wz = cmd->wz; /* 承接当前角速度 */
+        spin_ramp_wz = cmd->wz; 
         spin_last_selected = 1u;
     }
 
@@ -221,14 +215,12 @@ void Chassis_Spin_Update(chassis_cmd_t *cmd)
 }
 
 /* 小陀螺档位是否选中 */
-/* 档位是否选中 */
 uint8_t Chassis_Spin_IsSelected(void)
 {
     return chassis_spin.selected;
 }
 
 /* 小陀螺控制是否生效 */
-/* 是否已生效 */
 uint8_t Chassis_Spin_IsActive(void)
 {
     return chassis_spin.active;

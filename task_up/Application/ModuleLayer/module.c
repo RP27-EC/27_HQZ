@@ -7,7 +7,7 @@
 /* 模块初始化 */
 void Module_Init(void)
 {
-    // 先绑函数指针再调用, 顺序不能换
+    // 先绑函数指针再调用
     Gimbal_Init(&Gimbal);
     Lift_Init();
 }

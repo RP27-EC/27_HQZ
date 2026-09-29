@@ -13,7 +13,7 @@
 
 #define CHASSIS_FOLLOW_PI          3.14159265358979323846f /* 圆周率 */
 #define CHASSIS_FOLLOW_DEG_TO_RAD (CHASSIS_FOLLOW_PI / 180.0f) /* 角度转弧度 */
-#define CHASSIS_FOLLOW_BLEND_EPS  0.0001f /* 融合结束阈值 */
+#define CHASSIS_FOLLOW_BLEND_EPS  0.0001f /* 结束阈值 */
 
 chassis_follow_state_t chassis_follow; /* 底盘跟随状态 */
 
@@ -61,8 +61,8 @@ static uint8_t Chassis_Follow_YawValid(float yaw_rad)
 static uint8_t Chassis_Follow_DataValid(void)
 {
     uint32_t now; /* 当前时刻，ms */
-    uint32_t age; /* 反馈年龄，ms */
-
+    uint32_t age; /* 距上次收到云台反馈的时长，ms */
+    /* 检查云台 */
     if (board.status == NULL)
     {
         return 0u;
@@ -73,6 +73,7 @@ static uint8_t Chassis_Follow_DataValid(void)
         return 0u;
     }
 
+    //检查超时
     now = HAL_GetTick();
     age = now - board.status->gimbal_rx_time_ms;
 
@@ -84,7 +85,7 @@ static uint8_t Chassis_Follow_DataValid(void)
     return 1u;
 }
 
-/* 初始化跟随状态和差分缓存 */
+/* 初始化跟随状态 */
 void Chassis_Follow_Init(void)
 {
     chassis_follow.yaw_mec_rad = 0.0f;
@@ -104,7 +105,7 @@ void Chassis_Follow_Init(void)
     follow_last_selected = 0u;
 }
 
-/* S1 上拨且 S2 上/中拨选择跟随，云台失联则锁存故障 */
+/* S1 上拨且 S2 上/中拨选择跟随 */
 void Chassis_Follow_UpdateMode(void)
 {
     uint8_t rc_ready;      /* 遥控器在线且数据有效 */
@@ -181,7 +182,7 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
         return;
     }
 
-    /* 退出跟随：融合回手动旋转，避免角速度跳变 */
+    /* 退出跟随 */
     if (chassis_follow.selected == 0u)
     {
         if (follow_last_selected != 0u)
@@ -211,7 +212,7 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
 
     follow_last_selected = 1u;
 
-    /* 云台失联或故障时直接封锁底盘输出 */
+    /* 云台失联或故障时锁底盘输出 */
     if ((chassis_follow.active == 0u) || (chassis_follow.fault_latched != 0u))
     {
         cmd->vx = 0.0f;
@@ -235,11 +236,11 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     {
         float yaw_delta = Chassis_Follow_WrapPi(yaw_error - follow_last_yaw_rad);
 
-        /* 跳变过大说明反馈异常，锁存故障 */
+        /* 跳变过大则认为反馈异常 */
         if (fabsf(yaw_delta) >
               (CHASSIS_FOLLOW_YAW_JUMP_LIMIT_DEG * CHASSIS_FOLLOW_DEG_TO_RAD))
         {
-            chassis_follow.fault_latched = 1u;
+            chassis_follow.fault_latched = 1u;// 锁存故障
             chassis_follow.active = 0u;
             chassis_follow.data_valid = 0u;
             cmd->vx = 0.0f;
@@ -263,6 +264,7 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     vx_gimbal = cmd->vx;
     vy_gimbal = cmd->vy;
 
+// 旋转变换矩阵：将操作手指令从“云台坐标系”转换到底盘的“车体机械坐标系”
     cmd->vx = CHASSIS_FOLLOW_TRANSLATION_SIGN * /* 旋转平移 */
               ((cosf(yaw_error) * vx_gimbal) - (sinf(yaw_error) * vy_gimbal));
     cmd->vy = CHASSIS_FOLLOW_TRANSLATION_SIGN * /* 旋转平移 */
@@ -271,7 +273,7 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     (void)vx_gimbal;
     (void)vy_gimbal;
 #endif
-
+    //死区
       if (fabsf(yaw_error) < (CHASSIS_FOLLOW_DEADBAND_DEG * CHASSIS_FOLLOW_DEG_TO_RAD))
     {
         chassis_follow.turn_direction = 0;
@@ -296,7 +298,7 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
         {
             chassis_follow.turn_direction = 0;
         }
-
+      /* P + 前馈 */
         if (chassis_follow.turn_direction != 0)
         {
             auto_wz = CHASSIS_FOLLOW_WZ_SIGN *
@@ -315,13 +317,14 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
                             CHASSIS_FOLLOW_MAX_WZ);
     }
 
-    chassis_follow.blend += CHASSIS_FOLLOW_BLEND_STEP; /* 逐步接管 */
+    //斜坡
+    chassis_follow.blend += CHASSIS_FOLLOW_BLEND_STEP; //权重逐渐变1
     if (chassis_follow.blend > 1.0f)
     {
         chassis_follow.blend = 1.0f;
     }
 
-    target_wz = auto_wz * chassis_follow.blend; /* 融合旋转 */
+    target_wz = auto_wz * chassis_follow.blend; 
     cmd->wz = Chassis_Follow_Ramp(follow_last_wz, target_wz, CHASSIS_FOLLOW_WZ_STEP);
 
     chassis_follow.wz_target = auto_wz; /* 自动目标 */

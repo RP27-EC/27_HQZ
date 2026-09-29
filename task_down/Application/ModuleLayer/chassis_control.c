@@ -14,13 +14,11 @@
 chassis_control_t chassis_ctrl; /* 底盘控制对象 */
 
 /* 防 NaN 和异常大值 */
-/* 数值有效性: 排除 NaN 与溢出 */
 static uint8_t Chassis_Control_ValueValid(float value)
 {
     return (value == value) && (value < 1000000.0f) && (value > -1000000.0f);
 }
 
-/* 检查四轮对象和在线状态 */
 /* 四轮在线检查 */
 static uint8_t Chassis_Control_CheckOnline(void)
 {
@@ -32,6 +30,7 @@ static uint8_t Chassis_Control_CheckOnline(void)
 
     uint8_t online = 1u; /* 四轮组合在线标志 */
 
+    // 离线保护
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
         chassis_ctrl.state.wheel_online[i] =
@@ -52,7 +51,6 @@ static uint8_t Chassis_Control_CheckOnline(void)
 }
 
 /* 底盘运动学逆解，输出四轮速度目标 */
-/* 逆运动学: 车体速度 -> 四轮线速度 */
 static void Chassis_Control_KinematicsInverse(const chassis_cmd_t *cmd)
 {
     float front = cmd->vx; /* 前后分量 */
@@ -89,21 +87,22 @@ static void Chassis_Control_KinematicsInverse(const chassis_cmd_t *cmd)
     chassis_ctrl.state.wheel_target[WHEEL_RB] =  front - left + cycle; /* 右后 */
 }
 
-/* 四轮速度环计算，按控制源限制力矩 */
-/* 四轮速度环 */
+/* 四轮速度环，按控制源限制力矩 */
 static uint8_t Chassis_Control_PidUpdate(void)
 {
-    float torque_limit = CHASSIS_TEST_TORQUE_LIMIT_NM; /* 默认调试限矩 */
+    float torque_limit = CHASSIS_TEST_TORQUE_LIMIT_NM; /* 限矩 */
 
+    //跟随模式
     if (chassis_ctrl.state.cmd.source == CHASSIS_SRC_RC_FOLLOW)
     {
         torque_limit = CHASSIS_FOLLOW_TORQUE_LIMIT_NM;
     }
+    //小陀螺
     else if (chassis_ctrl.state.cmd.source == CHASSIS_SRC_SPIN)
     {
         torque_limit = CHASSIS_SPIN_TORQUE_LIMIT_NM;
     }
-
+    //检查指针
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
         if (chassis_ctrl.wheel == NULL ||
@@ -117,7 +116,8 @@ static uint8_t Chassis_Control_PidUpdate(void)
         }
 
         pid_ctrl_t *pid = chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl; /* 当前速度环 */
-
+        
+        // 获取电机编码器测速反馈并设置 PID 参数
         chassis_ctrl.state.wheel_speed[i] =
             chassis_ctrl.wheel->motor[i]->rx_info->speed;
         pid->target = chassis_ctrl.state.wheel_target[i]; /* 轮速目标 */
@@ -150,7 +150,6 @@ static uint8_t Chassis_Control_PidUpdate(void)
     return 1u;
 }
 
-/* 将四轮力矩写入电机并整组发送 */
 /* 四轮力矩下发 */
 static uint8_t Chassis_Control_Output(void)
 {
@@ -172,20 +171,20 @@ static uint8_t Chassis_Control_Output(void)
         chassis_ctrl.wheel->motor[i]->tx_info->torque = /* 写入组帧缓存 */
             chassis_ctrl.state.wheel_torque_out[i];
     }
-
+    // 硬件底层组包发送
     chassis_ctrl.wheel->group_set_torque(chassis_ctrl.wheel);
 
     return 1u;
 }
 
-/* 初始化底盘对象、四轮 PID 与安全状态 */
 /* 初始化 */
 void Chassis_Control_Init(void)
 {
-    uint8_t init_ok = 1u; /* 四轮对象完整性 */
+    uint8_t init_ok = 1u; /* 四轮对象完整 */
 
-    chassis_ctrl.wheel = &wheel_group;
+    chassis_ctrl.wheel = &wheel_group;//绑定指针
 
+    //检查
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
         chassis_ctrl.state.wheel_target[i] = 0.0f;
@@ -203,6 +202,7 @@ void Chassis_Control_Init(void)
             continue;
         }
 
+        // 初始化 PID 参数
         pid_ctrl_t *pid = chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl;
 
         pid->kp = CHASSIS_SPEED_KP;
@@ -219,6 +219,7 @@ void Chassis_Control_Init(void)
         chassis_ctrl.wheel->motor[i]->tx_info->torque = 0.0f;
     }
 
+    // 初始化控制命令
     chassis_ctrl.state.cmd.vx = 0.0f;
     chassis_ctrl.state.cmd.vy = 0.0f;
     chassis_ctrl.state.cmd.wz = 0.0f;
@@ -229,7 +230,6 @@ void Chassis_Control_Init(void)
     chassis_ctrl.state.fault = (init_ok == 0u) ? 1u : 0u;
 }
 
-/* 使能或关闭底盘，关闭时立即卸力 */
 /* 使能/失能底盘 */
 void Chassis_Control_SetEnable(uint8_t enable)
 {
@@ -241,7 +241,6 @@ void Chassis_Control_SetEnable(uint8_t enable)
     }
 }
 
-/* 四轮输出清零 */
 /* 停机并清状态 */
 void Chassis_Control_Stop(void)
 {
@@ -268,10 +267,10 @@ void Chassis_Control_Stop(void)
     }
 }
 
-/* 底盘周期更新，任何异常均回到停机 */
 /* 控制主入口, 1ms */
 void Chassis_Control_Update(const chassis_cmd_t *cmd)
 {
+    //空指针检查
     if (cmd == NULL)
     {
         chassis_ctrl.state.fault = 1u;
@@ -281,6 +280,7 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
 
     chassis_ctrl.state.cmd = *cmd;
 
+    // 使能检查
     if (chassis_ctrl.state.enabled == 0u || cmd->valid == 0u)
     {
         chassis_ctrl.state.fault = 1u;
@@ -288,6 +288,7 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
         return;
     }
 
+    // 浮点数检查
     if (!Chassis_Control_ValueValid(cmd->vx) ||
         !Chassis_Control_ValueValid(cmd->vy) ||
         !Chassis_Control_ValueValid(cmd->wz))
@@ -296,14 +297,14 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
         Chassis_Control_Stop();
         return;
     }
-
+    //在线检查
     if (Chassis_Control_CheckOnline() == 0u)
     {
         chassis_ctrl.state.fault = 1u;
         Chassis_Control_Stop();
         return;
     }
-
+    /*  逆解 -> PID 闭环 -> CAN 发送 */
     Chassis_Control_KinematicsInverse(cmd);
     if (Chassis_Control_PidUpdate() == 0u)
     {
@@ -316,7 +317,7 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
         Chassis_Control_Stop();
         return;
     }
-
+    /* 清除故障标志 */
     chassis_ctrl.state.fault = 0u;
 }
 

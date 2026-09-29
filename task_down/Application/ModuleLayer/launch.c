@@ -13,9 +13,9 @@ static void Launch_Work(Launch_t *launch);
 /* 离线处理 */
 static void Launch_Offline_Update(Launch_t *launch);
 
-static uint8_t launch_shoot_switch_seen;     /* S2 已完成首次采样 */
+static uint8_t launch_shoot_switch_seen;     /* S2首次采样 */
 static uint8_t launch_shoot_previous_switch; /* 上拍 S2 原始值 */
-static uint8_t launch_shoot_armed;           /* 发射已由拨杆动作解锁 */
+static uint8_t launch_shoot_armed;           /* 发射由拨杆解锁 */
 
 static uint8_t launch_s2_filter_initialized;
 static uint8_t launch_s2_raw_last;
@@ -33,16 +33,14 @@ Launch_t launch =
     .init = Launch_Init,   /* 初始化接口 */
 };
 
-/* 清空拨杆解锁序列 */
 /* 复位发射状态 */
 static void Launch_Reset_Shoot_Arm(void)
 {
-    launch_shoot_switch_seen = 0u;     /* 重新等待首次采样 */
+    launch_shoot_switch_seen = 0u;     /* 等待首次采样 */
     launch_shoot_previous_switch = 0u;
     launch_shoot_armed = 0u;           /* 清除解锁 */
 }
 
-/* 清除 S2 消抖状态，重新上线时先接受当前档位。 */
 /* 复位 S2 消抖 */
 static void Launch_Reset_S2_Filter(void)
 {
@@ -52,7 +50,6 @@ static void Launch_Reset_S2_Filter(void)
     launch_s2_stable_ticks = 0u;
 }
 
-/* S2 连续稳定后才承认新档位，滤除回中位时的接触弹跳。 */
 /* S2 档位消抖 */
 static uint8_t Launch_Filter_S2(uint8_t raw)
 {
@@ -92,7 +89,6 @@ static void Launch_Init(Launch_t *launch)
     Launch_Reset_Shoot_Arm();
 }
 
-/* 根据键鼠或遥控拨杆更新发射状态与模式 */
 /* 发射数据解析 */
 static void Launch_Data_Update(Launch_t *launch)
 {
@@ -103,7 +99,7 @@ static void Launch_Data_Update(Launch_t *launch)
     {
         Launch_Reset_Shoot_Arm();
         Launch_Reset_S2_Filter();
-        launch->state = L_UNLOCK; /* 键鼠直接解锁 */
+        launch->state = L_UNLOCK; /* 键鼠解锁 */
 
         /* 键鼠：左键按下发射，长按切连发 */
         if ((rc_dev.info->mouse_btn_l.value & 0x01u) != 0u)
@@ -121,7 +117,7 @@ static void Launch_Data_Update(Launch_t *launch)
         return;
     }
 
-    /* 遥控掉线立即锁定 */
+    /* 遥控掉线锁定 */
     if (rc_dev.work_state != DEV_ONLINE)
     {
     Launch_Reset_Shoot_Arm(); /* 掉线清除解锁 */
@@ -148,7 +144,7 @@ static void Launch_Data_Update(Launch_t *launch)
     s1 = (uint8_t)rc_dev.info->s1.value; /* 读取 S1 */
     s2 = Launch_Filter_S2((uint8_t)rc_dev.info->s2.value); /* 消抖后的 S2 */
 
-    /* 小陀螺档位禁止发射，避免机构互锁 */
+    /* 小陀螺档位禁止发射 */
     if ((s1 == RC_SW_UP) && (s2 == RC_SW_DOWN))
     {
         Launch_Reset_Shoot_Arm();
@@ -167,8 +163,8 @@ static void Launch_Data_Update(Launch_t *launch)
         return;
     }
 
-    /* 上电后必须先变化 S2，避免开机停在上位直接发射。 */
-    /* 安全解锁：上电后 S2 必须再动作一次 */
+    /* 解锁：上电后 S2 再动作一次 */
+    //作为保护，防上电就发射
     if ((launch_shoot_switch_seen != 0u) &&
         (s2 != launch_shoot_previous_switch))
     {
@@ -197,7 +193,7 @@ static void Launch_Data_Update(Launch_t *launch)
     }
 }
 
-/* 从板间状态同步发射子设备在线信息 */
+/* 从板间状态同步发射在线信息 */
 static void Launch_Offline_Update(Launch_t *launch)
 {
     launch->heart.r_fric_heart = board.rx_meg->state_meg.r_fric_state; /* 右轮 */
@@ -205,7 +201,6 @@ static void Launch_Offline_Update(Launch_t *launch)
     launch->heart.dial_heart = board.rx_meg->state_meg.dial_motor_state; /* 拨盘 */
 }
 
-/* 将许可、模式和触发电平写入板间报文 */
 /* 下发发射指令 */
 static void Launch_Cmd_Transmit(Launch_t *launch)
 {

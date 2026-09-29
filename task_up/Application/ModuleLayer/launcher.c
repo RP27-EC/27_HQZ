@@ -12,7 +12,7 @@
 launcher_t launcher; /* 发射机构对外状态 */
 
 static uint16_t launcher_fric_ready_count; /* 摩擦轮达速确认计数 */
-uint8_t launcher_jam_count; /* 堵转次数，调试可观测 */
+uint8_t launcher_jam_count; /* 堵转次数 */
 static uint16_t launcher_fric_stop_count; /* 摩擦轮停转确认计数 */
 static uint8_t launcher_dial_last_online; /* 拨盘上次在线状态 */
 static uint8_t launcher_dial_stopped; /* 1 = 拨盘已停机 */
@@ -63,7 +63,7 @@ static uint8_t Launcher_DialOnline(void)
     return (dail_motor.KT_motor_info.state_info.work_state == M_ONLINE) ? 1u : 0u;
 }
 
-/* 拨盘角度按配置方向取符号 */
+/* 拨盘角度 */
 static int32_t Launcher_DialAngle(void)
 {
     int32_t raw = dail_motor.KT_motor_info.rx_info.encoder_sum; /* 累计编码器值 */
@@ -129,7 +129,7 @@ static void Launcher_DialClearPid(void)
     launcher_dial_brake_pid.out = 0.0f;
 }
 
-/* 安全停机，保留重试间隔 */
+/* 停机 */
 static HAL_StatusTypeDef Launcher_DialStop(void)
 {
     Launcher_DialClearPid();
@@ -141,7 +141,7 @@ static HAL_StatusTypeDef Launcher_DialStop(void)
     return dail_motor.tx_W_cmd(&dail_motor, MOTOR_STOP_ID);
 }
 
-/* 拨盘进入闭环运行 */
+/* 拨盘闭环运行 */
 static HAL_StatusTypeDef Launcher_DialRun(void)
 {
     if (dail_motor.tx_W_cmd == NULL)
@@ -152,11 +152,11 @@ static HAL_StatusTypeDef Launcher_DialRun(void)
     return dail_motor.tx_W_cmd(&dail_motor, MOTOR_RUN_ID);
 }
 
-/* 位置环生成速度目标，再由速度环出力矩 */
+/* 单发控制  位置外环，速度内环 */
 static void Launcher_DialPositionControl(int64_t target)
 {
-    float speed_target;    /* 位置环输出的速度目标 */
-    int16_t current_output;/* 速度环输出的力矩电流 */
+    float speed_target;    /* 输出的速度目标 */
+    int16_t current_output;/* 输出的力矩电流 */
 
     if (Launcher_DialOnline() == 0u)
     {
@@ -190,7 +190,7 @@ static void Launcher_DialPositionControl(int64_t target)
     Launcher_DialApplyTorque(current_output);
 }
 
-/* 连发独立速度环 */
+/* 连发 速度环 */
 static void Launcher_DialSpeedControl(void)
 {
     int16_t current_output; /* 连发速度环输出 */
@@ -218,7 +218,7 @@ static void Launcher_DialSpeedControl(void)
     Launcher_DialApplyTorque(current_output);
 }
 
-/* 释放输入后用阻尼力矩刹车，速度降下来再断使能。 */
+/* 释放主动制动：目标设为 0 速，利用反接力矩刹车 */
 static void Launcher_DialBrakeControl(void)
 {
     int16_t current_output;
@@ -246,7 +246,6 @@ static void Launcher_DialBrakeControl(void)
     Launcher_DialApplyTorque(current_output);
 }
 
-/* 低速高电流连续确认后判定堵转 */
 #if LAUNCHER_DIAL_JAM_ENABLE
 /* 堵转判定: 旋转中低速高流且持续达阈值 */
 static uint8_t Launcher_DialBlockCheck(uint8_t moving)
@@ -428,7 +427,7 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
     launcher.dial_target_angle = (int32_t)launcher_dial_target;
 }
 
-/* 非发射状态下周期停机，避免丢帧导致失控 */
+/* 非发射状态下周期停机 */
 static void Launcher_DialSafeStop(uint32_t now)
 {
     if (((launcher_dial_stopped == 0u) ||
@@ -516,7 +515,7 @@ static void Launcher_DialControl(uint8_t shoot_active)
 #endif
 }
 
-/* 双摩擦轮速度环，离线或失能时卸力 */
+/* 双摩擦轮速度环 离线或失能卸力 */
 static void Launcher_FricControl(uint8_t enable)
 {
     for (uint8_t i = 0u; i < SHOOT_FRIC_NUM; i++)
@@ -555,7 +554,7 @@ static void Launcher_FricControl(uint8_t enable)
     RM_Group.group_set_torque(&RM_Group);
 }
 
-/* 双轮连续达速后才置就绪 */
+/* 双轮连续达速后置就绪 */
 static void Launcher_UpdateFrictionReady(uint8_t enabled)
 {
     float l_speed = fabsf((float)rm_motor[SHOOT_FRIC_L].rx_info->encoder_speed); /* 左轮转速 */
@@ -590,7 +589,7 @@ static void Launcher_UpdateFrictionReady(uint8_t enabled)
 /* 初始化发射机构状态与三套 PID */
 void Launcher_Init(void)
 {
-    pid_ctrl_t *pid; /* 摩擦轮速度环临时指针 */
+    pid_ctrl_t *pid; /* 摩擦轮速度环指针 */
 
     launcher.state = LAUNCHER_SLEEP;
     launcher.state_tick = 0u;
@@ -721,7 +720,7 @@ void Launcher_Work(void)
 
 
 
-    /* 发射总开关关闭：降速后进入休眠 */
+    /* 发射总开关关闭 */
     if (launch_on == 0u)
     {
         launcher.enabled = 0u;
