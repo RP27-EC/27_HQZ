@@ -685,7 +685,8 @@ void Launcher_Init(void)
 void Launcher_Work(void)
 {
     uint32_t now = HAL_GetTick(); /* 本次调度时刻 */
-    uint8_t launch_on;            /* 发射系统总使能 */
+    uint8_t fric_on;              /* 摩擦轮总使能 */
+    uint8_t dial_on;              /* 拨盘参与控制 */
     uint8_t shoot_level;          /* 发射触发电平 */
     uint8_t shoot_mode;           /* 0 = 单发，1 = 连发 */
     uint8_t shoot_active;         /* 发射保持状态 */
@@ -712,16 +713,16 @@ void Launcher_Work(void)
     dial_ready = 1u;
 #endif
 
-    launch_on = ((Board_HeartBeat.status == DEV_ONLINE) &&
-                 (Board_Rx_Info.shoot_pkt.launch_state != 0u) &&
-                 (Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
-                 (Launcher_FricOnline(SHOOT_FRIC_R) != 0u) &&
-                 (dial_ready != 0u)) ? 1u : 0u;
+    fric_on = ((Board_HeartBeat.status == DEV_ONLINE) &&
+               (Board_Rx_Info.shoot_pkt.launch_state != 0u) &&
+               (Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
+               (Launcher_FricOnline(SHOOT_FRIC_R) != 0u)) ? 1u : 0u;
+    dial_on = ((fric_on != 0u) && (dial_ready != 0u)) ? 1u : 0u;
 
 
 
     /* 发射总开关关闭：降速后进入休眠 */
-    if (launch_on == 0u)
+    if (fric_on == 0u)
     {
         launcher.enabled = 0u;
         launcher.last_shoot_level = 0u;
@@ -801,6 +802,18 @@ void Launcher_Work(void)
                      (launcher.last_shoot_level == 0u) &&
                      (shoot_mode == 0u)) ? 1u : 0u;
     shoot_active = (shoot_level != 0u) ? 1u : 0u; /* 发射保持 */
+
+    /* 拨盘离线不影响摩擦轮持续运行。 */
+    if (dial_on == 0u)
+    {
+        launcher.state = LAUNCHER_READY;
+        launcher.state_tick = now;
+        launcher.last_shoot_level = shoot_level;
+        launcher_dial_braking = 0u;
+        Launcher_FricControl(1u);
+        Launcher_DialSafeStop(now);
+        return;
+    }
 
     if ((shoot_active != 0u) && (launcher_dial_stopped != 0u))
     {
