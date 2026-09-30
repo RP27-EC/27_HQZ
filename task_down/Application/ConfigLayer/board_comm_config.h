@@ -26,6 +26,7 @@
 
 /* S1 下位机械模式：右摇杆目标步长与 Pitch 限位。 */
 #define BOARD_MEC_YAW_FRONT_RAD         0.0f
+#define BOARD_MEC_YAW_REAR_RAD          3.14159265358979323846f
 #define BOARD_MEC_PITCH_STEP_RAD        0.002f
 #define BOARD_MEC_PITCH_MIN_RAD         (-7.5f * 0.01745329251994329577f)
 #define BOARD_MEC_PITCH_MAX_RAD         (30.0f * 0.01745329251994329577f)

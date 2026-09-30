@@ -107,11 +107,16 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
 static void Board_Debug_Gimbal_Command(void)
 {
     static uint8_t mec_mode_active = 0u; /* 机械角模式已激活 */
+    static uint8_t yaw_rear = 0u;         /* 机械模式目标：0 前，1 后 */
+    static uint8_t last_r_pressed = 0u;   /* R 键上次状态 */
     static float pitch_mec_target = 0.0f;/* Pitch 机械目标角，rad */
     rc_data_t *rc_info = rc_dev.info;     /* 遥控数据源 */
+    uint8_t r_pressed;
 
     if (rc_dev.work_state != DEV_ONLINE)
     {
+        yaw_rear = 0u;
+        last_r_pressed = 0u;
         mec_mode_active = 0u;
         board.tx_pkt->car_pkt.car_state = 0u;
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
@@ -124,10 +129,13 @@ static void Board_Debug_Gimbal_Command(void)
     }
 
     board.tx_pkt->car_pkt.car_state = 1u;
+    r_pressed = ((rc_info->key_v & KEY_PRESSED_OFFSET_R) != 0u) ? 1u : 0u;
 #if BOARD_LIFT_ENABLE
     if (Board_Debug_Hole_Command(rc_info) != 0u)
     {
         mec_mode_active = 0u;
+        yaw_rear = 0u;
+        last_r_pressed = r_pressed;
         return;
     }
 #endif
@@ -140,11 +148,20 @@ static void Board_Debug_Gimbal_Command(void)
         if (mec_mode_active == 0u)
         {
             pitch_mec_target = board.rx_meg->gimbal_meg.pitch_mec;
+            yaw_rear = 0u;
+            last_r_pressed = r_pressed;
             mec_mode_active = 1u;
         }
+        else if ((r_pressed != 0u) && (last_r_pressed == 0u))
+        {
+            yaw_rear ^= 1u;
+        }
 
-        /* Yaw 固定前方零位，ch0 留给底盘转向 */
-        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = BOARD_MEC_YAW_FRONT_RAD;
+        last_r_pressed = r_pressed;
+
+        /* ch0 留给底盘转向，R 键切前后目标 */
+        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar =
+            (yaw_rear != 0u) ? BOARD_MEC_YAW_REAR_RAD : BOARD_MEC_YAW_FRONT_RAD;
 
         pitch_mec_target += (float)rc_info->ch1 / BOARD_RC_AXIS_MAX *
                             BOARD_MEC_PITCH_STEP_RAD;
@@ -163,6 +180,8 @@ static void Board_Debug_Gimbal_Command(void)
     {
         board.tx_pkt->car_pkt.gimbal_mode = 1u;
         mec_mode_active = 0u;
+        yaw_rear = 0u;
+        last_r_pressed = r_pressed;
     }
 }
 #endif
