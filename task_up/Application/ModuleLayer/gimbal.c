@@ -194,6 +194,8 @@ static void gimbal_clear_all_pid(gimbal_t *gimbal)
     gimbal_pid_clear(&gimbal->pid_info.yaw_mec_inner);
     gimbal_pid_clear(&gimbal->pid_info.yaw_init_outer);
     gimbal_pid_clear(&gimbal->pid_info.yaw_init_inner);
+    gimbal_pid_clear(&gimbal->pid_info.pitch_init_outer);
+    gimbal_pid_clear(&gimbal->pid_info.pitch_init_inner);
     gimbal_pid_clear(&gimbal->pid_info.pitch_gyro_outer);
     gimbal_pid_clear(&gimbal->pid_info.pitch_gyro_inner);
     gimbal_pid_clear(&gimbal->pid_info.pitch_mec_outer);
@@ -239,16 +241,42 @@ static void gimbal_pid_init(gimbal_t *gimbal)
 
     /* Yaw 归中编码器串级 */
     pid = &gimbal->pid_info.yaw_init_outer;
-    pid->kp = 1.0f; pid->ki = 0.0f; pid->kd = 0.0f;
-    pid->deadband = GIMBAL_MEC_ERR_DEADBAND_DEG;
-    pid->integral_max = 0.0f; pid->out_max = 500.0f;
+    pid->kp = GIMBAL_INIT_YAW_OUTER_KP;
+    pid->ki = GIMBAL_INIT_YAW_OUTER_KI;
+    pid->kd = GIMBAL_INIT_YAW_OUTER_KD;
+    pid->integral_max = GIMBAL_INIT_YAW_OUTER_INTEGRAL_MAX;
+    pid->out_max = GIMBAL_INIT_YAW_OUTER_OUT_MAX;
+    pid->deadband = 0.0f;
+    pid->d_filter_alpha = GIMBAL_INIT_D_FILTER_ALPHA;
 
     pid = &gimbal->pid_info.yaw_init_inner;
-    pid->kp = 1.2f; pid->ki = 0.0f; pid->kd = 0.2f;
-    pid->d_filter_alpha = GIMBAL_MEC_OUTER_D_FILTER_ALPHA;
-    pid->integral_max = 0.0f; pid->out_max = 100.0f;
+    pid->kp = GIMBAL_INIT_YAW_INNER_KP;
+    pid->ki = GIMBAL_INIT_YAW_INNER_KI;
+    pid->kd = GIMBAL_INIT_YAW_INNER_KD;
+    pid->integral_max = GIMBAL_INIT_YAW_INNER_INTEGRAL_MAX;
+    pid->out_max = GIMBAL_INIT_YAW_INNER_OUT_MAX;
+    pid->deadband = 0.0f;
+    pid->d_filter_alpha = GIMBAL_INIT_D_FILTER_ALPHA;
 
-    /* Pitch 机械编码器串级 */
+    /* Pitch 归中编码器串级 */
+    pid = &gimbal->pid_info.pitch_init_outer;
+    pid->kp = GIMBAL_INIT_PITCH_OUTER_KP;
+    pid->ki = GIMBAL_INIT_PITCH_OUTER_KI;
+    pid->kd = GIMBAL_INIT_PITCH_OUTER_KD;
+    pid->integral_max = GIMBAL_INIT_PITCH_OUTER_INTEGRAL_MAX;
+    pid->out_max = GIMBAL_INIT_PITCH_OUTER_OUT_MAX;
+    pid->deadband = 0.0f;
+    pid->d_filter_alpha = GIMBAL_INIT_D_FILTER_ALPHA;
+
+    pid = &gimbal->pid_info.pitch_init_inner;
+    pid->kp = GIMBAL_INIT_PITCH_INNER_KP;
+    pid->ki = GIMBAL_INIT_PITCH_INNER_KI;
+    pid->kd = GIMBAL_INIT_PITCH_INNER_KD;
+    pid->integral_max = GIMBAL_INIT_PITCH_INNER_INTEGRAL_MAX;
+    pid->out_max = GIMBAL_INIT_PITCH_INNER_OUT_MAX;
+    pid->deadband = 0.0f;
+    pid->d_filter_alpha = GIMBAL_INIT_D_FILTER_ALPHA;
+
     pid = &gimbal->pid_info.pitch_mec_outer;
     pid->kp = 1.6f; pid->ki = 0.0f; pid->kd = GIMBAL_MEC_OUTER_KD;
     pid->deadband = GIMBAL_MEC_ERR_DEADBAND_DEG;
@@ -361,6 +389,10 @@ static void gimbal_get_command_target(gimbal_t *gimbal, float *yaw_target, float
     switch (gimbal->gimbal_mode)
     {
     case G_INIT:
+        *yaw_target = gimbal_wrap_deg(gimbal->init_info.yaw_home_deg);
+        *pitch_target = gimbal->init_info.pitch_home_deg;
+        break;
+
     case G_MEC:
         *yaw_target = gimbal_wrap_deg(gimbal->pid_info.yaw_mec_target_raw);
         *pitch_target = gimbal->pid_info.pitch_mec_target_raw;
@@ -409,9 +441,9 @@ static float gimbal_limit_pitch_target(gimbal_t *gimbal, float pitch_target)
 static void gimbal_update_init(gimbal_t *gimbal)
 {
     float yaw_error = gimbal_abs(gimbal_wrap_deg(
-        gimbal->base_info.yaw_mec_angle - gimbal->pid_info.yaw_mec_target_raw));
+        gimbal->base_info.yaw_mec_angle - gimbal->init_info.yaw_home_deg));
     float pitch_error = gimbal_abs(
-        gimbal->base_info.pitch_mec_angle - gimbal->pid_info.pitch_mec_target_raw);
+        gimbal->base_info.pitch_mec_angle - gimbal->init_info.pitch_home_deg);
     uint8_t position_ok = (yaw_error <= gimbal->init_info.yaw_angle_tolerance) && /* 到位 */
                           (pitch_error <= gimbal->init_info.pitch_angle_tolerance);
     uint8_t speed_ok = (gimbal_abs(gimbal->base_info.yaw_mec_speed) <= /* 静止 */
@@ -419,10 +451,10 @@ static void gimbal_update_init(gimbal_t *gimbal)
                        (gimbal_abs(gimbal->base_info.pitch_mec_speed) <=
                         gimbal->init_info.pitch_speed_tolerance);
     uint8_t target_ok = (gimbal_abs(gimbal_wrap_deg(
-                           gimbal->pid_info.yaw_target - gimbal->pid_info.yaw_mec_target_raw)) <=
+                           gimbal->pid_info.yaw_target - gimbal->init_info.yaw_home_deg)) <=
                         GIMBAL_TARGET_ARRIVE_EPS_DEG) &&
                        (gimbal_abs(gimbal->pid_info.pitch_target -
-                                    gimbal->pid_info.pitch_mec_target_raw) <=
+                                    gimbal->init_info.pitch_home_deg) <=
                         GIMBAL_TARGET_ARRIVE_EPS_DEG);
 
     if (position_ok && speed_ok && target_ok)
@@ -672,6 +704,24 @@ static float gimbal_gravity_compensation(gimbal_t *gimbal)
             gimbal_tune.gravity_b_nm);
 }
 
+/* Dedicated pitch gravity feed-forward for homing only. */
+static float gimbal_init_gravity_compensation(gimbal_t *gimbal)
+{
+    float angle_rad;
+
+    if (gimbal->init_info.pitch_gravity_enable == 0u)
+    {
+        return 0.0f;
+    }
+
+    angle_rad = (gimbal->base_info.pitch_mec_angle -
+                 gimbal->init_info.pitch_gravity_middle_deg) * GIMBAL_DEG_TO_RAD;
+
+    return gimbal->init_info.pitch_gravity_sign *
+           (gimbal->init_info.pitch_gravity_k_nm * cosf(angle_rad) +
+            gimbal->init_info.pitch_gravity_b_nm);
+}
+
 //伪代码，yaw的阻力补偿
 /*
  * Yaw axis drag compensation placeholder.
@@ -709,6 +759,48 @@ static float gimbal_mec_speed_limit(float error_deg,
     float brake_rate = sqrtf(2.0f * decel_rad_s2 * error_rad);
 
     return (brake_rate < max_rate_rad_s) ? brake_rate : max_rate_rad_s;
+}
+
+/* Init cascade with its own speed and deceleration limits. */
+static float gimbal_init_pid_calc(pid_ctrl_t *outer,
+                                 pid_ctrl_t *inner,
+                                 float target,
+                                 float angle,
+                                 float speed,
+                                 float max_rate_deg_s,
+                                 float decel_rad_s2,
+                                 uint8_t wrap)
+{
+    float speed_limit;
+
+    outer->target = target;
+    outer->measure = angle;
+    outer->err = target - angle;
+    if (wrap != 0u)
+    {
+        outer->err = gimbal_wrap_deg(outer->err);
+    }
+    single_pid_ctrl(outer);
+
+    /*
+     * 归中单独选择是否套用制动曲线限速。
+     * 关闭时外环只受自身 out_max 限幅，等价于旧版快速归中的 all_pid_calc 路径；
+     * 该开关只作用于 G_INIT，机械/陀螺环不受影响。
+     */
+    if (GIMBAL_INIT_SPEED_LIMIT_ENABLE != 0u)
+    {
+        speed_limit = gimbal_mec_speed_limit(outer->err,
+                                              max_rate_deg_s,
+                                              decel_rad_s2);
+        outer->out = gimbal_clamp(outer->out, -speed_limit, speed_limit);
+    }
+
+    inner->target = outer->out;
+    inner->measure = speed;
+    inner->err = inner->target - inner->measure;
+    single_pid_ctrl(inner);
+
+    return inner->out;
 }
 
 /* 机械串级：位置 P/D -> 限速 -> 速度 PID -> 力矩 */
@@ -781,7 +873,9 @@ static float gimbal_mec_pid_calc(pid_ctrl_t *outer,
 /* 按当前模式计算两轴力矩并做硬件限幅 */
 static void gimbal_calc_output(gimbal_t *gimbal)
 {
-    float gravity = gimbal_gravity_compensation(gimbal); /* Pitch 重力项 */
+    float gravity = (gimbal->gimbal_mode == G_INIT) ?
+                    gimbal_init_gravity_compensation(gimbal) :
+                    gimbal_gravity_compensation(gimbal);
     gimbal->base_info.gravity_f = gravity;
 
 
@@ -789,26 +883,29 @@ static void gimbal_calc_output(gimbal_t *gimbal)
     {
     case G_INIT: /* 上电归中 */
         gimbal_update_init(gimbal);
-        // 上电归中仍使用机械角/速度串级
-        gimbal->base_info.output_gimbal_p =
-            all_pid_calc(&gimbal->pid_info.pitch_mec_outer,
-                         &gimbal->pid_info.pitch_mec_inner,
-                         gimbal->pid_info.pitch_target,
-                         gimbal->base_info.pitch_mec_angle,
-                         gimbal->base_info.pitch_mec_speed,
-                         0.0f,
-                         1.0f,
-                         0) + gravity;
+        gimbal->base_info.output_gimbal_p = gimbal_clamp(
+            gimbal_init_pid_calc(&gimbal->pid_info.pitch_init_outer,
+                                 &gimbal->pid_info.pitch_init_inner,
+                                 gimbal->pid_info.pitch_target,
+                                 gimbal->base_info.pitch_mec_angle,
+                                 gimbal->base_info.pitch_mec_speed,
+                                 gimbal->init_info.pitch_max_rate_deg_s,
+                                 gimbal->init_info.pitch_decel_rad_s2,
+                                 0u) + gravity,
+            -gimbal->init_info.pitch_torque_limit_nm,
+            gimbal->init_info.pitch_torque_limit_nm);
 
-        gimbal->base_info.output_gimbal_y =
-            all_pid_calc(&gimbal->pid_info.yaw_init_outer,
-                         &gimbal->pid_info.yaw_init_inner,
-                         gimbal->pid_info.yaw_target,
-                         gimbal->base_info.yaw_mec_angle,
-                         gimbal->base_info.yaw_mec_speed,
-                         0.0f,
-                         1.0f,
-                         3);
+        gimbal->base_info.output_gimbal_y = gimbal_clamp(
+            gimbal_init_pid_calc(&gimbal->pid_info.yaw_init_outer,
+                                 &gimbal->pid_info.yaw_init_inner,
+                                 gimbal->pid_info.yaw_target,
+                                 gimbal->base_info.yaw_mec_angle,
+                                 gimbal->base_info.yaw_mec_speed,
+                                 gimbal->init_info.yaw_max_rate_deg_s,
+                                 gimbal->init_info.yaw_decel_rad_s2,
+                                 3u),
+            -gimbal->init_info.yaw_torque_limit_nm,
+            gimbal->init_info.yaw_torque_limit_nm);
         break;
     case G_MEC: /* 机械模式：位置限速制动 */
         gimbal->base_info.output_gimbal_p =
@@ -983,18 +1080,31 @@ void Gimbal_Init(gimbal_t *gimbal)
     /* 归中参数初始化 */
     gimbal->init_info.init_flag = 0;
     gimbal->init_info.init_time = 0;
-    gimbal->init_info.init_time_max = 6000;
-    gimbal->init_info.pitch_angle_tolerance = 2.0f;
-    gimbal->init_info.yaw_angle_tolerance = 2.0f;
-    gimbal->init_info.pitch_ramp_step = 0.25f; //  归中速率限制
-    gimbal->init_info.yaw_ramp_step = 0.25f;   // 归中速率限制
+    gimbal->init_info.init_time_max = GIMBAL_INIT_TIMEOUT_MS;
+    gimbal->init_info.pitch_angle_tolerance = GIMBAL_INIT_PITCH_TOL_DEG;
+    gimbal->init_info.yaw_angle_tolerance = GIMBAL_INIT_YAW_TOL_DEG;
+    gimbal->init_info.pitch_ramp_step = GIMBAL_INIT_PITCH_RAMP_DEG_PER_MS;
+    gimbal->init_info.yaw_ramp_step = GIMBAL_INIT_YAW_RAMP_DEG_PER_MS;
     gimbal->init_info.mode_transition_active = 0;
     gimbal->init_info.mode_pitch_ramp_step = 0.1f;
     gimbal->init_info.mode_yaw_ramp_step = 0.1f;
-    gimbal->init_info.pitch_speed_tolerance = 0.5f;
-    gimbal->init_info.yaw_speed_tolerance = 0.5f;
+    gimbal->init_info.pitch_speed_tolerance = GIMBAL_INIT_PITCH_SPEED_TOL_RAD_S;
+    gimbal->init_info.yaw_speed_tolerance = GIMBAL_INIT_YAW_SPEED_TOL_RAD_S;
     gimbal->init_info.stable_time = 0;
-    gimbal->init_info.stable_time_max = 30;
+    gimbal->init_info.stable_time_max = GIMBAL_INIT_STABLE_MS;
+    gimbal->init_info.yaw_home_deg = GIMBAL_INIT_YAW_HOME_DEG;
+    gimbal->init_info.pitch_home_deg = GIMBAL_INIT_PITCH_HOME_DEG;
+    gimbal->init_info.yaw_max_rate_deg_s = GIMBAL_INIT_YAW_MAX_RATE_DEG_S;
+    gimbal->init_info.pitch_max_rate_deg_s = GIMBAL_INIT_PITCH_MAX_RATE_DEG_S;
+    gimbal->init_info.yaw_decel_rad_s2 = GIMBAL_INIT_YAW_DECEL_RAD_S2;
+    gimbal->init_info.pitch_decel_rad_s2 = GIMBAL_INIT_PITCH_DECEL_RAD_S2;
+    gimbal->init_info.yaw_torque_limit_nm = GIMBAL_INIT_YAW_TORQUE_LIMIT_NM;
+    gimbal->init_info.pitch_torque_limit_nm = GIMBAL_INIT_PITCH_TORQUE_LIMIT_NM;
+    gimbal->init_info.pitch_gravity_enable = GIMBAL_INIT_PITCH_GRAVITY_ENABLE;
+    gimbal->init_info.pitch_gravity_k_nm = GIMBAL_INIT_PITCH_GRAVITY_K_NM;
+    gimbal->init_info.pitch_gravity_b_nm = GIMBAL_INIT_PITCH_GRAVITY_B_NM;
+    gimbal->init_info.pitch_gravity_sign = GIMBAL_INIT_PITCH_GRAVITY_SIGN;
+    gimbal->init_info.pitch_gravity_middle_deg = GIMBAL_INIT_PITCH_GRAVITY_MIDDLE_DEG;
 
     gimbal->feedforward.yaw_rate_cmd_deg_s = 0.0f;
     gimbal->feedforward.pitch_rate_cmd_deg_s = 0.0f;

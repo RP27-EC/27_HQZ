@@ -9,6 +9,7 @@
 #include "communicate.h"
 #include "motor.h"
 #include "rp_device_config.h"
+#include "gimbal_init_config.h"
 
 /*
  * 云台控制层对外接口。
@@ -147,6 +148,19 @@ typedef struct
     float yaw_speed_tolerance;         /* Yaw 到位速度阈值 */
     uint16_t stable_time;              /* 到位条件的连续时间 */
     uint16_t stable_time_max;          /* 稳定所需的连续时间 */
+    float yaw_home_deg;                /* Yaw 归中机械目标 */
+    float pitch_home_deg;              /* Pitch 归中机械目标 */
+    float yaw_max_rate_deg_s;          /* Yaw 归中最大目标速度 */
+    float pitch_max_rate_deg_s;        /* Pitch 归中最大目标速度 */
+    float yaw_decel_rad_s2;            /* Yaw 归中制动假设 */
+    float pitch_decel_rad_s2;          /* Pitch 归中制动假设 */
+    float yaw_torque_limit_nm;         /* Yaw 归中输出限幅 */
+    float pitch_torque_limit_nm;       /* Pitch 归中输出限幅 */
+    uint8_t pitch_gravity_enable;      /* Pitch 归中重力补偿开关 */
+    float pitch_gravity_k_nm;          /* Pitch 归中重力补偿幅值 */
+    float pitch_gravity_b_nm;          /* Pitch 归中重力补偿偏置 */
+    float pitch_gravity_sign;          /* Pitch 归中重力补偿方向 */
+    float pitch_gravity_middle_deg;    /* Pitch 归中重力补偿相位 */
 } gimbal_init_info_t;
 
 /* 云台前馈量。 */
@@ -220,6 +234,8 @@ typedef struct
     pid_ctrl_t yaw_mec_inner;      /* Yaw 电机速度内环 */
     pid_ctrl_t yaw_init_outer;     /* Yaw 归中角度外环 */
     pid_ctrl_t yaw_init_inner;     /* Yaw 归中速度内环 */
+    pid_ctrl_t pitch_init_outer;   /* Pitch 归中角度外环 */
+    pid_ctrl_t pitch_init_inner;   /* Pitch 归中速度内环 */
     pid_ctrl_t pitch_gyro_outer;   /* Pitch 陀螺角度外环 */
     pid_ctrl_t pitch_gyro_inner;   /* Pitch IMU 角速度内环 */
     pid_ctrl_t pitch_mec_outer;    /* Pitch 机械角度外环 */
