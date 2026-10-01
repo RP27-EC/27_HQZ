@@ -37,19 +37,22 @@
 #define GIMBAL_PITCH_MIN_DEG       (-7.5f)
 /* Pitch 机械上限 */
 #define GIMBAL_PITCH_MAX_DEG       30.0f
-/* 机械模式：位置外环微分与制动整形 */
+/* 机械模式 Yaw：位置外环微分与制动整形 */
 #define GIMBAL_MEC_OUTER_KD              0.1f
 #define GIMBAL_MEC_OUTER_D_FILTER_ALPHA  0.85f
 #define GIMBAL_MEC_ERR_DEADBAND_DEG      0.1f
 #define GIMBAL_MEC_YAW_MAX_RATE_DEG_S    120.0f
-#define GIMBAL_MEC_PITCH_MAX_RATE_DEG_S  90.0f
 #define GIMBAL_MEC_YAW_DECEL_RAD_S2      8.0f
-#define GIMBAL_MEC_PITCH_DECEL_RAD_S2    6.0f
-/* 机械模式：小误差直接位置刚度与阻尼 */
+
+/*
+ * 机械模式 Pitch 不单独建环：直接复用速控的 pitch 通路
+ * （操作手角速度 + pitch_hold 保持环 + pitch_gyro_inner 速度环）。
+ * 机械模式与速控在 pitch 上是同一段代码，只是 Yaw 仍走机械环。
+ */
+
+/* 机械模式 Yaw：小误差直接位置刚度与阻尼 */
 #define GIMBAL_MEC_YAW_HOLD_KP_NM_PER_DEG   0.8f
 #define GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S 0.08f
-#define GIMBAL_MEC_PITCH_HOLD_KP_NM_PER_DEG 0.5f
-#define GIMBAL_MEC_PITCH_HOLD_KD_NM_PER_RAD_S 0.06f
 #define GIMBAL_MEC_HOLD_FULL_ERR_DEG     1.0f
 #define GIMBAL_MEC_HOLD_ENTER_ERR_DEG    3.0f
 #define GIMBAL_MEC_HOLD_TORQUE_LIMIT_NM  3.0f
@@ -238,8 +241,6 @@ typedef struct
     pid_ctrl_t pitch_init_inner;   /* Pitch 归中速度内环 */
     pid_ctrl_t pitch_gyro_outer;   /* Pitch 陀螺角度外环 */
     pid_ctrl_t pitch_gyro_inner;   /* Pitch IMU 角速度内环 */
-    pid_ctrl_t pitch_mec_outer;    /* Pitch 机械角度外环 */
-    pid_ctrl_t pitch_mec_inner;    /* Pitch 电机速度内环 */
 
     pid_ctrl_t yaw_hold;           /* Yaw 速控松杆保持环（角度 -> 角速度） */
     pid_ctrl_t pitch_hold;         /* Pitch 速控松杆保持环（角度 -> 角速度） */

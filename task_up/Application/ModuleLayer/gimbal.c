@@ -198,8 +198,6 @@ static void gimbal_clear_all_pid(gimbal_t *gimbal)
     gimbal_pid_clear(&gimbal->pid_info.pitch_init_inner);
     gimbal_pid_clear(&gimbal->pid_info.pitch_gyro_outer);
     gimbal_pid_clear(&gimbal->pid_info.pitch_gyro_inner);
-    gimbal_pid_clear(&gimbal->pid_info.pitch_mec_outer);
-    gimbal_pid_clear(&gimbal->pid_info.pitch_mec_inner);
     gimbal_pid_clear(&gimbal->pid_info.yaw_hold);
     gimbal_pid_clear(&gimbal->pid_info.pitch_hold);
 }
@@ -276,16 +274,6 @@ static void gimbal_pid_init(gimbal_t *gimbal)
     pid->out_max = GIMBAL_INIT_PITCH_INNER_OUT_MAX;
     pid->deadband = 0.0f;
     pid->d_filter_alpha = GIMBAL_INIT_D_FILTER_ALPHA;
-
-    pid = &gimbal->pid_info.pitch_mec_outer;
-    pid->kp = 1.6f; pid->ki = 0.0f; pid->kd = GIMBAL_MEC_OUTER_KD;
-    pid->deadband = GIMBAL_MEC_ERR_DEADBAND_DEG;
-    pid->d_filter_alpha = GIMBAL_MEC_OUTER_D_FILTER_ALPHA;
-    pid->integral_max = 500.0f; pid->out_max = 10.0f;
-
-    pid = &gimbal->pid_info.pitch_mec_inner;
-    pid->kp = 1.2f; pid->ki = 0.0f; pid->kd = 0.0f;
-    pid->integral_max = 0.0f; pid->out_max = 10.0f;
 
     /* 速控松杆保持环：角度误差 -> 目标角速度修正量 */
     pid = &gimbal->pid_info.yaw_hold;
@@ -907,18 +895,23 @@ static void gimbal_calc_output(gimbal_t *gimbal)
             -gimbal->init_info.yaw_torque_limit_nm,
             gimbal->init_info.yaw_torque_limit_nm);
         break;
-    case G_MEC: /* 机械模式：位置限速制动 */
+    case G_MEC: /* 机械模式：Pitch 直接复用速控通路，Yaw 位置限速制动 */
+        /*
+         * Pitch 与 G_RATE 分支是同一段逻辑：操作手角速度前馈 + 松杆保持环
+         * 出目标角速度，再走 pitch_gyro_inner 速度环。共用一个 PID 对象，
+         * 改速控参数即改机械模式，不留第二套参数。
+         */
+        gimbal_update_rate_targets(gimbal);
+
         gimbal->base_info.output_gimbal_p =
-            gimbal_mec_pid_calc(&gimbal->pid_info.pitch_mec_outer,
-                                &gimbal->pid_info.pitch_mec_inner,
-                                gimbal->pid_info.pitch_target,
-                                gimbal->base_info.pitch_mec_angle,
-                                gimbal->base_info.pitch_mec_speed,
-                                GIMBAL_MEC_PITCH_MAX_RATE_DEG_S,
-                                GIMBAL_MEC_PITCH_DECEL_RAD_S2,
-                                GIMBAL_MEC_PITCH_HOLD_KP_NM_PER_DEG,
-                                GIMBAL_MEC_PITCH_HOLD_KD_NM_PER_RAD_S,
-                                0u) + gravity;
+            all_pid_calc(NULL,
+                         &gimbal->pid_info.pitch_gyro_inner,
+                         gimbal->feedforward.pitch_rate_target_deg_s,
+                         0.0f,
+                         gimbal->base_info.pitch_mec_speed,
+                         0.0f,
+                         GIMBAL_RAD_TO_DEG,
+                         0) + gravity;
 
         gimbal->base_info.output_gimbal_y =
             gimbal_mec_pid_calc(&gimbal->pid_info.yaw_mec_outer,
