@@ -234,7 +234,7 @@ static void gimbal_pid_init(gimbal_t *gimbal)
     pid->integral_max = 0.0f; pid->out_max = 500.0f;
 
     pid = &gimbal->pid_info.yaw_mec_inner;
-    pid->kp = 3.5f; pid->ki = 0.0f; pid->kd = 0.0f;
+    pid->kp = 5.5f; pid->ki = 0.0f; pid->kd = 0.2f;
     pid->integral_max = 0.0f; pid->out_max = 100.0f;
 
     /* Yaw 归中编码器串级 */
@@ -791,71 +791,87 @@ static float gimbal_init_pid_calc(pid_ctrl_t *outer,
     return inner->out;
 }
 
-/* 机械串级：位置 P/D -> 限速 -> 速度 PID -> 力矩 */
 /* 小误差保持力矩的权重：远距离为 0，近距离为 1 */
 static float gimbal_mec_hold_blend(float error_deg)
 {
     float abs_error = gimbal_abs(error_deg);
+    float full_err = gimbal_tune.mec_hold_full_err_deg;
+    float enter_err = gimbal_tune.mec_hold_enter_err_deg;
 
-    if (abs_error <= GIMBAL_MEC_HOLD_FULL_ERR_DEG)
+    if (abs_error <= full_err)
     {
         return 1.0f;
     }
-    if (abs_error >= GIMBAL_MEC_HOLD_ENTER_ERR_DEG)
+    /* enter <= full 时区间退化，直接交给速度环，避免在线调参时除零 */
+    if ((abs_error >= enter_err) || (enter_err <= full_err))
     {
         return 0.0f;
     }
 
-    return (GIMBAL_MEC_HOLD_ENTER_ERR_DEG - abs_error) /
-           (GIMBAL_MEC_HOLD_ENTER_ERR_DEG -
-            GIMBAL_MEC_HOLD_FULL_ERR_DEG);
+    return (enter_err - abs_error) / (enter_err - full_err);
 }
 
-static float gimbal_mec_pid_calc(pid_ctrl_t *outer,
-                                pid_ctrl_t *inner,
-                                float target,
-                                float angle,
-                                float speed,
-                                float max_rate_deg_s,
-                                float decel_rad_s2,
-                                float hold_kp_nm_per_deg,
-                                float hold_kd_nm_per_rad_s,
-                                uint8_t wrap)
+/*
+ * 机械模式 Yaw：位置外环(角度误差 -> 目标角速度) + 速度内环 -> 力矩。
+ *
+ * 稳定性照搬底盘跟随（chassis_follow.c）的经验：
+ *   1. 小误差死区，中心直接不出力，抑制到位后的高频抖动；
+ *   2. 线束/静摩擦前馈，按误差方向叠加一份恒定力矩，避免"卡住 -> 误差累积
+ *      -> 猛冲 -> 超调"的极限环；死区内不叠加，否则会在中心来回翻转；
+ *   3. 阻尼用的转速先低通再微分，不在编码器量化噪声上做微分。
+ * 输出力矩的斜率限幅在调用处叠加，因为需要上一拍的输出值。
+ */
+static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
 {
+    pid_ctrl_t *outer = &gimbal->pid_info.yaw_mec_outer; /* 位置外环 */
+    pid_ctrl_t *inner = &gimbal->pid_info.yaw_mec_inner; /* 速度内环 */
     float speed_loop_out;
     float hold_torque;
     float hold_blend;
     float speed_limit;
+    float out;
 
-    outer->target = target;
-    outer->measure = angle;
-    outer->err = target - angle;
-    if (wrap != 0u)
-    {
-        outer->err = gimbal_wrap_deg(outer->err);
-    }
-    single_pid_ctrl(outer);
+    outer->target = gimbal->pid_info.yaw_target;
+    outer->measure = gimbal->base_info.yaw_mec_angle;
+    outer->err = gimbal_wrap_deg(outer->target - outer->measure);
+    outer->deadband = gimbal_tune.mec_yaw_deadband_deg; /* 在线可改 */
+    single_pid_ctrl(outer); /* 死区内 err 会被清零，下面据此停掉前馈 */
 
     speed_limit = gimbal_mec_speed_limit(outer->err,
-                                          max_rate_deg_s,
-                                          decel_rad_s2);
+                                          gimbal_tune.mec_yaw_max_rate_deg_s,
+                                          gimbal_tune.mec_yaw_decel_rad_s2);
     outer->out = gimbal_clamp(outer->out, -speed_limit, speed_limit);
 
     inner->target = outer->out;
-    inner->measure = speed;
+    inner->measure = gimbal->base_info.yaw_mec_speed;
     inner->err = inner->target - inner->measure;
     single_pid_ctrl(inner);
-
     speed_loop_out = inner->out;
-    hold_torque = hold_kp_nm_per_deg * outer->err -
-                  hold_kd_nm_per_rad_s * speed;
+
+    /* 低通后的转速只用于阻尼项，速度环反馈仍用原始值以免丢相位裕度 */
+    gimbal->base_info.yaw_mec_speed_lpf += GIMBAL_MEC_YAW_SPEED_LPF_ALPHA *
+        (gimbal->base_info.yaw_mec_speed - gimbal->base_info.yaw_mec_speed_lpf);
+
+    hold_torque = gimbal_tune.mec_yaw_hold_kp_nm_per_deg * outer->err -
+                  gimbal_tune.mec_yaw_hold_kd_nm_per_rad_s *
+                      gimbal->base_info.yaw_mec_speed_lpf;
     hold_torque = gimbal_clamp(hold_torque,
                                -GIMBAL_MEC_HOLD_TORQUE_LIMIT_NM,
                                GIMBAL_MEC_HOLD_TORQUE_LIMIT_NM);
     hold_blend = gimbal_mec_hold_blend(outer->err);
 
-    return (speed_loop_out * (1.0f - hold_blend)) +
-           (hold_torque * hold_blend);
+    out = (speed_loop_out * (1.0f - hold_blend)) + (hold_torque * hold_blend);
+
+    if (outer->err > 0.0f)
+    {
+        out += gimbal_tune.mec_yaw_friction_ff_nm;
+    }
+    else if (outer->err < 0.0f)
+    {
+        out -= gimbal_tune.mec_yaw_friction_ff_nm;
+    }
+
+    return out;
 }
 
 /* 按当前模式计算两轴力矩并做硬件限幅 */
@@ -895,7 +911,10 @@ static void gimbal_calc_output(gimbal_t *gimbal)
             -gimbal->init_info.yaw_torque_limit_nm,
             gimbal->init_info.yaw_torque_limit_nm);
         break;
-    case G_MEC: /* 机械模式：Pitch 直接复用速控通路，Yaw 位置限速制动 */
+    case G_MEC: /* 机械模式：Pitch 复用速控通路，Yaw 位置环 + 速度环 */
+    {
+        float yaw_out;
+
         /*
          * Pitch 与 G_RATE 分支是同一段逻辑：操作手角速度前馈 + 松杆保持环
          * 出目标角速度，再走 pitch_gyro_inner 速度环。共用一个 PID 对象，
@@ -913,18 +932,18 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          GIMBAL_RAD_TO_DEG,
                          0) + gravity;
 
-        gimbal->base_info.output_gimbal_y =
-            gimbal_mec_pid_calc(&gimbal->pid_info.yaw_mec_outer,
-                                &gimbal->pid_info.yaw_mec_inner,
-                                gimbal->pid_info.yaw_target,
-                                gimbal->base_info.yaw_mec_angle,
-                                gimbal->base_info.yaw_mec_speed,
-                                GIMBAL_MEC_YAW_MAX_RATE_DEG_S,
-                                GIMBAL_MEC_YAW_DECEL_RAD_S2,
-                                GIMBAL_MEC_YAW_HOLD_KP_NM_PER_DEG,
-                                GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S,
-                                1u);
+        /*
+         * 输出力矩斜率限幅，同底盘跟随的 Chassis_Follow_Ramp(last_wz, wz, STEP)。
+         * 上一拍输出取自 base_info.output_gimbal_y，模式切换帧被清零，所以
+         * 每次进机械模式都是从 0 平滑爬到目标力矩。
+         */
+        yaw_out = gimbal_mec_yaw_calc(gimbal);
+        gimbal->base_info.output_gimbal_y = gimbal_ramp(
+            gimbal->base_info.output_gimbal_y,
+            yaw_out,
+            gimbal_tune.mec_yaw_torque_step_nm);
         break;
+    }
     case G_GYRO:
         // Pitch 陀螺仪环
         gimbal->base_info.output_gimbal_p =
@@ -1060,6 +1079,15 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_tune.mouse_pitch_sign = GIMBAL_MOUSE_PITCH_SIGN;
     gimbal_tune.mouse_rate_ff_dps_per_count = GIMBAL_MOUSE_RATE_FF_DPS_PER_COUNT;
     gimbal_tune.mouse_deadband_count = GIMBAL_MOUSE_DEADBAND_COUNT;
+    gimbal_tune.mec_yaw_hold_kp_nm_per_deg = GIMBAL_MEC_YAW_HOLD_KP_NM_PER_DEG;
+    gimbal_tune.mec_yaw_hold_kd_nm_per_rad_s = GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S;
+    gimbal_tune.mec_yaw_max_rate_deg_s = GIMBAL_MEC_YAW_MAX_RATE_DEG_S;
+    gimbal_tune.mec_yaw_decel_rad_s2 = GIMBAL_MEC_YAW_DECEL_RAD_S2;
+    gimbal_tune.mec_yaw_deadband_deg = GIMBAL_MEC_ERR_DEADBAND_DEG;
+    gimbal_tune.mec_yaw_torque_step_nm = GIMBAL_MEC_YAW_TORQUE_STEP_NM;
+    gimbal_tune.mec_yaw_friction_ff_nm = GIMBAL_MEC_YAW_FRICTION_FF_NM;
+    gimbal_tune.mec_hold_full_err_deg = GIMBAL_MEC_HOLD_FULL_ERR_DEG;
+    gimbal_tune.mec_hold_enter_err_deg = GIMBAL_MEC_HOLD_ENTER_ERR_DEG;
 
     /* 绑定电机驱动 */
     gimbal->pitch_motor = &dm_motor[PITCH]; /* 绑定 Pitch */
@@ -1115,6 +1143,7 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_pid_init(gimbal);
     gimbal->base_info.output_gimbal_p = 0.0f;
     gimbal->base_info.output_gimbal_y = 0.0f;
+    gimbal->base_info.yaw_mec_speed_lpf = 0.0f;
 }
 
 /* 主执行入口，放control任务中 */

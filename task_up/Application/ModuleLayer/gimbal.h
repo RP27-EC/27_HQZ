@@ -40,9 +40,20 @@
 /* 机械模式 Yaw：位置外环微分与制动整形 */
 #define GIMBAL_MEC_OUTER_KD              0.1f
 #define GIMBAL_MEC_OUTER_D_FILTER_ALPHA  0.85f
-#define GIMBAL_MEC_ERR_DEADBAND_DEG      0.1f
+/* 中心死区：区间内不出力，抑制到位后的高频抖动（参考底盘跟随的 5° 死区） */
+#define GIMBAL_MEC_ERR_DEADBAND_DEG      0.2f
 #define GIMBAL_MEC_YAW_MAX_RATE_DEG_S    120.0f
-#define GIMBAL_MEC_YAW_DECEL_RAD_S2      8.0f
+/* 制动假设必须接近实测能达到的角减速度，填大了会刹不住而超调 */
+#define GIMBAL_MEC_YAW_DECEL_RAD_S2      4.0f
+/* 输出力矩斜率限幅，单位 N·m/ms，照搬底盘跟随的 Ramp(last_wz, wz, WZ_STEP)。
+ * 满量程 6 N·m 约需 6/STEP 毫秒，0 表示不限幅。 */
+#define GIMBAL_MEC_YAW_TORQUE_STEP_NM    0.08f
+/* 线束/静摩擦前馈：按误差方向叠加的恒定力矩，用来破静摩擦，
+ * 避免"卡住 → 误差累积 → 猛冲"。死区内不叠加，否则会在中心来回翻转。 */
+#define GIMBAL_MEC_YAW_FRICTION_FF_NM    0.3f
+/* 阻尼所用转速的一阶低通系数，截止约 16 Hz。
+ * 转速不过滤就对它做微分，会在编码器量化噪声上自激，发出嗡嗡声。 */
+#define GIMBAL_MEC_YAW_SPEED_LPF_ALPHA   0.1f
 
 /*
  * 机械模式 Pitch 不单独建环：直接复用速控的 pitch 通路
@@ -50,11 +61,15 @@
  * 机械模式与速控在 pitch 上是同一段代码，只是 Yaw 仍走机械环。
  */
 
-/* 机械模式 Yaw：小误差直接位置刚度与阻尼 */
-#define GIMBAL_MEC_YAW_HOLD_KP_NM_PER_DEG   0.8f
-#define GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S 0.08f
-#define GIMBAL_MEC_HOLD_FULL_ERR_DEG     1.0f
-#define GIMBAL_MEC_HOLD_ENTER_ERR_DEG    3.0f
+/*
+ * 机械模式 Yaw：小误差段的直接位置刚度与阻尼。
+ * 阻尼比 ζ = KD / (2·√(KP·J))，J 是 yaw 轴转动惯量。
+ * 这几个值经 gimbal_tune 暴露，可在 Keil Watch 在线改。
+ */
+#define GIMBAL_MEC_YAW_HOLD_KP_NM_PER_DEG   2.0f
+#define GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S 0.5f
+#define GIMBAL_MEC_HOLD_FULL_ERR_DEG     0.3f
+#define GIMBAL_MEC_HOLD_ENTER_ERR_DEG    1.0f
 #define GIMBAL_MEC_HOLD_TORQUE_LIMIT_NM  3.0f
 /* 最终输出力矩限幅 */
 #define GIMBAL_TORQUE_LIMIT        6.0f
@@ -217,6 +232,16 @@ typedef struct
     volatile float mouse_pitch_sign;
     volatile float mouse_rate_ff_dps_per_count;
     volatile float mouse_deadband_count;
+    /* 机械模式 Yaw：只作用于 G_MEC 的 yaw 轴，Keil Watch 在线可改 */
+    volatile float mec_yaw_hold_kp_nm_per_deg;
+    volatile float mec_yaw_hold_kd_nm_per_rad_s;
+    volatile float mec_yaw_max_rate_deg_s;
+    volatile float mec_yaw_decel_rad_s2;
+    volatile float mec_yaw_deadband_deg;
+    volatile float mec_yaw_torque_step_nm;
+    volatile float mec_yaw_friction_ff_nm;
+    volatile float mec_hold_full_err_deg;
+    volatile float mec_hold_enter_err_deg;
 } gimbal_tune_t;
 
 /* 目标角与 8 路串级 PID */
@@ -256,6 +281,7 @@ typedef struct
 
     float yaw_mec_angle;           /* Yaw 电机机械角 */
     float yaw_mec_speed;           /* Yaw 电机机械角速度 */
+    float yaw_mec_speed_lpf;       /* Yaw 机械角速度低通值，仅用于阻尼项 */
     float pitch_mec_angle;         /* Pitch 电机机械角 */
     float pitch_mec_speed;         /* Pitch 电机机械角速度*/
 
