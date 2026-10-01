@@ -120,7 +120,6 @@
         <SetRegEntry>
           <Number>0</Number>
           <Key>DLGUARM</Key>
-          <Name>	</Name>
         </SetRegEntry>
         <SetRegEntry>
           <Number>0</Number>
@@ -405,12 +404,27 @@
         <Ww>
           <count>22</count>
           <WinNumber>2</WinNumber>
-          <ItemText>gimbal_trace.err[]</ItemText>
+          <ItemText>gimbal_trace.err,0x0A</ItemText>
         </Ww>
         <Ww>
           <count>23</count>
           <WinNumber>2</WinNumber>
-          <ItemText>gimbal_trace.err,0x0A</ItemText>
+          <ItemText>gimbal_tune.mec_yaw_torque_step_nm</ItemText>
+        </Ww>
+        <Ww>
+          <count>24</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>Gimbal.pid_info.yaw_target    </ItemText>
+        </Ww>
+        <Ww>
+          <count>25</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>Gimbal.init_info.mode_transition_active </ItemText>
+        </Ww>
+        <Ww>
+          <count>26</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>Gimbal.base_info.yaw_mec_speed  </ItemText>
         </Ww>
       </WatchWindow2>
       <Tracepoint>

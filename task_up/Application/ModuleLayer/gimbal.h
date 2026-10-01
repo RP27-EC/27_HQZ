@@ -10,6 +10,7 @@
 #include "motor.h"
 #include "rp_device_config.h"
 #include "gimbal_init_config.h"
+#include "gimbal_turn_config.h"
 
 /*
  * 云台控制层对外接口。
@@ -260,6 +261,8 @@ typedef struct
     pid_ctrl_t yaw_gyro_inner;     /* Yaw IMU 角速度内环 */
     pid_ctrl_t yaw_mec_outer;      /* Yaw 机械角度外环 */
     pid_ctrl_t yaw_mec_inner;      /* Yaw 电机速度内环 */
+    pid_ctrl_t yaw_turn_outer;     /* Yaw 掉头角度外环（归中式串级，参数独立） */
+    pid_ctrl_t yaw_turn_inner;     /* Yaw 掉头速度内环（归中式串级，参数独立） */
     pid_ctrl_t yaw_init_outer;     /* Yaw 归中角度外环 */
     pid_ctrl_t yaw_init_inner;     /* Yaw 归中速度内环 */
     pid_ctrl_t pitch_init_outer;   /* Pitch 归中角度外环 */

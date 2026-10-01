@@ -26,11 +26,17 @@ typedef struct
     volatile uint8_t button_event;
     volatile uint8_t is_hole;
     volatile uint8_t exit_pending;
+    volatile uint8_t hole_rear_blocked; /* 反向时按 B 被拒绝 */
 } board_lift_debug_t;
 
 volatile board_lift_debug_t board_lift_dbg;
 volatile uint8_t board_hole_request;
 volatile uint8_t board_hole_exit_pending;
+
+/* 云台机械模式前后方向状态：0 前，1 后。
+ * 放在文件级是因为过洞命令也要判它（反向不允许进狗洞），而且 R 键现在在
+ * 任何 S1 位置都要能切换，只有遥控离线才复位。 */
+static uint8_t board_gimbal_yaw_rear = 0u;
 
 #if BOARD_COMM_DEBUG
 static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
@@ -52,6 +58,7 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
         board_hole_exit_pending = 0u;
         board_lift_dbg.is_hole = 0u;
         board_lift_dbg.exit_pending = 0u;
+        board_lift_dbg.hole_rear_blocked = 0u;
         board.tx_pkt->gimbal_target_pkt.is_hole = 0u;
         return 0u;
     }
@@ -64,13 +71,26 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
         (rc_info->s2.value == RC_SW_MID) &&
         (button_event != 0u))
     {
-        board_hole_request ^= 1u;
-        if (board_hole_request != 0u)
+        if (board_hole_request == 0u)
         {
-            board_hole_exit_pending = 0u;
+            /*
+             * 狗洞只允许云台正对前方时进入。反向时忽略这次按键、不置位请求，
+             * 上板升降因此不会进入对位/下压流程。
+             */
+            if (board_gimbal_yaw_rear == 0u)
+            {
+                board_hole_request = 1u;
+                board_hole_exit_pending = 0u;
+                board_lift_dbg.hole_rear_blocked = 0u;
+            }
+            else
+            {
+                board_lift_dbg.hole_rear_blocked = 1u;
+            }
         }
         else
         {
+            board_hole_request = 0u;
             board_hole_exit_pending = 1u;
             hole_exit_tick = now;
         }
@@ -107,7 +127,6 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
 static void Board_Debug_Gimbal_Command(void)
 {
     static uint8_t mec_mode_active = 0u; /* 机械角模式已激活 */
-    static uint8_t yaw_rear = 0u;         /* 机械模式目标：0 前，1 后 */
     static uint8_t last_r_pressed = 0u;   /* R 键上次状态 */
     static float pitch_mec_target = 0.0f;/* Pitch 机械目标角，rad */
     rc_data_t *rc_info = rc_dev.info;     /* 遥控数据源 */
@@ -115,7 +134,7 @@ static void Board_Debug_Gimbal_Command(void)
 
     if (rc_dev.work_state != DEV_ONLINE)
     {
-        yaw_rear = 0u;
+        board_gimbal_yaw_rear = 0u;
         last_r_pressed = 0u;
         mec_mode_active = 0u;
         board.tx_pkt->car_pkt.car_state = 0u;
@@ -133,13 +152,28 @@ static void Board_Debug_Gimbal_Command(void)
 #if BOARD_LIFT_ENABLE
     if (Board_Debug_Hole_Command(rc_info) != 0u)
     {
+        /* 过洞期间云台被强制正前方，不响应 R；方向状态留到退出后再改 */
         mec_mode_active = 0u;
-        yaw_rear = 0u;
         last_r_pressed = r_pressed;
         return;
     }
 #endif
-    /* S1 下位保留控制使能，仅切换机械环 */
+
+    /*
+     * R 键在任何 S1 位置都生效：边沿检测放在 S1 分支之前。
+     * 方向状态只在遥控离线时复位，进出机械模式都不清，
+     * 所以在速控/遥控状态下按 R，切到 S1 下位时立刻生效。
+     */
+    if ((r_pressed != 0u) && (last_r_pressed == 0u))
+    {
+        board_gimbal_yaw_rear ^= 1u;
+    }
+    last_r_pressed = r_pressed;
+
+    /* 前后目标每个周期都下发，与当前 S1 位置无关 */
+    board.tx_pkt->gimbal_target_pkt.yaw_mec_tar =
+        (board_gimbal_yaw_rear != 0u) ? BOARD_MEC_YAW_REAR_RAD : BOARD_MEC_YAW_FRONT_RAD;
+
     /* S1 下拨：只切换云台机械环，底盘仍由底盘分支控制 */
     if (rc_info->s1.value == RC_SW_DOWN)
     {
@@ -148,20 +182,8 @@ static void Board_Debug_Gimbal_Command(void)
         if (mec_mode_active == 0u)
         {
             pitch_mec_target = board.rx_meg->gimbal_meg.pitch_mec;
-            yaw_rear = 0u;
-            last_r_pressed = r_pressed;
             mec_mode_active = 1u;
         }
-        else if ((r_pressed != 0u) && (last_r_pressed == 0u))
-        {
-            yaw_rear ^= 1u;
-        }
-
-        last_r_pressed = r_pressed;
-
-        /* ch0 留给底盘转向，R 键切前后目标 */
-        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar =
-            (yaw_rear != 0u) ? BOARD_MEC_YAW_REAR_RAD : BOARD_MEC_YAW_FRONT_RAD;
 
         pitch_mec_target += (float)rc_info->ch1 / BOARD_RC_AXIS_MAX *
                             BOARD_MEC_PITCH_STEP_RAD;
@@ -180,8 +202,6 @@ static void Board_Debug_Gimbal_Command(void)
     {
         board.tx_pkt->car_pkt.gimbal_mode = 1u;
         mec_mode_active = 0u;
-        yaw_rear = 0u;
-        last_r_pressed = r_pressed;
     }
 }
 #endif

@@ -70,6 +70,10 @@
 
 /* 云台对齐和行程保护 */
 #define LIFT_ALIGN_TOL_DEG              5.0f
+/* 狗洞升降只允许云台正对前方（机械角 0° 附近）。
+ * 与上面的对齐判据互为兜底：对齐只保证"到了当前目标"，反向时目标就是 -180°，
+ * 光靠对齐判据在后方也算到位，所以这里必须单独判一次朝向。 */
+#define LIFT_FRONT_TOL_DEG              10.0f
 #define LIFT_OVERTRAVEL_COUNTS          40.0f
 
 /* 手动调试最大输出 */

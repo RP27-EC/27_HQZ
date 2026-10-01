@@ -192,6 +192,8 @@ static void gimbal_clear_all_pid(gimbal_t *gimbal)
     gimbal_pid_clear(&gimbal->pid_info.yaw_gyro_inner);
     gimbal_pid_clear(&gimbal->pid_info.yaw_mec_outer);
     gimbal_pid_clear(&gimbal->pid_info.yaw_mec_inner);
+    gimbal_pid_clear(&gimbal->pid_info.yaw_turn_outer);
+    gimbal_pid_clear(&gimbal->pid_info.yaw_turn_inner);
     gimbal_pid_clear(&gimbal->pid_info.yaw_init_outer);
     gimbal_pid_clear(&gimbal->pid_info.yaw_init_inner);
     gimbal_pid_clear(&gimbal->pid_info.pitch_init_outer);
@@ -236,6 +238,25 @@ static void gimbal_pid_init(gimbal_t *gimbal)
     pid = &gimbal->pid_info.yaw_mec_inner;
     pid->kp = 5.5f; pid->ki = 0.0f; pid->kd = 0.2f;
     pid->integral_max = 0.0f; pid->out_max = 100.0f;
+
+    /* Yaw 掉头串级：与归中同款做法，参数是独立的一份拷贝 */
+    pid = &gimbal->pid_info.yaw_turn_outer;
+    pid->kp = GIMBAL_TURN_YAW_OUTER_KP;
+    pid->ki = GIMBAL_TURN_YAW_OUTER_KI;
+    pid->kd = GIMBAL_TURN_YAW_OUTER_KD;
+    pid->integral_max = GIMBAL_TURN_YAW_OUTER_INTEGRAL_MAX;
+    pid->out_max = GIMBAL_TURN_YAW_OUTER_OUT_MAX;
+    pid->deadband = 0.0f;
+    pid->d_filter_alpha = GIMBAL_TURN_D_FILTER_ALPHA;
+
+    pid = &gimbal->pid_info.yaw_turn_inner;
+    pid->kp = GIMBAL_TURN_YAW_INNER_KP;
+    pid->ki = GIMBAL_TURN_YAW_INNER_KI;
+    pid->kd = GIMBAL_TURN_YAW_INNER_KD;
+    pid->integral_max = GIMBAL_TURN_YAW_INNER_INTEGRAL_MAX;
+    pid->out_max = GIMBAL_TURN_YAW_INNER_OUT_MAX;
+    pid->deadband = 0.0f;
+    pid->d_filter_alpha = GIMBAL_TURN_D_FILTER_ALPHA;
 
     /* Yaw 归中编码器串级 */
     pid = &gimbal->pid_info.yaw_init_outer;
@@ -507,6 +528,23 @@ static void gimbal_update_targets(gimbal_t *gimbal)
         gimbal->pid_info.pitch_target = gimbal_ramp(
             gimbal->pid_info.pitch_target, pitch_final, gimbal->init_info.pitch_ramp_step);
     }
+    else if (gimbal->gimbal_mode == G_MEC)
+    {
+        /*
+         * 掉头：Yaw 目标按归中同款斜坡给出。
+         *
+         * WARNING: 这一支必须排在 mode_transition_active 之前。机械模式里
+         * pitch_final 来自下板持续积分的 pitch_mec_tar，只要右摇杆不在绝对
+         * 中位它就每周期都在变，模式切换斜坡的"双轴都到位"判据永远不成立，
+         * mode_transition_active 就会一直停在 1，把这里的掉头斜坡整个挡掉，
+         * 结果掉头实际用的是硬编码的 mode_yaw_ramp_step(0.1)，改这个宏毫无效果。
+         * 所以机械模式直接清掉该标志，只用掉头斜坡。
+         */
+        gimbal->init_info.mode_transition_active = 0;
+        gimbal->pid_info.yaw_target = gimbal_ramp_wrapped(
+            gimbal->pid_info.yaw_target, yaw_final, GIMBAL_TURN_YAW_RAMP_DEG_PER_MS);
+        gimbal->pid_info.pitch_target = pitch_final;
+    }
     else if (gimbal->init_info.mode_transition_active)
     {
         gimbal->pid_info.yaw_target = gimbal_ramp_wrapped(
@@ -757,6 +795,7 @@ static float gimbal_init_pid_calc(pid_ctrl_t *outer,
                                  float speed,
                                  float max_rate_deg_s,
                                  float decel_rad_s2,
+                                 uint8_t speed_limit_enable,
                                  uint8_t wrap)
 {
     float speed_limit;
@@ -771,11 +810,11 @@ static float gimbal_init_pid_calc(pid_ctrl_t *outer,
     single_pid_ctrl(outer);
 
     /*
-     * 归中单独选择是否套用制动曲线限速。
-     * 关闭时外环只受自身 out_max 限幅，等价于旧版快速归中的 all_pid_calc 路径；
-     * 该开关只作用于 G_INIT，机械/陀螺环不受影响。
+     * 是否套用制动曲线限速由调用方传入：
+     * 关闭时外环只受自身 out_max 限幅，等价于旧版快速归中的 all_pid_calc 路径。
+     * 归中与掉头各传各的开关，两边参数互不影响。
      */
-    if (GIMBAL_INIT_SPEED_LIMIT_ENABLE != 0u)
+    if (speed_limit_enable != 0u)
     {
         speed_limit = gimbal_mec_speed_limit(outer->err,
                                               max_rate_deg_s,
@@ -812,7 +851,7 @@ static float gimbal_mec_hold_blend(float error_deg)
 }
 
 /*
- * 机械模式 Yaw：位置外环(角度误差 -> 目标角速度) + 速度内环 -> 力矩。
+ * 机械模式 Yaw 保持段：小误差的直接位置刚度 + 阻尼。
  *
  * 稳定性照搬底盘跟随（chassis_follow.c）的经验：
  *   1. 小误差死区，中心直接不出力，抑制到位后的高频抖动；
@@ -820,6 +859,7 @@ static float gimbal_mec_hold_blend(float error_deg)
  *      -> 猛冲 -> 超调"的极限环；死区内不叠加，否则会在中心来回翻转；
  *   3. 阻尼用的转速先低通再微分，不在编码器量化噪声上做微分。
  * 输出力矩的斜率限幅在调用处叠加，因为需要上一拍的输出值。
+ * 掉头段（误差大）不走这里，见 gimbal_mec_yaw_turn_calc。
  */
 static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
 {
@@ -834,6 +874,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     outer->target = gimbal->pid_info.yaw_target;
     outer->measure = gimbal->base_info.yaw_mec_angle;
     outer->err = gimbal_wrap_deg(outer->target - outer->measure);
+
     outer->deadband = gimbal_tune.mec_yaw_deadband_deg; /* 在线可改 */
     single_pid_ctrl(outer); /* 死区内 err 会被清零，下面据此停掉前馈 */
 
@@ -874,6 +915,34 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     return out;
 }
 
+/*
+ * 机械模式 Yaw 掉头段：误差大时用归中那套位置->速度串级。
+ *
+ * 数值取自 gimbal_turn_config.h，是归中参数的一份独立拷贝；串级函数也是
+ * 归中用的 gimbal_init_pid_calc。归中串级的外环输出不被制动曲线钳成 rad/s，
+ * 量纲是 deg 级，所以同样的 PID 数值能在满误差时打满力矩；机械 yaw 自己的
+ * 串级外环被钳到 <=2.09 rad/s，把归中的数值直接搬过去只会让掉头更软，
+ * 所以必须连串级一起复用。
+ *
+ * 调用方对这个返回值直通写入，不再叠加输出力矩斜率限幅 —— 归中的 G_INIT
+ * 分支就是直通的，那道限幅只属于保持段。
+ */
+static float gimbal_mec_yaw_turn_calc(gimbal_t *gimbal)
+{
+    return gimbal_clamp(
+        gimbal_init_pid_calc(&gimbal->pid_info.yaw_turn_outer,
+                             &gimbal->pid_info.yaw_turn_inner,
+                             gimbal->pid_info.yaw_target,
+                             gimbal->base_info.yaw_mec_angle,
+                             gimbal->base_info.yaw_mec_speed,
+                             GIMBAL_TURN_YAW_MAX_RATE_DEG_S,
+                             GIMBAL_TURN_YAW_DECEL_RAD_S2,
+                             GIMBAL_TURN_SPEED_LIMIT_ENABLE,
+                             1u),
+        -GIMBAL_TURN_YAW_TORQUE_LIMIT_NM,
+        GIMBAL_TURN_YAW_TORQUE_LIMIT_NM);
+}
+
 /* 按当前模式计算两轴力矩并做硬件限幅 */
 static void gimbal_calc_output(gimbal_t *gimbal)
 {
@@ -895,6 +964,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                                  gimbal->base_info.pitch_mec_speed,
                                  gimbal->init_info.pitch_max_rate_deg_s,
                                  gimbal->init_info.pitch_decel_rad_s2,
+                                 GIMBAL_INIT_SPEED_LIMIT_ENABLE,
                                  0u) + gravity,
             -gimbal->init_info.pitch_torque_limit_nm,
             gimbal->init_info.pitch_torque_limit_nm);
@@ -907,6 +977,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                                  gimbal->base_info.yaw_mec_speed,
                                  gimbal->init_info.yaw_max_rate_deg_s,
                                  gimbal->init_info.yaw_decel_rad_s2,
+                                 GIMBAL_INIT_SPEED_LIMIT_ENABLE,
                                  3u),
             -gimbal->init_info.yaw_torque_limit_nm,
             gimbal->init_info.yaw_torque_limit_nm);
@@ -933,15 +1004,28 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          0) + gravity;
 
         /*
-         * 输出力矩斜率限幅，同底盘跟随的 Chassis_Follow_Ramp(last_wz, wz, STEP)。
+         * 掉头段与保持段分开走：
+         *   误差大 -> 归中同一条路径（同一串级函数 + 直通输出），不过力矩斜率
+         *             限幅，与 G_INIT 完全一致；
+         *   误差小 -> 保持环，仍然叠加斜率限幅，同底盘跟随的
+         *             Chassis_Follow_Ramp(last_wz, wz, STEP)。
          * 上一拍输出取自 base_info.output_gimbal_y，模式切换帧被清零，所以
          * 每次进机械模式都是从 0 平滑爬到目标力矩。
          */
-        yaw_out = gimbal_mec_yaw_calc(gimbal);
-        gimbal->base_info.output_gimbal_y = gimbal_ramp(
-            gimbal->base_info.output_gimbal_y,
-            yaw_out,
-            gimbal_tune.mec_yaw_torque_step_nm);
+        if (gimbal_abs(gimbal_wrap_deg(gimbal->pid_info.yaw_target -
+                                       gimbal->base_info.yaw_mec_angle)) >
+            GIMBAL_TURN_ENTER_ERR_DEG)
+        {
+            gimbal->base_info.output_gimbal_y = gimbal_mec_yaw_turn_calc(gimbal);
+        }
+        else
+        {
+            yaw_out = gimbal_mec_yaw_calc(gimbal);
+            gimbal->base_info.output_gimbal_y = gimbal_ramp(
+                gimbal->base_info.output_gimbal_y,
+                yaw_out,
+                gimbal_tune.mec_yaw_torque_step_nm);
+        }
         break;
     }
     case G_GYRO:
