@@ -61,6 +61,14 @@
 /* 输出力矩斜率限幅，单位 N·m/ms，照搬底盘跟随的 Ramp(last_wz, wz, WZ_STEP)。
  * 满量程 6 N·m 约需 6/STEP 毫秒，0 表示不限幅。 */
 #define GIMBAL_MEC_YAW_TORQUE_STEP_NM    0.08f
+
+#define GIMBAL_MEC_YAW_FF_OFF_DPS        5.0f
+#define GIMBAL_MEC_YAW_FF_FULL_DPS       15.0f
+#define GIMBAL_MEC_YAW_FF_BLEND_STEP     0.02f
+#define GIMBAL_MEC_YAW_FF_FALL_STEP      0.10f
+#define GIMBAL_MEC_YAW_FF_FILTER_ALPHA   0.05f
+#define GIMBAL_MEC_YAW_FF_MAX_GAIN       0.90f
+#define GIMBAL_MEC_YAW_NEAR_RATE_KP      10.0f
 /* 线束/静摩擦前馈：按误差方向叠加的恒定力矩，用来破静摩擦，
  * 避免"卡住 → 误差累积 → 猛冲"。死区内不叠加，否则会在中心来回翻转。 */
 #define GIMBAL_MEC_YAW_FRICTION_FF_NM    0.3f
@@ -162,13 +170,13 @@
  * 改这几个宏等于改上电默认值。 */
 
 /* 位置外环 kp。参考原值 0.3（码域）；本工程实测整定为 0.5。 */
-#define GIMBAL_MEC_HOLD_KP_NM_PER_DEG    0.5f
+#define GIMBAL_MEC_HOLD_KP_NM_PER_DEG    1.5f
 /* 位置外环积分。参考折算值 0.25（1.0 × 1ms/4ms）；本工程实测整定为 0.5。 */
-#define GIMBAL_MEC_HOLD_KI_NM_PER_DEG    0.5f
+#define GIMBAL_MEC_HOLD_KI_NM_PER_DEG    0.0f
 /* 位置外环微分。参考 position_kd = 0.005（单位 s，配 4 ms 周期），
  * 按周期折算到 1 ms：0.005 / 0.001 = 5.0。
  * 【现场整定】接近目标时冲过 -> 加大；高频发抖 -> 减小或置 0。 */
-#define GIMBAL_MEC_HOLD_KD_NM_PER_DEG    5.0f
+#define GIMBAL_MEC_HOLD_KD_NM_PER_DEG    0.0f
 /* 积分累加限幅 —— 参考原值直取（单位「码·秒」）。 */
 #define GIMBAL_MEC_HOLD_KI_LIMIT         150.0f
 
@@ -183,32 +191,12 @@
 #define GIMBAL_MEC_HOLD_RATE_KI_LIMIT       0.0f
 /* 速度内环输出限幅（参考 1800/2047 ≈ 88% 量程；本工程最终限幅就是 6 N·m） */
 #define GIMBAL_MEC_HOLD_RATE_OUT_MAX_NM     6.0f
-/* 速率死区，单位 deg/s。
- *
- * 作用：实测角速度小于本值时当作 0，速度内环不再对微小抖动出反向力矩。
- * 这是消除"静止时电机嗡嗡叫、极小角度震荡"的关键 —— 那个震荡是内环在
- * 陀螺/编码器的微小噪声上反复修正产生的极限环，振幅小到看不出轴动但听得见。
- *
- * 物理上等价于给系统加一个"粘滞死区"，不影响运动段的阻尼（60 deg/s 时
- * 仍有 0.08*60 = 4.8 N·m 的制动能力），只在静止附近把噪声掐掉。
- *
- * WARNING: 本项只在【速度内环】上生效。由于位置环的连续软死区
- * (GIMBAL_MEC_HOLD_DEADZONE_DEG) 在目标附近会把位置增益压到 0，
- * 所以若想"静止时仍有力顶住"，还要把那个死区收紧，否则近目标处
- * 位置环和速度环都不出力，云台是松的。
- * 【现场整定】还有嗡嗡声 -> 加大；低速跟不动、发飘 -> 减小或置 0。 */
-#define GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS   6.0f
+/* NOTE: 保留 Watch 布局。 */
+#define GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS   10.0f
 
-/* 连续软死区，单位【度】（代码里会乘 182.04 换算成编码器计数）。
- *
- * 本工程实测整定值：Watch 里 mec_hold_deadzone_count = 180（计数），
- *   180 / 182.04 = 0.9888 度  →  下面宏取 0.9888f。
- *
- * 作用：与原来的硬死区区别很大 —— 硬死区把 err 清零 = 位置环和阻尼一起失效；
- * 软死区只把控制目标挪到死区边界，死区内速度环照常制动，不会抖也不会漂。
- * 代价：死区内的稳态偏差位置环不纠正，所以云台可以停在目标 ±死区 的位置上。
- * 【现场整定】想更有保持力（顶得更硬）-> 减小本值；中心抖动 -> 加大。 */
-#define GIMBAL_MEC_HOLD_DEADZONE_DEG     0.9888f
+/* 静止时的零力矩角度范围，deg。 */
+#define GIMBAL_MEC_HOLD_DEADZONE_DEG     0.3f
+#define GIMBAL_MEC_YAW_HOLD_EXIT_DEG      0.5f
 
 /* 以下两项不再用于机械 Yaw（改成 IMU 内环后不需要了），保留供对照：
  *   GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S  编码器速度阻尼，已被 IMU 内环替代

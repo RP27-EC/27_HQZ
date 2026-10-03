@@ -853,6 +853,9 @@ static float gimbal_init_pid_calc(pid_ctrl_t *outer,
  */
 static pid_ctrl_t gimbal_mec_yaw_pos_pid;
 static pid_ctrl_t gimbal_mec_yaw_rate_pid;
+static float gimbal_mec_yaw_ff_blend;
+static float gimbal_mec_yaw_chassis_rate_lpf;
+static uint8_t gimbal_mec_yaw_hard_hold;
 
 /*
  * 位置式 PID，逐行照搬参考工程 algorithms_library/PID.c 的 PID_Calc()。
@@ -969,10 +972,15 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     float ref_target_count;
     float speed_limit;
     float brake_limit;
+    float near_rate_limit;
     float speed_command;
     float speed_target;
     float rate_command;
     float rate_measure;
+    float chassis_rate;
+    float relative_rate;
+    float ff_target;
+    float ff_step;
     float gyro_dir;
     float torque;
     static uint8_t gyro_was_online; /* IMU 恢复沿检测，用于防突跳 */
@@ -984,6 +992,9 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     {
         gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_pos_pid);
         gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_rate_pid);
+        gimbal_mec_yaw_ff_blend = 0.0f;
+        gimbal_mec_yaw_chassis_rate_lpf = 0.0f;
+        gimbal_mec_yaw_hard_hold = 0u;
         gyro_was_online = 0u;
         return 0.0f;
     }
@@ -997,9 +1008,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
                                 gimbal->base_info.yaw_mec_angle) *
                 GIMBAL_DEG_TO_COUNT;
 
-    /* ---- 连续软死区（照抄参考 cloud_terrace.c:499-508）----
-     * 边界外只纠正超出死区的误差；内部把控制目标设成当前值，
-     * 位置项为 0，但速度内环照常运行继续制动。 */
+    /* 软死区抑制小角误差。 */
     deadzone_count = gimbal_tune.mec_hold_deadzone_count;
     control_target_count = err_count;
     if (err_count > deadzone_count)       { control_target_count -= deadzone_count; }
@@ -1018,6 +1027,12 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     if (speed_limit > brake_limit)
     {
         speed_limit = brake_limit;
+    }
+    near_rate_limit = GIMBAL_MEC_YAW_NEAR_RATE_KP *
+                      gimbal_abs(control_target_count) * GIMBAL_COUNT_TO_DEG;
+    if (speed_limit > near_rate_limit)
+    {
+        speed_limit = near_rate_limit;
     }
 
     /* ---- 位置外环 PID（照抄参考 cloud_terrace.c:520-531）----
@@ -1047,17 +1062,42 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
      * 参考的 target 和反馈都是 deg/s，与这里完全同量纲，
      * 所以 kp/ki/kd 直接用参考的 mechanical_yaw_rate_* 原值。 */
     gyro_dir = gimbal_tune.mec_yaw_gyro_direction;
-    rate_command = speed_target;
     rate_measure = gyro_dir * gimbal->base_info.yaw_imu_speed;
+    relative_rate = gimbal->base_info.yaw_mec_speed * GIMBAL_RAD_TO_DEG;
+    chassis_rate = rate_measure - relative_rate;
+    gimbal_mec_yaw_chassis_rate_lpf += GIMBAL_MEC_YAW_FF_FILTER_ALPHA *
+        (chassis_rate - gimbal_mec_yaw_chassis_rate_lpf);
+    ff_target = gimbal_clamp(
+        (gimbal_abs(gimbal_mec_yaw_chassis_rate_lpf) - GIMBAL_MEC_YAW_FF_OFF_DPS) /
+        (GIMBAL_MEC_YAW_FF_FULL_DPS - GIMBAL_MEC_YAW_FF_OFF_DPS),
+        0.0f, 1.0f) * GIMBAL_MEC_YAW_FF_MAX_GAIN;
+    ff_step = (ff_target < gimbal_mec_yaw_ff_blend) ?
+              GIMBAL_MEC_YAW_FF_FALL_STEP : GIMBAL_MEC_YAW_FF_BLEND_STEP;
+    gimbal_mec_yaw_ff_blend = gimbal_ramp(
+        gimbal_mec_yaw_ff_blend, ff_target, ff_step);
+    rate_command = speed_target + gimbal_mec_yaw_ff_blend *
+                   gimbal_mec_yaw_chassis_rate_lpf;
 
-    /* 速率死区：实测角速度小于阈值就当作 0，内环不再对微小抖动出反向力矩。
-     * 这是消除"静止时嗡嗡叫、极小角度震荡"的关键 —— 那个震荡是内环在陀螺
-     * 噪声上反复修正形成的极限环。运动段不受影响：阈值很小，60 deg/s 时
-     * 仍有 0.08*60 = 4.8 N·m 的制动能力。
-     * 注意这只掐掉速度环的抖动，位置环该出的保持力照出。 */
-    if (gimbal_abs(rate_measure) < gimbal_tune.mec_hold_rate_deadband_dps)
+    if (gimbal_abs(gimbal_mec_yaw_chassis_rate_lpf) < GIMBAL_MEC_YAW_FF_OFF_DPS)
     {
-        rate_measure = 0.0f;
+        /* 静止边界留滞回。 */
+        gimbal_mec_yaw_hard_hold = (gimbal_mec_yaw_hard_hold != 0u) ?
+            (gimbal_abs(err_count) <
+             GIMBAL_MEC_YAW_HOLD_EXIT_DEG * GIMBAL_DEG_TO_COUNT) :
+            (gimbal_abs(err_count) <= deadzone_count);
+    }
+    else
+    {
+        gimbal_mec_yaw_hard_hold = 0u;
+    }
+
+    if (gimbal_mec_yaw_hard_hold != 0u)
+    {
+        gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_pos_pid);
+        gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_rate_pid);
+        gimbal_mec_yaw_ff_blend = 0.0f;
+        gyro_was_online = 0u;
+        return 0.0f;
     }
 
     gimbal_mec_yaw_rate_pid.kp = gimbal_tune.mec_hold_rate_kp_nm_per_dps;
@@ -1073,7 +1113,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
         gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_pos_pid);
         gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_rate_pid);
         gimbal_mec_yaw_pos_pid.last_err = control_target_count;
-        gimbal_mec_yaw_rate_pid.last_err = speed_target - rate_measure;
+        gimbal_mec_yaw_rate_pid.last_err = rate_command - rate_measure;
         gyro_was_online = 1u;
     }
 
@@ -1421,6 +1461,9 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal->base_info.yaw_mec_speed_lpf = 0.0f;
     gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_pos_pid);   /* 机械 Yaw 双环专用 */
     gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_rate_pid);
+    gimbal_mec_yaw_ff_blend = 0.0f;
+    gimbal_mec_yaw_chassis_rate_lpf = 0.0f;
+    gimbal_mec_yaw_hard_hold = 0u;
 }
 
 /* 主执行入口，放control任务中 */
@@ -1437,6 +1480,9 @@ void Gimbal_Work(gimbal_t *gimbal)
     //  模式切换保护
     if (selected_mode != gimbal->gimbal_mode)
     {
+        gimbal_mec_yaw_ff_blend = 0.0f;
+        gimbal_mec_yaw_chassis_rate_lpf = 0.0f;
+        gimbal_mec_yaw_hard_hold = 0u;
         gimbal->gimbal_mode = selected_mode;
         gimbal_clear_all_pid(gimbal);
         gimbal->last_gimbal_mode = selected_mode;
