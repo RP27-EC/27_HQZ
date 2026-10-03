@@ -68,7 +68,7 @@
 #define GIMBAL_MEC_YAW_FF_FALL_STEP      0.10f
 #define GIMBAL_MEC_YAW_FF_FILTER_ALPHA   0.05f
 #define GIMBAL_MEC_YAW_FF_MAX_GAIN       0.90f
-#define GIMBAL_MEC_YAW_NEAR_RATE_KP      10.0f
+#define GIMBAL_MEC_YAW_NEAR_RATE_KP      6.0f
 /* 线束/静摩擦前馈：按误差方向叠加的恒定力矩，用来破静摩擦，
  * 避免"卡住 → 误差累积 → 猛冲"。死区内不叠加，否则会在中心来回翻转。 */
 #define GIMBAL_MEC_YAW_FRICTION_FF_NM    0.3f
