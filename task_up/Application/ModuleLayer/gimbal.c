@@ -1050,6 +1050,16 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     rate_command = speed_target;
     rate_measure = gyro_dir * gimbal->base_info.yaw_imu_speed;
 
+    /* 速率死区：实测角速度小于阈值就当作 0，内环不再对微小抖动出反向力矩。
+     * 这是消除"静止时嗡嗡叫、极小角度震荡"的关键 —— 那个震荡是内环在陀螺
+     * 噪声上反复修正形成的极限环。运动段不受影响：阈值很小，60 deg/s 时
+     * 仍有 0.08*60 = 4.8 N·m 的制动能力。
+     * 注意这只掐掉速度环的抖动，位置环该出的保持力照出。 */
+    if (gimbal_abs(rate_measure) < gimbal_tune.mec_hold_rate_deadband_dps)
+    {
+        rate_measure = 0.0f;
+    }
+
     gimbal_mec_yaw_rate_pid.kp = gimbal_tune.mec_hold_rate_kp_nm_per_dps;
     gimbal_mec_yaw_rate_pid.ki = gimbal_tune.mec_hold_rate_ki_nm_per_dps;
     gimbal_mec_yaw_rate_pid.kd = gimbal_tune.mec_hold_rate_kd_nm_per_dps;
@@ -1351,6 +1361,7 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_tune.mec_hold_rate_kd_nm_per_dps = GIMBAL_MEC_HOLD_RATE_KD_NM_PER_DPS;
     gimbal_tune.mec_hold_rate_ki_limit = GIMBAL_MEC_HOLD_RATE_KI_LIMIT;
     gimbal_tune.mec_hold_rate_out_max_nm = GIMBAL_MEC_HOLD_RATE_OUT_MAX_NM;
+    gimbal_tune.mec_hold_rate_deadband_dps = GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS;
     gimbal_tune.mec_yaw_gyro_direction = 1.0f; /* 实机核对：yaw_imu_angle 与 yaw_mec_angle 同向 */
 
     /* 绑定电机驱动 */

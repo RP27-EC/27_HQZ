@@ -173,8 +173,8 @@
 #define GIMBAL_MEC_HOLD_KI_LIMIT         150.0f
 
 /* 速度内环 kp。参考折算值 0.0488（10 码/(deg/s) ÷ 204.8）；
- * 本工程实测整定为 0.08（比参考折算值高，因为本工程响应对应更快）。 */
-#define GIMBAL_MEC_HOLD_RATE_KP_NM_PER_DPS  0.08f
+ * 本工程实测整定为 0.1（比参考折算值高，因为本工程响应对应更快）。 */
+#define GIMBAL_MEC_HOLD_RATE_KP_NM_PER_DPS  0.1f
 /* 速度内环积分 —— 参考 mechanical_yaw_rate_ki = 0，原值直取。 */
 #define GIMBAL_MEC_HOLD_RATE_KI_NM_PER_DPS  0.0f
 /* 速度内环微分 —— 参考 mechanical_yaw_rate_kd = 0，原值直取。 */
@@ -183,22 +183,32 @@
 #define GIMBAL_MEC_HOLD_RATE_KI_LIMIT       0.0f
 /* 速度内环输出限幅（参考 1800/2047 ≈ 88% 量程；本工程最终限幅就是 6 N·m） */
 #define GIMBAL_MEC_HOLD_RATE_OUT_MAX_NM     6.0f
+/* 速率死区，单位 deg/s。
+ *
+ * 作用：实测角速度小于本值时当作 0，速度内环不再对微小抖动出反向力矩。
+ * 这是消除"静止时电机嗡嗡叫、极小角度震荡"的关键 —— 那个震荡是内环在
+ * 陀螺/编码器的微小噪声上反复修正产生的极限环，振幅小到看不出轴动但听得见。
+ *
+ * 物理上等价于给系统加一个"粘滞死区"，不影响运动段的阻尼（60 deg/s 时
+ * 仍有 0.08*60 = 4.8 N·m 的制动能力），只在静止附近把噪声掐掉。
+ *
+ * WARNING: 本项只在【速度内环】上生效。由于位置环的连续软死区
+ * (GIMBAL_MEC_HOLD_DEADZONE_DEG) 在目标附近会把位置增益压到 0，
+ * 所以若想"静止时仍有力顶住"，还要把那个死区收紧，否则近目标处
+ * 位置环和速度环都不出力，云台是松的。
+ * 【现场整定】还有嗡嗡声 -> 加大；低速跟不动、发飘 -> 减小或置 0。 */
+#define GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS   6.0f
 
 /* 连续软死区，单位【度】（代码里会乘 182.04 换算成编码器计数）。
  *
- * WARNING: 这个值与实测有一处不一致，需要确认后再改。
- *   实车实测可用的一组里，Watch 的 mec_hold_deadzone_count = 180，
- *   换算成度是 180 / 182.04 ≈ 0.99 度；
- *   而这个宏原先是 0.2 度（= 36.4 计数）。两者差约 5 倍。
- *   如果把本宏写成 0.2f 并烧写，死区会从 0.99 度变成 0.2 度，可能开始抖。
- *   所以这里【暂时保留 0.2f 不动】，等你确认要以哪个值为准。
- *   - 要保留实测的 0.99 度：把下面改成 0.99f
- *   - 要收紧死区：改成 0.2f 或 0.4f，同时把 mec_hold_rate_kp 往上加一点补阻尼
+ * 本工程实测整定值：Watch 里 mec_hold_deadzone_count = 180（计数），
+ *   180 / 182.04 = 0.9888 度  →  下面宏取 0.9888f。
  *
  * 作用：与原来的硬死区区别很大 —— 硬死区把 err 清零 = 位置环和阻尼一起失效；
  * 软死区只把控制目标挪到死区边界，死区内速度环照常制动，不会抖也不会漂。
- * 代价：死区内的稳态偏差位置环不纠正，所以云台可以停在目标 ±死区 的位置上。 */
-#define GIMBAL_MEC_HOLD_DEADZONE_DEG     0.2f
+ * 代价：死区内的稳态偏差位置环不纠正，所以云台可以停在目标 ±死区 的位置上。
+ * 【现场整定】想更有保持力（顶得更硬）-> 减小本值；中心抖动 -> 加大。 */
+#define GIMBAL_MEC_HOLD_DEADZONE_DEG     0.9888f
 
 /* 以下两项不再用于机械 Yaw（改成 IMU 内环后不需要了），保留供对照：
  *   GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S  编码器速度阻尼，已被 IMU 内环替代
@@ -390,6 +400,7 @@ typedef struct
     volatile float mec_hold_rate_kd_nm_per_dps;  /* 速度内环 kd */
     volatile float mec_hold_rate_ki_limit;       /* 速度内环积分限幅 */
     volatile float mec_hold_rate_out_max_nm;     /* 速度内环输出限幅 */
+    volatile float mec_hold_rate_deadband_dps;   /* 速度内环速率死区（deg/s） */
     volatile float mec_yaw_gyro_direction;       /* IMU 与编码器同向 +1，反向 -1 */
 } gimbal_tune_t;
 
