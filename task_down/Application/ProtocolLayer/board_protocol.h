@@ -10,7 +10,7 @@
 
 #define BOARD_RC_AXIS_DEADBAND          20.0f  /* 摇杆死区 */
 #define BOARD_RC_AXIS_MAX               660.0f /* 摇杆幅值 */
-#define BOARD_D5_YAW_RATE_MAX_DEG_S     300.0f /* Yaw 最大角速度 */
+#define BOARD_D5_YAW_RATE_MAX_DEG_S     200.0f /* Yaw 最大角速度 */
 #define BOARD_D5_PITCH_RATE_MAX_DEG_S   150.0f /* Pitch 最大角速度 */
 #define BOARD_D5_RATE_LSB_DEG_S         0.1f   /* 角速度量化步长 */
 

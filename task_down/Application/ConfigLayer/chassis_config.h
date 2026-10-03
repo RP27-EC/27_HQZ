@@ -48,10 +48,10 @@
 #define CHASSIS_FOLLOW_KP                 20.0f
 #define CHASSIS_FOLLOW_MAX_WZ             40.0f
 #define CHASSIS_FOLLOW_WZ_STEP            0.4f
-#define CHASSIS_FOLLOW_RATE_FF            -2.0f
+#define CHASSIS_FOLLOW_RATE_FF            -3.0f
 #define CHASSIS_FOLLOW_RATE_PER_DEG_S     0.032f
-#define CHASSIS_FOLLOW_FRICTION_FF        7.0f
-#define CHASSIS_FOLLOW_DEADBAND_DEG       5.0f
+#define CHASSIS_FOLLOW_FRICTION_FF        0.0f
+#define CHASSIS_FOLLOW_DEADBAND_DEG       0.5f
 #define CHASSIS_FOLLOW_TURN_LOCK_DEG      150.0f
 #define CHASSIS_FOLLOW_TURN_UNLOCK_DEG    20.0f
 #define CHASSIS_FOLLOW_TORQUE_LIMIT_NM    4.0f
