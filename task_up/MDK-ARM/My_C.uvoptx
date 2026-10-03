@@ -419,12 +419,72 @@
         <Ww>
           <count>25</count>
           <WinNumber>2</WinNumber>
-          <ItemText>Gimbal.init_info.mode_transition_active </ItemText>
+          <ItemText>Gimbal.init_info.mode_transition_active ,0x0A</ItemText>
         </Ww>
         <Ww>
           <count>26</count>
           <WinNumber>2</WinNumber>
           <ItemText>Gimbal.base_info.yaw_mec_speed  </ItemText>
+        </Ww>
+        <Ww>
+          <count>27</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>Gimbal.base_info.yaw_mec_angle ,0x0A</ItemText>
+        </Ww>
+        <Ww>
+          <count>28</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>Gimbal.base_info.yaw_imu_angle ,0x0A</ItemText>
+        </Ww>
+        <Ww>
+          <count>29</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>gimbal_tune.mec_yaw_hold_kd_nm_per_rad_s </ItemText>
+        </Ww>
+        <Ww>
+          <count>30</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>Gimbal.pid_info.yaw_target</ItemText>
+        </Ww>
+        <Ww>
+          <count>31</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>Gimbal.base_info.yaw_mec_angle </ItemText>
+        </Ww>
+        <Ww>
+          <count>32</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>Gimbal.base_info.output_gimbal_y  </ItemText>
+        </Ww>
+        <Ww>
+          <count>33</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>Gimbal.gimbal_mode</ItemText>
+        </Ww>
+        <Ww>
+          <count>34</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>gimbal_tune.mec_hold_rate_kp_nm_per_dps </ItemText>
+        </Ww>
+        <Ww>
+          <count>35</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>gimbal_tune.mec_hold_kp_nm_per_deg </ItemText>
+        </Ww>
+        <Ww>
+          <count>36</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>mec_yaw_decel_rad_s2   </ItemText>
+        </Ww>
+        <Ww>
+          <count>37</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>gimbal_tune.mec_yaw_decel_rad_s2   </ItemText>
+        </Ww>
+        <Ww>
+          <count>38</count>
+          <WinNumber>2</WinNumber>
+          <ItemText>gimbal_tune.mec_hold_deadzone_count</ItemText>
         </Ww>
       </WatchWindow2>
       <Tracepoint>

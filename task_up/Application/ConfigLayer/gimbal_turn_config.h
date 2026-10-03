@@ -23,9 +23,22 @@
 /* 别名依赖归中的定义，必须可见 */
 #include "gimbal_init_config.h"
 
-/* 掉头段与保持段的切换阈值：误差大于该值走掉头串级，否则交回机械 yaw 保持环。
- * 归中没有对应项（归中不存在保持段），所以这一项是掉头独有的具体数值。 */
-#define GIMBAL_TURN_ENTER_ERR_DEG             1.0f
+/* 掉头段与保持段的切换阈值。
+ *
+ * 注意：机械模式已不再使用两段切换（见下面的 GIMBAL_MEC_YAW_USE_TURN_PATH = 0），
+ * 这个宏只在把那个开关置 1 时才生效，保留供对照。
+ *
+ * 为什么关掉切换：被扰动后的回正误差是 1~10 deg，全部 > 原来的 1.0 deg，
+ * 所以一直走掉头段；而掉头段的内环 err = 目标(deg/s) - yaw_mec_speed(rad/s)
+ * 量纲差 57.3 倍，输出恒饱和在 ±6 N·m，位置环没有任何调节手段，减速距离固定，
+ * 超调量固定且与任何参数无关。实测保持段阻尼增益从 0.5 加到 1000 毫无变化，
+ * 正是因为它一次都没被执行过。 */
+#define GIMBAL_TURN_ENTER_ERR_DEG             90.0f
+
+/* 机械模式 Yaw 是否按误差大小切换回旧的"掉头段"路径。
+ * 0 = 只用统一定位律 gimbal_mec_yaw_calc（默认，理由见 gimbal.c 的 WARNING）。
+ * 1 = 恢复旧行为：误差 > GIMBAL_TURN_ENTER_ERR_DEG 时走 gimbal_mec_yaw_turn_calc。 */
+#define GIMBAL_MEC_YAW_USE_TURN_PATH          0
 
 /* 掉头目标角斜坡步长 deg/ms。归中的"从任何位置都能稳稳到位"有一半来自这道斜坡：
  * 没有它，180° 是直接阶跃砸进环里；有了它，环始终只追一个移动的目标。 */
