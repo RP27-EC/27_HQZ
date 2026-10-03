@@ -62,8 +62,8 @@
  * 满量程 6 N·m 约需 6/STEP 毫秒，0 表示不限幅。 */
 #define GIMBAL_MEC_YAW_TORQUE_STEP_NM    0.08f
 
-#define GIMBAL_MEC_YAW_FF_OFF_DPS        20.0f
-#define GIMBAL_MEC_YAW_FF_FULL_DPS       30.0f
+#define GIMBAL_MEC_YAW_FF_OFF_DPS        25.0f
+#define GIMBAL_MEC_YAW_FF_FULL_DPS       35.0f
 #define GIMBAL_MEC_YAW_FF_BLEND_STEP     0.02f
 #define GIMBAL_MEC_YAW_FF_FALL_STEP      0.10f
 #define GIMBAL_MEC_YAW_FF_FILTER_ALPHA   0.05f
