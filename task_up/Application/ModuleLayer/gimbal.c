@@ -977,6 +977,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     float speed_target;
     float rate_command;
     float rate_measure;
+    float rate_feedback;
     float chassis_rate;
     float relative_rate;
     float ff_target;
@@ -1065,6 +1066,14 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     rate_measure = gyro_dir * gimbal->base_info.yaw_imu_speed;
     relative_rate = gimbal->base_info.yaw_mec_speed * GIMBAL_RAD_TO_DEG;
     chassis_rate = rate_measure - relative_rate;
+
+    /* WARNING: 速率死区【不能】加在 rate_measure 上！
+     * rate_measure 后面还要参与 chassis_rate = rate_measure - relative_rate，
+     * 一旦在它上面做死区，chassis_rate 会在阈值附近反复跳变，进而让
+     * ff_blend 抖动、hard_hold 状态来回翻转 —— 每次翻转都会 reset PID 并
+     * 输出 0 力矩，结果就是震动比不加死区还厉害。
+     * 所以死区只加在【喂给速度内环 PID 的那份反馈】上，见下面 rate_feedback。 */
+
     gimbal_mec_yaw_chassis_rate_lpf += GIMBAL_MEC_YAW_FF_FILTER_ALPHA *
         (chassis_rate - gimbal_mec_yaw_chassis_rate_lpf);
     ff_target = gimbal_clamp(
@@ -1078,6 +1087,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     rate_command = speed_target + gimbal_mec_yaw_ff_blend *
                    gimbal_mec_yaw_chassis_rate_lpf;
 
+#if GIMBAL_MEC_YAW_HARD_HOLD_ENABLE
     if (gimbal_abs(gimbal_mec_yaw_chassis_rate_lpf) < GIMBAL_MEC_YAW_FF_OFF_DPS)
     {
         /* 静止边界留滞回。 */
@@ -1099,12 +1109,28 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
         gyro_was_online = 0u;
         return 0.0f;
     }
+#else
+    /* 静止卸力已关闭：静止附近交给位置环软死区 + 速率死区，
+     * 保留保持力，避免"卸力后漂出去再满力抓回来"的阶跃抽动。 */
+    gimbal_mec_yaw_hard_hold = 0u;
+#endif
 
     gimbal_mec_yaw_rate_pid.kp = gimbal_tune.mec_hold_rate_kp_nm_per_dps;
     gimbal_mec_yaw_rate_pid.ki = gimbal_tune.mec_hold_rate_ki_nm_per_dps;
     gimbal_mec_yaw_rate_pid.kd = gimbal_tune.mec_hold_rate_kd_nm_per_dps;
     gimbal_mec_yaw_rate_pid.integral_max = gimbal_tune.mec_hold_rate_ki_limit;
     gimbal_mec_yaw_rate_pid.out_max = gimbal_tune.mec_hold_rate_out_max_nm;
+
+    /* 速率死区：只作用在【喂给速度内环 PID】这一份反馈上。
+     * 静止时陀螺测到的微小抖动被当作 0，内环不再对它反复出反向力矩 ——
+     * 这是"停下来后嗡嗡震动"的直接来源。运动段完全不受影响
+     * （60 deg/s 时仍是 0.1*60 = 6 N·m，照旧满力刹车）。
+     * rate_measure 本身保持原始值，供上面 chassis_rate / FF / hard_hold 使用。 */
+    rate_feedback = rate_measure;
+    if (gimbal_abs(rate_feedback) < gimbal_tune.mec_hold_rate_deadband_dps)
+    {
+        rate_feedback = 0.0f;
+    }
 
     /* 陀螺仪恢复沿：重置两个 PID 并把位置环 last_err 对齐当前误差，
      * 避免微分项把恢复瞬间当成突变（参考 cloud_terrace.c:524-530, 542-546）。 */
@@ -1113,13 +1139,13 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
         gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_pos_pid);
         gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_rate_pid);
         gimbal_mec_yaw_pos_pid.last_err = control_target_count;
-        gimbal_mec_yaw_rate_pid.last_err = rate_command - rate_measure;
+        gimbal_mec_yaw_rate_pid.last_err = rate_command - rate_feedback;
         gyro_was_online = 1u;
     }
 
     torque = gimbal_pid_calc(&gimbal_mec_yaw_rate_pid,
                              rate_command,
-                             rate_measure,
+                             rate_feedback,
                              GIMBAL_CONTROL_PERIOD_S);
 
     return gimbal_clamp(torque,

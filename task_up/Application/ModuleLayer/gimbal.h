@@ -62,8 +62,8 @@
  * 满量程 6 N·m 约需 6/STEP 毫秒，0 表示不限幅。 */
 #define GIMBAL_MEC_YAW_TORQUE_STEP_NM    0.08f
 
-#define GIMBAL_MEC_YAW_FF_OFF_DPS        5.0f
-#define GIMBAL_MEC_YAW_FF_FULL_DPS       15.0f
+#define GIMBAL_MEC_YAW_FF_OFF_DPS        20.0f
+#define GIMBAL_MEC_YAW_FF_FULL_DPS       30.0f
 #define GIMBAL_MEC_YAW_FF_BLEND_STEP     0.02f
 #define GIMBAL_MEC_YAW_FF_FALL_STEP      0.10f
 #define GIMBAL_MEC_YAW_FF_FILTER_ALPHA   0.05f
@@ -194,9 +194,27 @@
 /* NOTE: 保留 Watch 布局。 */
 #define GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS   10.0f
 
-/* 静止时的零力矩角度范围，deg。 */
+/* 静止时的零力矩角度范围，deg。
+ * 【本工程实测】0.3 / 0.5 是可用值，已改回。
+ * 注意不要把 DEADZONE 放大：它会同时放大 hard_hold 的生效范围，
+ * 而 hard_hold 是完全卸力（return 0.0f），生效范围一大，云台就长期无力、
+ * 被线束推着漂，漂出 HOLD_EXIT 又变满力 —— 0 到 ±6 N·m 的阶跃反而更震。 */
 #define GIMBAL_MEC_HOLD_DEADZONE_DEG     0.3f
-#define GIMBAL_MEC_YAW_HOLD_EXIT_DEG      0.5f
+#define GIMBAL_MEC_YAW_HOLD_EXIT_DEG     0.5f
+
+/* 静止卸力（hard_hold）开关：1 = 启用，0 = 关闭。
+ *
+ * 关掉的理由：这个机制在误差进入死区时直接 return 0.0f，完全不输出力矩。
+ * 它有副作用 —— 云台在死区内是"松"的，会被线束/走线推着漂，
+ * 漂出 HOLD_EXIT_DEG 后控制器又重新全力接管，形成一次阶跃，
+ * 表现为静止时的间歇性抽动。而且它与"静止时也要有力顶住"的目标相反。
+ *
+ * 关掉之后，静止附近由【位置环 + 速率死区】共同保证安静：
+ *   位置环：误差在软死区内时位置项自然为 0，不会主动出力
+ *   速率死区：陀螺在静止时的微小噪声被当作 0，内环不出反向力矩
+ * 这样既有安静的静止，又保留了必要的保持力（误差一到死区外就出力）。
+ * 置 1 可恢复旧行为对照。 */
+#define GIMBAL_MEC_YAW_HARD_HOLD_ENABLE  0
 
 /* 以下两项不再用于机械 Yaw（改成 IMU 内环后不需要了），保留供对照：
  *   GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S  编码器速度阻尼，已被 IMU 内环替代
