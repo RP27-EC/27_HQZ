@@ -220,6 +220,7 @@ void Board_Tx_Pkt_05(Board_t* board)
     uint8_t ctrl_source = BOARD_D5_CTRL_RC; /* 输入来源 */
     uint8_t cmd_type = BOARD_D5_CMD_RC_RATE; /* 控制量类型 */
     uint8_t button_bits = 0u; /* 鼠标键位 */
+    float uturn_rate = 0.0f;  /* 掉头动作角速度，deg/s */
 
     if (rc_dev.work_state == DEV_ONLINE)
     {
@@ -231,9 +232,19 @@ void Board_Tx_Pkt_05(Board_t* board)
             cmd_type = BOARD_D5_CMD_RC_RATE;
             button_bits = (uint8_t)((rc_dev.info->mouse_btn_l.value & 0x01u) |
                                     ((rc_dev.info->mouse_btn_r.value & 0x01u) << 1));
-            yaw_rate = constrain(rc_dev.info->mouse_x * BOARD_D5_MOUSE_YAW_GAIN,
-                                 -BOARD_D5_YAW_RATE_MAX_DEG_S,
-                                 BOARD_D5_YAW_RATE_MAX_DEG_S);
+            if (Chassis_Input_GetUturnYawRateDegS(&uturn_rate) != 0u)
+            {
+                /* 跟随档掉头动作：屏蔽鼠标 Yaw，直接下发角速度指令 */
+                yaw_rate = constrain(uturn_rate,
+                                     -BOARD_D5_YAW_RATE_MAX_DEG_S,
+                                     BOARD_D5_YAW_RATE_MAX_DEG_S);
+            }
+            else
+            {
+                yaw_rate = constrain(rc_dev.info->mouse_x * BOARD_D5_MOUSE_YAW_GAIN,
+                                     -BOARD_D5_YAW_RATE_MAX_DEG_S,
+                                     BOARD_D5_YAW_RATE_MAX_DEG_S);
+            }
             pitch_rate = constrain(rc_dev.info->mouse_y * BOARD_D5_MOUSE_PITCH_GAIN,
                                    -BOARD_D5_PITCH_RATE_MAX_DEG_S,
                                    BOARD_D5_PITCH_RATE_MAX_DEG_S);

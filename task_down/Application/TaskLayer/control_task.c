@@ -39,6 +39,19 @@ volatile uint8_t board_hole_exit_pending;
 static uint8_t board_gimbal_yaw_rear = 0u;
 
 #if BOARD_COMM_DEBUG
+/* 生效中的"前后方向"：键鼠模式看掉头基准，遥控模式看上面那套状态。
+ * 过洞的反向拦截必须用生效值，否则键鼠掉头后判断会失效。 */
+static uint8_t Board_Debug_YawRear(void)
+{
+    if (Chassis_Input_IsKeyboardMode() != 0u)
+    {
+        return Chassis_Input_IsKeyboardYawRear();
+    }
+
+    return board_gimbal_yaw_rear;
+}
+
+
 static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
 {
     static uint8_t last_b_value = 0u;
@@ -77,7 +90,7 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
              * 狗洞只允许云台正对前方时进入。反向时忽略这次按键、不置位请求，
              * 上板升降因此不会进入对位/下压流程。
              */
-            if (board_gimbal_yaw_rear == 0u)
+            if (Board_Debug_YawRear() == 0u)
             {
                 board_hole_request = 1u;
                 board_hole_exit_pending = 0u;
@@ -114,6 +127,11 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     if ((board_hole_request != 0u) || (board_hole_exit_pending != 0u))
     {
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
+        /*
+         * 过洞强制云台回前方零位，掉头基准也要跟着回前方：否则跟随中心还停在
+         * 180deg，云台被拉回前方时跟随环会用 180deg 误差把底盘转过去。
+         */
+        Chassis_Input_ResetYawReference();
         board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = BOARD_MEC_YAW_FRONT_RAD;
         board.tx_pkt->gimbal_target_pkt.pitch_mec_tar =
             BOARD_HOLE_PITCH_TARGET_RAD;
@@ -131,6 +149,8 @@ static void Board_Debug_Gimbal_Command(void)
     static float pitch_mec_target = 0.0f;/* Pitch 机械目标角，rad */
     rc_data_t *rc_info = rc_dev.info;     /* 遥控数据源 */
     uint8_t r_pressed;
+    uint8_t keyboard_active; /* 键鼠模式生效 */
+    uint8_t keyboard_mech;   /* 键鼠 X 机械档生效 */
 
     if (rc_dev.work_state != DEV_ONLINE)
     {
@@ -148,6 +168,8 @@ static void Board_Debug_Gimbal_Command(void)
     }
 
     board.tx_pkt->car_pkt.car_state = 1u;
+    keyboard_active = Chassis_Input_IsKeyboardMode();
+    keyboard_mech = Chassis_Input_IsKeyboardMechMode();
     r_pressed = ((rc_info->key_v & KEY_PRESSED_OFFSET_R) != 0u) ? 1u : 0u;
 #if BOARD_LIFT_ENABLE
     if (Board_Debug_Hole_Command(rc_info) != 0u)
@@ -160,22 +182,36 @@ static void Board_Debug_Gimbal_Command(void)
 #endif
 
     /*
-     * R 键在任何 S1 位置都生效：边沿检测放在 S1 分支之前。
-     * 方向状态只在遥控离线时复位，进出机械模式都不清，
-     * 所以在速控/遥控状态下按 R，切到 S1 下位时立刻生效。
+     * R 键分工：
+     *   键鼠模式：R 归 chassis_input.c 管（机械档翻掉头基准、跟随档起掉头动作），
+     *             这里不再动 S1 下位那套前后零位预置，两套状态互不干扰。
+     *   遥控模式：保持原行为，R 在任何 S1 位置都生效，切到 S1 下位时立刻用上。
      */
-    if ((r_pressed != 0u) && (last_r_pressed == 0u))
+    if (keyboard_active == 0u)
     {
-        board_gimbal_yaw_rear ^= 1u;
+        if ((r_pressed != 0u) && (last_r_pressed == 0u))
+        {
+            board_gimbal_yaw_rear ^= 1u;
+        }
     }
     last_r_pressed = r_pressed;
 
-    /* 前后目标每个周期都下发，与当前 S1 位置无关 */
-    board.tx_pkt->gimbal_target_pkt.yaw_mec_tar =
-        (board_gimbal_yaw_rear != 0u) ? BOARD_MEC_YAW_REAR_RAD : BOARD_MEC_YAW_FRONT_RAD;
+    /* 前后目标每个周期都下发，与当前 S1 位置无关。键鼠模式取掉头基准。 */
+    if (keyboard_mech != 0u)
+    {
+        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar =
+            (Chassis_Input_IsKeyboardYawRear() != 0u) ?
+            BOARD_MEC_YAW_REAR_RAD : BOARD_MEC_YAW_FRONT_RAD;
+    }
+    else
+    {
+        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar =
+            (board_gimbal_yaw_rear != 0u) ?
+            BOARD_MEC_YAW_REAR_RAD : BOARD_MEC_YAW_FRONT_RAD;
+    }
 
-    /* S1 下拨：只切换云台机械环，底盘仍由底盘分支控制 */
-    if (rc_info->s1.value == RC_SW_DOWN)
+    /* 机械模式：S1 下位（遥控）或 键鼠 X 档（云台锁机械零位，看着跟底盘走） */
+    if ((rc_info->s1.value == RC_SW_DOWN) || (keyboard_mech != 0u))
     {
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
         /* 进入机械模式时从当前角度起调，避免跳变 */
@@ -185,16 +221,22 @@ static void Board_Debug_Gimbal_Command(void)
             mec_mode_active = 1u;
         }
 
-        pitch_mec_target += (float)rc_info->ch1 / BOARD_RC_AXIS_MAX *
-                            BOARD_MEC_PITCH_STEP_RAD;
-        if (pitch_mec_target > BOARD_MEC_PITCH_MAX_RAD)
+        /* 只有遥控才用右摇杆积分 Pitch。键鼠的 Pitch 走上板 D5 鼠标角速度通路，
+         * 机械模式里 D2 的 Pitch 机械目标并不参与运算。 */
+        if (keyboard_mech == 0u)
         {
-            pitch_mec_target = BOARD_MEC_PITCH_MAX_RAD;
+            pitch_mec_target += (float)rc_info->ch1 / BOARD_RC_AXIS_MAX *
+                                BOARD_MEC_PITCH_STEP_RAD;
+            if (pitch_mec_target > BOARD_MEC_PITCH_MAX_RAD)
+            {
+                pitch_mec_target = BOARD_MEC_PITCH_MAX_RAD;
+            }
+            else if (pitch_mec_target < BOARD_MEC_PITCH_MIN_RAD)
+            {
+                pitch_mec_target = BOARD_MEC_PITCH_MIN_RAD;
+            }
         }
-        else if (pitch_mec_target < BOARD_MEC_PITCH_MIN_RAD)
-        {
-            pitch_mec_target = BOARD_MEC_PITCH_MIN_RAD;
-        }
+
         board.tx_pkt->gimbal_target_pkt.pitch_mec_tar = pitch_mec_target;
     }
     /* 机械模式退出后交回 IMU 角度环 */

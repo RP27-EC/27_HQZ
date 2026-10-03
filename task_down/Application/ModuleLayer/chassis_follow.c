@@ -17,7 +17,7 @@
 
 chassis_follow_state_t chassis_follow; /* 底盘跟随状态 */
 
-static float follow_last_yaw_rad; /* 上拍 Yaw 误差 */
+static float follow_last_yaw_rot; /* 上拍云台实际相对角（含符号），rad */
 static float follow_last_wz; /* 上拍输出角速度 */
 static uint8_t follow_have_last_yaw; /* 1 = 已有上拍 Yaw */
 static uint8_t follow_last_selected; /* 上拍是否选中跟随 */
@@ -84,11 +84,23 @@ static uint8_t Chassis_Follow_DataValid(void)
     return 1u;
 }
 
+/* 当前跟随中心：键鼠掉头后取掉头基准（0 或 180deg），否则用配置中心。
+ * 基准由 chassis_input.c 维护，退出键鼠时它会复位回 0。 */
+static float Chassis_Follow_CenterRad(void)
+{
+#if CHASSIS_FOLLOW_YAW_REFERENCE_ENABLE
+    return Chassis_Input_GetYawReferenceRad();
+#else
+    return CHASSIS_FOLLOW_CENTER_RAD;
+#endif
+}
+
 /* 初始化跟随状态和差分缓存 */
 void Chassis_Follow_Init(void)
 {
     chassis_follow.yaw_mec_rad = 0.0f;
     chassis_follow.yaw_error_rad = 0.0f;
+    chassis_follow.center_rad = CHASSIS_FOLLOW_CENTER_RAD;
     chassis_follow.wz_target = 0.0f;
     chassis_follow.wz_output = 0.0f;
     chassis_follow.manual_yaw_rate = 0.0f;
@@ -100,7 +112,7 @@ void Chassis_Follow_Init(void)
     chassis_follow.fault_latched = 0u;
     chassis_follow.turn_direction = 0;
 
-    follow_last_yaw_rad = 0.0f;
+    follow_last_yaw_rot = 0.0f;
     follow_last_wz = 0.0f;
     follow_have_last_yaw = 0u;
     follow_last_selected = 0u;
@@ -171,7 +183,9 @@ void Chassis_Follow_UpdateMode(void)
 void Chassis_Follow_Update(chassis_cmd_t *cmd)
 {
     float yaw_mec;   /* 云台机械角，rad */
+    float yaw_rot;   /* 平移旋转角，rad（实际相对角，含掉头基准） */
     float yaw_error; /* 相对跟随中心误差，rad */
+    float center_rad;/* 本拍跟随中心，rad */
     float auto_wz;   /* 自动跟随输出，rad/s */
     float target_wz; /* 融合目标，rad/s */
     float manual_wz; /* 退出时保留的手动旋转 */
@@ -235,8 +249,11 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     }
 
     yaw_mec = board.rx_meg->gimbal_meg.yaw_mec; /* 云台相对角 */
-    yaw_error = Chassis_Follow_WrapPi( /* 跟随误差 */
-        (CHASSIS_FOLLOW_YAW_ANGLE_SIGN * yaw_mec) - CHASSIS_FOLLOW_CENTER_RAD);
+    center_rad = Chassis_Follow_CenterRad(); /* 跟随中心 = 掉头基准 */
+    yaw_rot = Chassis_Follow_WrapPi( /* 平移旋转角：始终按实际相对角 */
+        CHASSIS_FOLLOW_YAW_ANGLE_SIGN * yaw_mec);
+    yaw_error = Chassis_Follow_WrapPi( /* 跟随误差 = 旋转角 - 中心 */
+        yaw_rot - center_rad);
     chassis_follow.manual_yaw_rate = board_manual_yaw_rate_deg_s;
     command_ff = CHASSIS_FOLLOW_RATE_FF * CHASSIS_FOLLOW_RATE_PER_DEG_S *
                  chassis_follow.manual_yaw_rate;
@@ -245,7 +262,10 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
 
     if (follow_have_last_yaw != 0u)
     {
-        float yaw_delta = Chassis_Follow_WrapPi(yaw_error - follow_last_yaw_rad);
+        /* 判据用【实际相对角】而不是误差：误差里含软件基准，基准在掉头/退出键鼠
+         * 时本来就会瞬间改变，拿它判跳变会把正常操作误判成反馈故障，
+         * 一旦锁存 fault_latched 底盘会被 Chassis_Control_Stop() 停到 S1 离开上位。 */
+        float yaw_delta = Chassis_Follow_WrapPi(yaw_rot - follow_last_yaw_rot);
 
         /* 跳变过大说明反馈异常，锁存故障 */
         if (fabsf(yaw_delta) >
@@ -267,23 +287,26 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
         }
     }
 
-    follow_last_yaw_rad = yaw_error; /* 缓存上拍误差 */
+    follow_last_yaw_rot = yaw_rot; /* 缓存上拍实际相对角 */
     follow_have_last_yaw = 1u;
     chassis_follow.yaw_mec_rad = yaw_mec;
     chassis_follow.yaw_error_rad = yaw_error;
+    chassis_follow.center_rad = center_rad;
 
-    /* 跟随误差存在时，平移按云台方向旋转 */
+    /* 跟随误差存在时，平移按云台方向旋转。
+     * 用实际相对角（不是误差角）：掉头后中心是 180deg 时，W 依旧朝视线方向开。 */
 #if CHASSIS_FOLLOW_TRANSLATION_ENABLE
     vx_gimbal = cmd->vx;
     vy_gimbal = cmd->vy;
 
     cmd->vx = CHASSIS_FOLLOW_TRANSLATION_SIGN * /* 旋转平移 */
-              ((cosf(yaw_error) * vx_gimbal) - (sinf(yaw_error) * vy_gimbal));
+              ((cosf(yaw_rot) * vx_gimbal) - (sinf(yaw_rot) * vy_gimbal));
     cmd->vy = CHASSIS_FOLLOW_TRANSLATION_SIGN * /* 旋转平移 */
-              ((sinf(yaw_error) * vx_gimbal) + (cosf(yaw_error) * vy_gimbal));
+              ((sinf(yaw_rot) * vx_gimbal) + (cosf(yaw_rot) * vy_gimbal));
 #else
     (void)vx_gimbal;
     (void)vy_gimbal;
+    (void)yaw_rot;
 #endif
 
       if (fabsf(yaw_error) < (CHASSIS_FOLLOW_DEADBAND_DEG * CHASSIS_FOLLOW_DEG_TO_RAD))
@@ -328,6 +351,15 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     auto_wz = constrain(auto_wz,
                         -CHASSIS_FOLLOW_MAX_WZ,
                         CHASSIS_FOLLOW_MAX_WZ);
+
+    /* 掉头动作期间只冻结"底盘跟转"，平移旋转照旧按实际相对角走，这样 W 的方向会
+     * 跟着视线连续转过去，不会在动作收尾那一拍整体反向。跟转和指令前馈都要清：
+     * 动作期间 D5 下发的是掉头角速度，不清就会被当成操作手前馈把底盘带着转。 */
+    if (Chassis_Input_IsUturnActive() != 0u)
+    {
+        auto_wz = 0.0f;
+        chassis_follow.command_ff = 0.0f;
+    }
 
     chassis_follow.blend += CHASSIS_FOLLOW_BLEND_STEP; /* 逐步接管 */
     if (chassis_follow.blend > 1.0f)

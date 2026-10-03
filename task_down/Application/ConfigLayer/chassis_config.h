@@ -39,9 +39,29 @@
 #define CHASSIS_SPIN_GIMBAL_TIMEOUT_MS    50u
 #define CHASSIS_SPIN_TORQUE_LIMIT_NM     4.0f
 
+/* 键鼠机械档：鼠标 X 直接转底盘，等价遥控 S1 下位时 ch0 的转向作用。
+ * 增益单位 rad/s per 鼠标计数，初值对齐 D5 鼠标手感（5 deg/s per count）。
+ * 上车要标定：GAIN 决定转速手感，SIGN 决定左右方向。 */
+#define CHASSIS_KEY_MECH_MOUSE_WZ_GAIN    0.0873f
+#define CHASSIS_KEY_MECH_MOUSE_WZ_MAX     3.5f
+#define CHASSIS_KEY_MECH_MOUSE_WZ_SIGN    1.0f
+
+/* 键鼠跟随档掉头动作：云台在上板上是 IMU 自稳的，只能靠 D5 角速度指令让它在
+ * 世界上转 180deg；下板给一段恒定角速度，并用上板回传的 yaw_imu 闭环停止。
+ * 180deg 两个方向等距，所以 SIGN 必须指定。 */
+#define CHASSIS_KEY_UTURN_RATE_DEG_S      180.0f
+#define CHASSIS_KEY_UTURN_SIGN            1.0f
+#define CHASSIS_KEY_UTURN_ANGLE_DEG       180.0f
+#define CHASSIS_KEY_UTURN_TOL_DEG         6.0f
+#define CHASSIS_KEY_UTURN_TIMEOUT_MS      2500u
+#define CHASSIS_KEY_UTURN_RATE_STEP_DEG_S 2.0f /* 每 1 ms 角速度增量，90 ms 到满速 */
+#define CHASSIS_KEY_UTURN_FEEDBACK_TIMEOUT_MS 50u /* 上板反馈超时，ms */
+
 /* 底盘跟随云台参数。遥控 S2 上/中拨选择，键鼠按 Z 选择。 */
 #define CHASSIS_FOLLOW_TRANSLATION_ENABLE 1u
 #define CHASSIS_FOLLOW_CENTER_RAD         0.0f
+/* 1 = 跟随中心跟随键鼠掉头基准（0 或 180deg），0 = 永远对齐前方（改动前行为）。 */
+#define CHASSIS_FOLLOW_YAW_REFERENCE_ENABLE 1u
 #define CHASSIS_FOLLOW_YAW_ANGLE_SIGN     1.0f
 #define CHASSIS_FOLLOW_TRANSLATION_SIGN   1.0f
 #define CHASSIS_FOLLOW_WZ_SIGN            -1.0f

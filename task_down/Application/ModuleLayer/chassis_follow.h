@@ -12,6 +12,7 @@ typedef struct
 {
     float yaw_mec_rad;    /* 云台机械角，rad */
     float yaw_error_rad;  /* 相对跟随中心误差，rad */
+    float center_rad;     /* 当前跟随中心，rad（跟随键鼠掉头基准） */
     float wz_target;      /* 自动旋转目标，rad/s */
     float wz_output;      /* 融合后旋转输出，rad/s */
     float manual_yaw_rate;/* 统一 Yaw 操作量，deg/s */
