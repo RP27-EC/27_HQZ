@@ -761,15 +761,15 @@ void Lift_Work(void)
     }
 
     if (((lift.state == LIFT_READY_UP) && (is_hole == 0u)) ||
+        (lift.state == LIFT_MOVING_UP) ||
         (lift.state == LIFT_FAULT) || (lift.state == LIFT_STALL_STOP))
     {
         lift.pitch_zero_hold = 0u;
     }
     else if ((lift.state == LIFT_ALIGN_DOWN) ||
-             (lift.state == LIFT_MOVING_DOWN) ||
-             (lift.state == LIFT_MOVING_UP))
+             (lift.state == LIFT_MOVING_DOWN))
     {
-        // NOTE: 故障后重试需重新锁零
+        // NOTE: 重新下行需恢复锁零
         lift.pitch_zero_hold = 1u;
     }
 }
