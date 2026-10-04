@@ -150,7 +150,6 @@ static void lift_output_position(int32_t target_count)
 static uint8_t lift_alignment_ok(void)
 {
     float yaw_error;
-    float pitch_error;
 
     if ((Gimbal.gimbal_mode != G_MEC) || (Gimbal.init_info.init_flag == 0u))
     {
@@ -170,17 +169,12 @@ static uint8_t lift_alignment_ok(void)
 
     yaw_error = lift_abs(lift_wrap_deg(Gimbal.base_info.yaw_mec_angle -
                                        Gimbal.pid_info.yaw_target));
-    pitch_error = lift_abs(Gimbal.base_info.pitch_mec_angle -
-                           Gimbal.pid_info.pitch_target);
-
-    if ((yaw_error > LIFT_ALIGN_TOL_DEG) ||
-        (pitch_error > LIFT_ALIGN_TOL_DEG))
+    if (yaw_error > LIFT_ALIGN_TOL_DEG)
     {
         return 0u;
     }
 
-    if ((lift_abs(Gimbal.base_info.yaw_mec_speed) > LIFT_ALIGN_SPEED_RAD_S) ||
-        (lift_abs(Gimbal.base_info.pitch_mec_speed) > LIFT_ALIGN_SPEED_RAD_S))
+    if (lift_abs(Gimbal.base_info.yaw_mec_speed) > LIFT_ALIGN_SPEED_RAD_S)
     {
         return 0u;
     }
@@ -511,6 +505,7 @@ void Lift_Init(void)
     lift.pending_is_hole = 0u;
     lift.pending_valid = 0u;
     lift.control_is_hole = 0u;
+    lift.pitch_zero_hold = 0u;
     lift.fault_code = 0u;
     lift.state_enter_tick = HAL_GetTick();
     lift.init_tick = lift.state_enter_tick;
@@ -606,6 +601,11 @@ void Lift_Work(void)
         lift.cmd_seen = 0u;
         lift.pending_valid = 0u;
         lift.control_is_hole = 0u;
+        if ((Board_HeartBeat.status != DEV_ONLINE) ||
+            (Board_Rx_Info.state_pkt.car_state == 0u))
+        {
+            lift.pitch_zero_hold = 0u;
+        }
         lift_enter_state(LIFT_WAIT, now);
         return;
     }
@@ -633,6 +633,10 @@ void Lift_Work(void)
         lift.pending_valid = 0u;
     }
     is_hole = lift.control_is_hole;
+    if (is_hole != 0u)
+    {
+        lift.pitch_zero_hold = 1u;
+    }
 
     if (lift.state == LIFT_WAIT)
     {
@@ -755,6 +759,16 @@ void Lift_Work(void)
         lift.motor->tx_info->torque = 0.0f;
         break;
     }
+
+    if ((lift.state == LIFT_READY_UP) && (is_hole == 0u))
+    {
+        lift.pitch_zero_hold = 0u;
+    }
+}
+
+uint8_t Lift_IsPitchZeroHoldActive(void)
+{
+    return lift.pitch_zero_hold;
 }
 
 uint8_t Lift_MotorOnline(void)

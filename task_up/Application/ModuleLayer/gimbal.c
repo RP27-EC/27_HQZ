@@ -1,6 +1,7 @@
 /* gimbal.c - 云台控制 */
 
 #include "gimbal.h"
+#include "lift.h"
 #include "imu_sensor.h"
 #include "rc_sensor.h"
 #include "board_remote_config.h"
@@ -599,6 +600,15 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     float pitch_mag = gimbal_abs(pitch_cmd);
     float yaw_blend;
     float pitch_blend;
+    uint8_t pitch_zero_hold = Lift_IsPitchZeroHoldActive();
+    uint8_t pitch_zero_transition =
+        (pitch_zero_hold != gimbal->feedforward.pitch_zero_hold_last);
+
+    if (pitch_zero_transition != 0u)
+    {
+        gimbal->feedforward.pitch_hold_angle_deg = 0.0f;
+        integral_to_zero(&gimbal->pid_info.pitch_hold);
+    }
 
     /* 增益每周期同步一次，方便在 Keil Watch 里在线改参 */
     gimbal->pid_info.yaw_hold.kp = gimbal_tune.yaw_hold_kp;
@@ -613,7 +623,10 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     if (gimbal->feedforward.manual_source_changed != 0u)
     {
         gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
-        gimbal->feedforward.pitch_hold_angle_deg = gimbal->base_info.pitch_mec_angle;
+        if ((pitch_zero_hold == 0u) && (pitch_zero_transition == 0u))
+        {
+            gimbal->feedforward.pitch_hold_angle_deg = gimbal->base_info.pitch_mec_angle;
+        }
         integral_to_zero(&gimbal->pid_info.yaw_hold);
         integral_to_zero(&gimbal->pid_info.pitch_hold);
         gimbal->feedforward.manual_source_changed = 0u;
@@ -622,7 +635,8 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     if (gimbal->feedforward.manual_source == GIMBAL_INPUT_KEYBOARD)
     {
         float yaw_delta = gimbal->feedforward.mouse_dx_counts;
-        float pitch_delta = gimbal->feedforward.mouse_dy_counts;
+        float pitch_delta = (pitch_zero_hold != 0u) ? 0.0f :
+                            gimbal->feedforward.mouse_dy_counts;
 
         if (gimbal_abs(yaw_delta) < gimbal_tune.mouse_deadband_count)
         {
@@ -676,7 +690,8 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
             gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
             integral_to_zero(&gimbal->pid_info.yaw_hold);
         }
-        if (pitch_mag > gimbal_tune.rate_hold_enter_deg_s)
+        if ((pitch_zero_hold == 0u) &&
+            (pitch_mag > gimbal_tune.rate_hold_enter_deg_s))
         {
             gimbal->feedforward.pitch_hold_angle_deg = gimbal->base_info.pitch_mec_angle;
             integral_to_zero(&gimbal->pid_info.pitch_hold);
@@ -685,6 +700,16 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
         yaw_blend = gimbal_hold_blend(yaw_mag);
         pitch_blend = gimbal_hold_blend(pitch_mag);
     }
+
+    if (pitch_zero_hold != 0u)
+    {
+        // NOTE: 升降全程优先锁零
+        gimbal->feedforward.pitch_hold_angle_deg = 0.0f;
+        gimbal->pid_info.pitch_target = 0.0f;
+        pitch_cmd = 0.0f;
+        pitch_blend = 1.0f;
+    }
+    gimbal->feedforward.pitch_zero_hold_last = pitch_zero_hold;
 
     /* 保持环：角度误差 -> 角速度修正量 */
     gimbal->pid_info.yaw_hold.err = gimbal_wrap_deg(
@@ -1476,6 +1501,7 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal->feedforward.pitch_torque_ff_nm = 0.0f;
     gimbal->feedforward.yaw_hold_angle_deg = 0.0f;
     gimbal->feedforward.pitch_hold_angle_deg = 0.0f;
+    gimbal->feedforward.pitch_zero_hold_last = 0u;
     gimbal->feedforward.manual_source = GIMBAL_INPUT_RC;
     gimbal->feedforward.manual_source_changed = 0u;
     gimbal->feedforward.mouse_dx_counts = 0.0f;
@@ -1528,7 +1554,10 @@ void Gimbal_Work(gimbal_t *gimbal)
         }
 
         gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
-        gimbal->feedforward.pitch_hold_angle_deg = gimbal->base_info.pitch_mec_angle;
+        gimbal->feedforward.pitch_hold_angle_deg =
+            ((Lift_IsPitchZeroHoldActive() != 0u) ||
+             (gimbal->feedforward.pitch_zero_hold_last != 0u)) ?
+            0.0f : gimbal->base_info.pitch_mec_angle;
 
         // 切换帧先卸力，下一帧从当前角度开始是斜坡步进
         gimbal->base_info.output_gimbal_p = 0.0f;
@@ -1544,6 +1573,7 @@ void Gimbal_Work(gimbal_t *gimbal)
     //  休眠下电置零
     if (gimbal->gimbal_mode == G_SLEEP)
     {
+        gimbal->feedforward.pitch_zero_hold_last = 0u;
         gimbal->base_info.output_gimbal_p = 0.0f;
         gimbal->base_info.output_gimbal_y = 0.0f;
     }

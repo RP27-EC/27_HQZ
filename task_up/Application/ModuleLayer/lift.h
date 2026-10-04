@@ -35,6 +35,7 @@ typedef struct
     uint8_t pending_is_hole;
     uint8_t pending_valid;
     uint8_t control_is_hole;
+    uint8_t pitch_zero_hold;
     uint8_t fault_code;
     uint8_t home_valid;
 
@@ -103,6 +104,7 @@ extern volatile lift_debug_t lift_debug;
 
 void Lift_Init(void);
 void Lift_Work(void);
+uint8_t Lift_IsPitchZeroHoldActive(void);
 uint8_t Lift_MotorOnline(void);
 uint8_t Lift_Get_Report_State(void);
 

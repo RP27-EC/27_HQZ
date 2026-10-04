@@ -350,6 +350,7 @@ typedef struct
     float pitch_torque_ff_nm;       /* Pitch 最终力矩前馈 */
     float yaw_hold_angle_deg;       /* 速控回中后保持的 Yaw 角度 */
     float pitch_hold_angle_deg;     /* 速控回中后保持的 Pitch 角度 */
+    uint8_t pitch_zero_hold_last;
 } gimbal_feedforward_t;
 
 /* Runtime tuning values. Edit these in Keil Watch without reflashing. */
