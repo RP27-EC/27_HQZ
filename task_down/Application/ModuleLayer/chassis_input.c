@@ -317,11 +317,11 @@ static void Chassis_Input_Keyboard(chassis_cmd_t *cmd, const rc_data_t *rc)
 
     if ((rc->key_v & KEY_PRESSED_OFFSET_W) != 0u)
     {
-        forward += 1.0f;
+        forward += 0.7f;
     }
     if ((rc->key_v & KEY_PRESSED_OFFSET_S) != 0u)
     {
-        forward -= 1.0f;
+        forward -= 0.7f;
     }
     if ((rc->key_v & KEY_PRESSED_OFFSET_A) != 0u)
     {
