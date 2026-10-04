@@ -42,8 +42,8 @@
 /* 键鼠机械档：鼠标 X 直接转底盘，等价遥控 S1 下位时 ch0 的转向作用。
  * 增益单位 rad/s per 鼠标计数，初值对齐 D5 鼠标手感（5 deg/s per count）。
  * 上车要标定：GAIN 决定转速手感，SIGN 决定左右方向。 */
-#define CHASSIS_KEY_MECH_MOUSE_WZ_GAIN    0.0873f
-#define CHASSIS_KEY_MECH_MOUSE_WZ_MAX     3.5f
+#define CHASSIS_KEY_MECH_MOUSE_WZ_GAIN    20.0f
+#define CHASSIS_KEY_MECH_MOUSE_WZ_MAX     15.0f
 #define CHASSIS_KEY_MECH_MOUSE_WZ_SIGN    1.0f
 
 /* 键鼠跟随档掉头动作：云台在上板上是 IMU 自稳的，只能靠 D5 角速度指令让它在
