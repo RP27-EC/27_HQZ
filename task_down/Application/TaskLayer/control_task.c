@@ -151,6 +151,7 @@ static void Board_Debug_Gimbal_Command(void)
     uint8_t r_pressed;
     uint8_t keyboard_active; /* 键鼠模式生效 */
     uint8_t keyboard_mech;   /* 键鼠 X 机械档生效 */
+    uint8_t uturn_mech;
 
     if (rc_dev.work_state != DEV_ONLINE)
     {
@@ -170,6 +171,7 @@ static void Board_Debug_Gimbal_Command(void)
     board.tx_pkt->car_pkt.car_state = 1u;
     keyboard_active = Chassis_Input_IsKeyboardMode();
     keyboard_mech = Chassis_Input_IsKeyboardMechMode();
+    uturn_mech = (Chassis_Input_GetUturnState() == CHASSIS_UTURN_POSITION) ? 1u : 0u;
     r_pressed = ((rc_info->key_v & KEY_PRESSED_OFFSET_R) != 0u) ? 1u : 0u;
 #if BOARD_LIFT_ENABLE
     if (Board_Debug_Hole_Command(rc_info) != 0u)
@@ -196,12 +198,10 @@ static void Board_Debug_Gimbal_Command(void)
     }
     last_r_pressed = r_pressed;
 
-    /* 前后目标每个周期都下发，与当前 S1 位置无关。键鼠模式取掉头基准。 */
-    if (keyboard_mech != 0u)
+    /* 预发送与定位共用固定终点。 */
+    if (keyboard_active != 0u)
     {
-        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar =
-            (Chassis_Input_IsKeyboardYawRear() != 0u) ?
-            BOARD_MEC_YAW_REAR_RAD : BOARD_MEC_YAW_FRONT_RAD;
+        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = Chassis_Input_GetKeyboardYawTargetRad();
     }
     else
     {
@@ -211,7 +211,7 @@ static void Board_Debug_Gimbal_Command(void)
     }
 
     /* 机械模式：S1 下位（遥控）或 键鼠 X 档（云台锁机械零位，看着跟底盘走） */
-    if ((rc_info->s1.value == RC_SW_DOWN) || (keyboard_mech != 0u))
+    if ((rc_info->s1.value == RC_SW_DOWN) || (keyboard_mech != 0u) || (uturn_mech != 0u))
     {
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
         /* 进入机械模式时从当前角度起调，避免跳变 */
@@ -223,7 +223,7 @@ static void Board_Debug_Gimbal_Command(void)
 
         /* 只有遥控才用右摇杆积分 Pitch。键鼠的 Pitch 走上板 D5 鼠标角速度通路，
          * 机械模式里 D2 的 Pitch 机械目标并不参与运算。 */
-        if (keyboard_mech == 0u)
+        if (keyboard_active == 0u)
         {
             pitch_mec_target += (float)rc_info->ch1 / BOARD_RC_AXIS_MAX *
                                 BOARD_MEC_PITCH_STEP_RAD;
@@ -258,14 +258,16 @@ void StartCtrlTask(void const *argument)
 
     for (;;)
     {
+#if CHASSIS_BRINGUP_ENABLE
+        Chassis_Input_Update();
+#endif
+
 #if BOARD_COMM_DEBUG
         Board_Debug_Gimbal_Command();
-
 #endif
 
     /* 第一阶段底盘调试链路 */
 #if CHASSIS_BRINGUP_ENABLE
-        Chassis_Input_Update();
         Chassis_Follow_UpdateMode();
         Chassis_Spin_UpdateMode();
         Chassis_Follow_Update(&chassis_input_cmd);

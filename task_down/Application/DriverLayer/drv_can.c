@@ -79,6 +79,7 @@ void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
 HAL_StatusTypeDef CAN_SendData(FDCAN_HandleTypeDef *hcan, uint32_t stdId, uint8_t *dat)
 {
 	FDCAN_TxHeaderTypeDef tx_message;
+	HAL_StatusTypeDef result;
 	
 	tx_message.IdType = FDCAN_STANDARD_ID;
 	tx_message.Identifier = stdId;
@@ -89,14 +90,14 @@ HAL_StatusTypeDef CAN_SendData(FDCAN_HandleTypeDef *hcan, uint32_t stdId, uint8_
 	tx_message.TxFrameType = FDCAN_DATA_FRAME;
 	tx_message.MessageMarker = 0;
 	tx_message.TxEventFifoControl =FDCAN_NO_TX_EVENTS;
-	HAL_FDCAN_AddMessageToTxFifoQ(hcan, &tx_message, dat);
+	result = HAL_FDCAN_AddMessageToTxFifoQ(hcan, &tx_message, dat);
 
 	if (hcan->Instance->ECR != 0U)
     {
         CLEAR_BIT(hcan->Instance->CCCR, FDCAN_CCCR_INIT);
     }
 	
-	return HAL_OK;
+	return result;
 }
 /* rxData Handler [Weak] functions -------------------------------------------*/
 /* __WEAK */

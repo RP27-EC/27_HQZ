@@ -14,6 +14,23 @@ typedef enum
     CHASSIS_KEY_MODE_SPIN,       /* C：小陀螺 */
 } chassis_key_mode_e;
 
+typedef enum
+{
+    CHASSIS_UTURN_IDLE = 0,
+    CHASSIS_UTURN_PREPARE,
+    CHASSIS_UTURN_POSITION,
+    CHASSIS_UTURN_RESTORE,
+} chassis_uturn_state_e;
+
+typedef enum
+{
+    CHASSIS_UTURN_NONE = 0,
+    CHASSIS_UTURN_RUNNING,
+    CHASSIS_UTURN_DONE,
+    CHASSIS_UTURN_TIMEOUT,
+    CHASSIS_UTURN_CANCELLED,
+} chassis_uturn_result_e;
+
 void Chassis_Input_Init(void);
 void Chassis_Input_Update(void);
 void Chassis_Input_SetSource(chassis_source_e source);
@@ -22,16 +39,19 @@ chassis_key_mode_e Chassis_Input_GetKeyboardChassisMode(void);
 
 /* 键鼠机械档（X 档）是否生效 */
 uint8_t Chassis_Input_IsKeyboardMechMode(void);
-/* 掉头基准是否在后方（180deg），机械档锁零位和 WASD 反向都按它走 */
+/* 固定前后方向不采纳超时停偏角 */
 uint8_t Chassis_Input_IsKeyboardYawRear(void);
-/* 当前掉头基准角，rad。跟随中心用它，未进键鼠时为 0 */
+float Chassis_Input_GetKeyboardYawTargetRad(void);
+/* 超时仅对齐跟随中心，不改变固定终点 */
 float Chassis_Input_GetYawReferenceRad(void);
-/* 强制把掉头基准打回前方（过洞强制云台回零位时用） */
+/* 过洞回零必须同步取消掉头 */
 void Chassis_Input_ResetYawReference(void);
-/* 跟随档掉头动作是否进行中（进行中要冻结跟随环，底盘不许动） */
+/* 包含预发送及恢复，期间屏蔽 Yaw 和自动跟转 */
 uint8_t Chassis_Input_IsUturnActive(void);
-/* 取掉头动作的 Yaw 角速度指令，deg/s；1 = 动作中，0 = 无动作 */
-uint8_t Chassis_Input_GetUturnYawRateDegS(float *rate_deg_s);
+chassis_uturn_state_e Chassis_Input_GetUturnState(void);
+chassis_uturn_result_e Chassis_Input_GetUturnResult(void);
+/* 只计完整成功发送周期，目标使用 D2 编码值 */
+void Chassis_Input_NotifyUturnTxCycle(uint8_t gimbal_mode, uint16_t yaw_target_raw);
 
 #endif
 

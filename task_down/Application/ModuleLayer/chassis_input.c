@@ -5,12 +5,14 @@
 #include <math.h>
 
 #include "board_protocol.h"
+#include "board_comm_config.h"
+#include "control_task.h"
 #include "main.h"
 #include "rc_sensor.h"
 #include "rp_math.h"
 
 #define CHASSIS_INPUT_PI      3.14159265358979323846f /* 圆周率 */
-#define CHASSIS_INPUT_HALF_PI (CHASSIS_INPUT_PI * 0.5f) /* 前后基准分界 */
+#define CHASSIS_INPUT_DEG_TO_RAD (CHASSIS_INPUT_PI / 180.0f)
 
 chassis_cmd_t chassis_input_cmd; /* 输入解析后的底盘指令 */
 
@@ -21,20 +23,20 @@ static uint8_t last_z_pressed; /* Z 键上次状态 */
 static uint8_t last_x_pressed; /* X 键上次状态 */
 static uint8_t last_c_pressed; /* C 键上次状态 */
 
-/*
- * 掉头基准角，rad。0 = 前方，pi = 后方，整车的"前方"就由它定义。
- *
- * 机械档按 R 直接翻到另一头（云台锁 0/pi，底盘不动）；跟随档按 R 走掉头动作，
- * 动作收尾时取实际相对角，这样跟随环接手时误差正好是 0，底盘一下都不会动。
- * 只在键鼠模式内保留，退出键鼠或遥控离线复位回前方。
- */
+/* 超时仅移动跟随中心，固定前后方向独立保存。 */
 static float yaw_reference_rad;
-static uint8_t last_r_pressed;    /* R 键上次状态 */
-static uint8_t uturn_active;      /* 1 = 跟随档掉头动作进行中 */
-static uint8_t uturn_stopping;    /* 1 = 已转够角度，正在减速 */
-static float uturn_rate_deg_s;    /* 当前下发的 Yaw 角速度指令，deg/s */
-static float uturn_start_yaw_deg; /* 动作起始 Yaw IMU 角，deg */
-static uint32_t uturn_start_tick; /* 动作起始时刻，ms */
+static volatile uint8_t yaw_rear;
+static uint8_t last_r_pressed;
+static volatile chassis_uturn_state_e uturn_state;
+static chassis_uturn_result_e uturn_result;
+static uint32_t uturn_start_tick;
+static uint32_t uturn_phase_tick;
+static uint32_t uturn_last_feedback_tick;
+static uint32_t uturn_stable_start_tick;
+static uint8_t uturn_stable_started;
+static volatile uint8_t uturn_handoff_cycles;
+static volatile uint8_t uturn_handoff_tx_started;
+static volatile uint32_t uturn_handoff_tx_tick;
 
 /* 遥控通道归一化，含死区 */
 static float Chassis_RcAxisValue(int16_t axis)
@@ -115,40 +117,38 @@ static float Chassis_Input_WrapPi(float angle)
     return atan2f(sinf(angle), cosf(angle));
 }
 
-/* 将角度归一化到 [-180, 180]，单位 deg */
-static float Chassis_Input_Wrap180Deg(float angle_deg)
-{
-    float value = fmodf(angle_deg, 360.0f); /* 取余 */
-
-    if (value > 180.0f)
-    {
-        value -= 360.0f;
-    }
-    else if (value < -180.0f)
-    {
-        value += 360.0f;
-    }
-
-    return value;
-}
-
-/* 当前掉头基准角，跟随中心用它 */
 float Chassis_Input_GetYawReferenceRad(void)
 {
     return yaw_reference_rad;
 }
 
-/* 强制把掉头基准打回前方：过洞强制云台回零位时，基准必须跟着回零位，
- * 否则跟随中心仍停在 180deg，云台被拉回前方时跟随环会把底盘转过去。 */
-void Chassis_Input_ResetYawReference(void)
+static void Chassis_Input_CancelUturn(void)
 {
-    yaw_reference_rad = 0.0f;
+    if (uturn_state != CHASSIS_UTURN_IDLE)
+    {
+        uturn_result = CHASSIS_UTURN_CANCELLED;
+    }
+    uturn_state = CHASSIS_UTURN_IDLE;
+    uturn_stable_started = 0u;
+    uturn_handoff_cycles = 0u;
+    uturn_handoff_tx_started = 0u;
 }
 
-/* 掉头基准是否在后方 */
+void Chassis_Input_ResetYawReference(void)
+{
+    Chassis_Input_CancelUturn();
+    yaw_reference_rad = BOARD_MEC_YAW_FRONT_RAD;
+    yaw_rear = 0u;
+}
+
 uint8_t Chassis_Input_IsKeyboardYawRear(void)
 {
-    return (fabsf(Chassis_Input_WrapPi(yaw_reference_rad)) > CHASSIS_INPUT_HALF_PI) ? 1u : 0u;
+    return yaw_rear;
+}
+
+float Chassis_Input_GetKeyboardYawTargetRad(void)
+{
+    return (yaw_rear != 0u) ? BOARD_MEC_YAW_REAR_RAD : BOARD_MEC_YAW_FRONT_RAD;
 }
 
 /* 键鼠 + X 机械档是否生效 */
@@ -163,146 +163,178 @@ uint8_t Chassis_Input_IsKeyboardMechMode(void)
     return 1u;
 }
 
-/* 跟随档掉头动作是否进行中 */
 uint8_t Chassis_Input_IsUturnActive(void)
 {
-    return uturn_active;
+    return (uturn_state != CHASSIS_UTURN_IDLE) ? 1u : 0u;
 }
 
-/* 取掉头动作的 Yaw 角速度指令，deg/s */
-uint8_t Chassis_Input_GetUturnYawRateDegS(float *rate_deg_s)
+chassis_uturn_state_e Chassis_Input_GetUturnState(void)
 {
-    if ((uturn_active == 0u) || (rate_deg_s == NULL))
-    {
-        return 0u;
-    }
-
-    *rate_deg_s = uturn_rate_deg_s;
-    return 1u;
+    return uturn_state;
 }
 
-/*
- * 掉头处理：机械档按 R 翻基准；跟随档按 R 走"云台世界角转 180deg"的动作。
- *
- * 跟随档云台在上板是 IMU 自稳的，D2 的机械目标角根本不参与，只能靠 D5 的 Yaw
- * 角速度指令推它转。所以这里给一段恒定角速度，并用上板回传的 yaw_imu 闭环判断
- * 转够了没有；动作期间跟随环只冻结"底盘跟转"（见 chassis_follow.c），
- * 平移旋转照旧，底盘不会自己转。
- */
-static void Chassis_Input_UturnUpdate(const rc_data_t *rc)
+chassis_uturn_result_e Chassis_Input_GetUturnResult(void)
 {
-    uint8_t r_pressed;   /* R 键当前状态 */
-    uint8_t mech;        /* 机械档 */
-    uint8_t follow;      /* 跟随档 */
-    uint8_t data_valid;  /* 云台反馈可用 */
-    float delta_deg;     /* 动作已转过的角度，deg */
-    float target_rate;   /* 本拍角速度目标，deg/s */
+    return uturn_result;
+}
 
-    r_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_R) != 0u) ? 1u : 0u;
+void Chassis_Input_NotifyUturnTxCycle(uint8_t gimbal_mode, uint16_t yaw_target_raw)
+{
+    uint32_t now = HAL_GetTick();
 
-    if (Chassis_Input_IsKeyboardMode() == 0u)
+    if (((uturn_state != CHASSIS_UTURN_PREPARE) &&
+         (uturn_state != CHASSIS_UTURN_RESTORE)) || (gimbal_mode == 0u) ||
+        (yaw_target_raw != float_to_uint(Chassis_Input_GetKeyboardYawTargetRad(), -4.0f, 4.0f, 16u)))
     {
-        /* 退出键鼠：基准复位回前方，动作取消。
-         * R 的按键记忆要留着：按着 R 切进键鼠的那一拍不许被当成一次新边沿。 */
-        yaw_reference_rad = 0.0f;
-        last_r_pressed = r_pressed;
-        uturn_active = 0u;
-        uturn_stopping = 0u;
-        uturn_rate_deg_s = 0.0f;
         return;
     }
 
-    mech = (keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH) ? 1u : 0u;
-    follow = (keyboard_chassis_mode == CHASSIS_KEY_MODE_FOLLOW) ? 1u : 0u;
-    data_valid = 0u;
-    /* gimbal_data_valid 只在收到 C2 时置位、不会自己清零，所以还要看反馈年龄 */
-    if ((board.status != NULL) && (board.status->gimbal_data_valid != 0u))
+    if ((uturn_handoff_tx_started == 0u) ||
+        ((now - uturn_handoff_tx_tick) >= BOARD_COMM_D1D2_PERIOD_MS))
     {
-        if ((HAL_GetTick() - board.status->gimbal_rx_time_ms) <=
-            CHASSIS_KEY_UTURN_FEEDBACK_TIMEOUT_MS)
+        uturn_handoff_tx_tick = now;
+        uturn_handoff_tx_started = 1u;
+        if (uturn_handoff_cycles < CHASSIS_KEY_UTURN_HANDOFF_PERIODS)
+        {
+            uturn_handoff_cycles++;
+        }
+    }
+}
+
+static void Chassis_Input_UturnUpdate(const rc_data_t *rc)
+{
+    uint32_t now = HAL_GetTick();
+    uint32_t feedback_tick = 0u;
+    uint32_t handoff_ms = CHASSIS_KEY_UTURN_HANDOFF_PERIODS * BOARD_COMM_D1D2_PERIOD_MS;
+    uint8_t r_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_R) != 0u) ? 1u : 0u;
+    uint8_t r_edge = ((r_pressed != 0u) && (last_r_pressed == 0u)) ? 1u : 0u;
+    uint8_t was_active = Chassis_Input_IsUturnActive();
+    uint8_t data_valid = 0u;
+    float yaw_mec = 0.0f;
+    float error_rad;
+
+    last_r_pressed = r_pressed;
+    if (Chassis_Input_IsKeyboardMode() == 0u)
+    {
+        Chassis_Input_ResetYawReference();
+        return;
+    }
+
+    if ((board_hole_request != 0u) || (board_hole_exit_pending != 0u) ||
+        ((rc->s2.value == RC_SW_MID) && (rc->B.value != 0u)))
+    {
+        Chassis_Input_CancelUturn();
+        return;
+    }
+
+    if ((board.status != NULL) && (board.rx_meg != NULL) &&
+        (board.status->gimbal_data_valid != 0u))
+    {
+        feedback_tick = board.status->gimbal_rx_time_ms;
+        yaw_mec = board.rx_meg->gimbal_meg.yaw_mec;
+        if (((now - feedback_tick) <= CHASSIS_KEY_UTURN_FEEDBACK_TIMEOUT_MS) &&
+            (yaw_mec == yaw_mec) && (fabsf(yaw_mec) <= (CHASSIS_INPUT_PI + 0.01f)))
         {
             data_valid = 1u;
         }
     }
 
-    if ((r_pressed != 0u) && (last_r_pressed == 0u) && (uturn_active == 0u))
+    if (keyboard_chassis_mode != CHASSIS_KEY_MODE_FOLLOW)
     {
-        if (mech != 0u)
+        Chassis_Input_CancelUturn();
+        if ((keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH) &&
+            (r_edge != 0u) && (was_active == 0u))
         {
-            /* 机械档：基准直接翻到另一头，云台锁 0/pi，底盘不动 */
-            yaw_reference_rad = (Chassis_Input_IsKeyboardYawRear() != 0u) ?
-                                0.0f : CHASSIS_INPUT_PI;
+            yaw_rear ^= 1u;
         }
-        else if ((follow != 0u) && (data_valid != 0u))
+        if (keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH)
         {
-            /* 跟随档：起一个掉头动作 */
-            uturn_active = 1u;
-            uturn_stopping = 0u;
-            uturn_rate_deg_s = 0.0f;
-            /* NOTE: 上板 yaw_imu 单位是 deg（yaw_mec 才是 rad），别混用 */
-            uturn_start_yaw_deg = board.rx_meg->gimbal_meg.yaw_imu;
-            uturn_start_tick = HAL_GetTick();
+            yaw_reference_rad = Chassis_Input_GetKeyboardYawTargetRad();
         }
-    }
-    last_r_pressed = r_pressed;
-
-    if (uturn_active == 0u)
-    {
         return;
     }
 
-    /* 档位切走或反馈失效：取消动作，基准保持原值 */
-    if ((follow == 0u) || (data_valid == 0u))
+    if (data_valid == 0u)
     {
-        uturn_active = 0u;
-        uturn_stopping = 0u;
-        uturn_rate_deg_s = 0.0f;
+        Chassis_Input_CancelUturn();
         return;
     }
 
-    if (uturn_stopping == 0u)
+    if ((r_edge != 0u) && (was_active == 0u))
     {
-        delta_deg = Chassis_Input_Wrap180Deg(board.rx_meg->gimbal_meg.yaw_imu -
-                                            uturn_start_yaw_deg);
+        yaw_rear ^= 1u;
+        uturn_handoff_cycles = 0u;
+        uturn_handoff_tx_started = 0u;
+        uturn_state = CHASSIS_UTURN_PREPARE;
+        uturn_result = CHASSIS_UTURN_RUNNING;
+        uturn_start_tick = now;
+        uturn_phase_tick = now;
+        uturn_last_feedback_tick = feedback_tick;
+        uturn_stable_started = 0u;
+    }
 
-        if ((fabsf(delta_deg) >= (CHASSIS_KEY_UTURN_ANGLE_DEG - CHASSIS_KEY_UTURN_TOL_DEG)) ||
-            ((HAL_GetTick() - uturn_start_tick) >= CHASSIS_KEY_UTURN_TIMEOUT_MS))
+    if (uturn_state == CHASSIS_UTURN_PREPARE)
+    {
+        /* NOTE: 时间与发送计数同时满足才交接。 */
+        if (((now - uturn_phase_tick) >= handoff_ms) &&
+            (uturn_handoff_cycles >= CHASSIS_KEY_UTURN_HANDOFF_PERIODS))
         {
-            uturn_stopping = 1u;
+            uturn_state = CHASSIS_UTURN_POSITION;
+            uturn_last_feedback_tick = feedback_tick;
+        }
+    }
+    else if (uturn_state == CHASSIS_UTURN_POSITION)
+    {
+        if (feedback_tick != uturn_last_feedback_tick)
+        {
+            if ((feedback_tick - uturn_last_feedback_tick) > CHASSIS_KEY_UTURN_FEEDBACK_TIMEOUT_MS)
+            {
+                uturn_stable_started = 0u;
+            }
+            uturn_last_feedback_tick = feedback_tick;
+            error_rad = Chassis_Input_WrapPi(Chassis_Input_GetKeyboardYawTargetRad() - yaw_mec);
+            if (fabsf(error_rad) <= (CHASSIS_KEY_UTURN_TOL_DEG * CHASSIS_INPUT_DEG_TO_RAD))
+            {
+                if (uturn_stable_started == 0u)
+                {
+                    uturn_stable_start_tick = feedback_tick;
+                    uturn_stable_started = 1u;
+                }
+                if ((feedback_tick - uturn_stable_start_tick) >= CHASSIS_KEY_UTURN_STABLE_MS)
+                {
+                    yaw_reference_rad = Chassis_Input_GetKeyboardYawTargetRad();
+                    uturn_result = CHASSIS_UTURN_DONE;
+                    uturn_handoff_cycles = 0u;
+                    uturn_handoff_tx_started = 0u;
+                    uturn_state = CHASSIS_UTURN_RESTORE;
+                    uturn_phase_tick = now;
+                }
+            }
+            else
+            {
+                uturn_stable_started = 0u;
+            }
         }
     }
 
-    target_rate = (uturn_stopping != 0u) ? 0.0f :
-                  (CHASSIS_KEY_UTURN_RATE_DEG_S * CHASSIS_KEY_UTURN_SIGN);
-
-    /* 角速度斜坡，起停都不突跳 */
-    if (uturn_rate_deg_s < target_rate)
+    if (((uturn_state == CHASSIS_UTURN_PREPARE) ||
+         (uturn_state == CHASSIS_UTURN_POSITION)) &&
+        ((now - uturn_start_tick) >= CHASSIS_KEY_UTURN_TIMEOUT_MS))
     {
-        uturn_rate_deg_s += CHASSIS_KEY_UTURN_RATE_STEP_DEG_S;
-        if (uturn_rate_deg_s > target_rate)
-        {
-            uturn_rate_deg_s = target_rate;
-        }
-    }
-    else if (uturn_rate_deg_s > target_rate)
-    {
-        uturn_rate_deg_s -= CHASSIS_KEY_UTURN_RATE_STEP_DEG_S;
-        if (uturn_rate_deg_s < target_rate)
-        {
-            uturn_rate_deg_s = target_rate;
-        }
-    }
-    else
-    {
-        /* 已在目标角速度上 */
+        yaw_reference_rad = Chassis_Input_WrapPi(yaw_mec);
+        uturn_result = CHASSIS_UTURN_TIMEOUT;
+        uturn_handoff_cycles = 0u;
+        uturn_handoff_tx_started = 0u;
+        uturn_state = CHASSIS_UTURN_RESTORE;
+        uturn_phase_tick = now;
     }
 
-    if ((uturn_stopping != 0u) && (uturn_rate_deg_s == 0.0f))
+    if ((uturn_state == CHASSIS_UTURN_RESTORE) &&
+        ((now - uturn_phase_tick) >= handoff_ms) &&
+        (uturn_handoff_cycles >= CHASSIS_KEY_UTURN_HANDOFF_PERIODS))
     {
-        /* 收尾：基准取当前实际相对角，跟随环接手时误差为 0，底盘不会动 */
-        yaw_reference_rad = Chassis_Input_WrapPi(board.rx_meg->gimbal_meg.yaw_mec);
-        uturn_active = 0u;
-        uturn_stopping = 0u;
+        uturn_state = CHASSIS_UTURN_IDLE;
+        uturn_stable_started = 0u;
     }
 }
 
@@ -393,13 +425,19 @@ void Chassis_Input_Init(void)
     last_z_pressed = 0u;
     last_x_pressed = 0u;
     last_c_pressed = 0u;
-    yaw_reference_rad = 0.0f;
+    yaw_reference_rad = BOARD_MEC_YAW_FRONT_RAD;
+    yaw_rear = 0u;
     last_r_pressed = 0u;
-    uturn_active = 0u;
-    uturn_stopping = 0u;
-    uturn_rate_deg_s = 0.0f;
-    uturn_start_yaw_deg = 0.0f;
+    uturn_state = CHASSIS_UTURN_IDLE;
+    uturn_result = CHASSIS_UTURN_NONE;
     uturn_start_tick = 0u;
+    uturn_phase_tick = 0u;
+    uturn_last_feedback_tick = 0u;
+    uturn_stable_start_tick = 0u;
+    uturn_stable_started = 0u;
+    uturn_handoff_cycles = 0u;
+    uturn_handoff_tx_started = 0u;
+    uturn_handoff_tx_tick = 0u;
 }
 
 /* 上层模式覆盖输入来源 */
@@ -430,11 +468,8 @@ void Chassis_Input_Update(void)
         last_z_pressed = 0u;
         last_x_pressed = 0u;
         last_c_pressed = 0u;
-        yaw_reference_rad = 0.0f;
-        last_r_pressed = 0u;
-        uturn_active = 0u;
-        uturn_stopping = 0u;
-        uturn_rate_deg_s = 0.0f;
+        Chassis_Input_ResetYawReference();
+        last_r_pressed = (rc != NULL && (rc->key_v & KEY_PRESSED_OFFSET_R) != 0u) ? 1u : 0u;
         chassis_input_cmd = cmd;
         return;
     }

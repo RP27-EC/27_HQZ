@@ -352,13 +352,12 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
                         -CHASSIS_FOLLOW_MAX_WZ,
                         CHASSIS_FOLLOW_MAX_WZ);
 
-    /* 掉头动作期间只冻结"底盘跟转"，平移旋转照旧按实际相对角走，这样 W 的方向会
-     * 跟着视线连续转过去，不会在动作收尾那一拍整体反向。跟转和指令前馈都要清：
-     * 动作期间 D5 下发的是掉头角速度，不清就会被当成操作手前馈把底盘带着转。 */
+    /* 自动定位不接管 QE，鼠标 Yaw 已在 D5 屏蔽。 */
     if (Chassis_Input_IsUturnActive() != 0u)
     {
         auto_wz = 0.0f;
         chassis_follow.command_ff = 0.0f;
+        chassis_follow.turn_direction = 0;
     }
 
     chassis_follow.blend += CHASSIS_FOLLOW_BLEND_STEP; /* 逐步接管 */
@@ -367,7 +366,8 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
         chassis_follow.blend = 1.0f;
     }
 
-    target_wz = auto_wz * chassis_follow.blend; /* 融合旋转 */
+    target_wz = (Chassis_Input_IsUturnActive() != 0u) ?
+                cmd->wz : auto_wz * chassis_follow.blend;
     cmd->wz = Chassis_Follow_Ramp(follow_last_wz, target_wz, CHASSIS_FOLLOW_WZ_STEP);
 
     chassis_follow.wz_target = auto_wz; /* 自动目标 */

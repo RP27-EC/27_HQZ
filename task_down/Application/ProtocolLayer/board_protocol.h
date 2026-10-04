@@ -135,6 +135,8 @@ typedef struct{
 	uint16_t offline_cnt;     /* 当前离线计数 */
 
 	volatile uint32_t gimbal_rx_time_ms; /* 云台反馈接收时刻 */
+	volatile uint8_t gimbal_d1_tx_ok;
+	volatile uint8_t gimbal_d2_tx_ok;
 	volatile uint8_t gimbal_data_valid;  /* 云台反馈数据有效 */
 }Board_Status_t;
 

@@ -46,15 +46,11 @@
 #define CHASSIS_KEY_MECH_MOUSE_WZ_MAX     15.0f
 #define CHASSIS_KEY_MECH_MOUSE_WZ_SIGN    1.0f
 
-/* 键鼠跟随档掉头动作：云台在上板上是 IMU 自稳的，只能靠 D5 角速度指令让它在
- * 世界上转 180deg；下板给一段恒定角速度，并用上板回传的 yaw_imu 闭环停止。
- * 180deg 两个方向等距，所以 SIGN 必须指定。 */
-#define CHASSIS_KEY_UTURN_RATE_DEG_S      180.0f
-#define CHASSIS_KEY_UTURN_SIGN            1.0f
-#define CHASSIS_KEY_UTURN_ANGLE_DEG       180.0f
-#define CHASSIS_KEY_UTURN_TOL_DEG         6.0f
+/* 到位门限与跟随死区匹配，避免交接后补转。 */
+#define CHASSIS_KEY_UTURN_TOL_DEG         0.5f
+#define CHASSIS_KEY_UTURN_STABLE_MS       100u
+#define CHASSIS_KEY_UTURN_HANDOFF_PERIODS 2u
 #define CHASSIS_KEY_UTURN_TIMEOUT_MS      2500u
-#define CHASSIS_KEY_UTURN_RATE_STEP_DEG_S 2.0f /* 每 1 ms 角速度增量，90 ms 到满速 */
 #define CHASSIS_KEY_UTURN_FEEDBACK_TIMEOUT_MS 50u /* 上板反馈超时，ms */
 
 /* 底盘跟随云台参数。遥控 S2 上/中拨选择，键鼠按 Z 选择。 */

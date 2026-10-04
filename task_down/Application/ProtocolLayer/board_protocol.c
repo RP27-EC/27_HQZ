@@ -43,6 +43,8 @@ void Board_Init(Board_t* board)
 	board->status->status = DEV_OFFLINE;
 	board->status->gimbal_rx_time_ms = 0u;
 	board->status->gimbal_data_valid = 0u;
+	board->status->gimbal_d1_tx_ok = 0u;
+	board->status->gimbal_d2_tx_ok = 0u;
 	
 	board->tx_01 = Board_Tx_Pkt_01;
 	board->tx_02 = Board_Tx_Pkt_02;
@@ -85,6 +87,8 @@ uint8_t pkt_05[8]; /* D5 遥控控制发送缓存 */
 
 void Board_Tx_Pkt_01(Board_t* board)
 {
+	board->status->gimbal_d1_tx_ok = 0u;
+	board->status->gimbal_d2_tx_ok = 0u;
 	memset(pkt_01, 0, 8); /* 清空缓存 */
 	
 	pkt_01[0] |= (board->tx_pkt->car_pkt.car_state & 0x03) << 0;   /* 车辆状态 */
@@ -110,7 +114,8 @@ void Board_Tx_Pkt_01(Board_t* board)
 	pkt_01[5] |= (board->tx_pkt->gimbal_target_pkt.is_hole & 0x01) << 3; /* 过洞标志 */
 	
 
-	CAN_SendData(&hfdcan2, ID_PKT_01, pkt_01);
+	board->status->gimbal_d1_tx_ok =
+		(CAN_SendData(&hfdcan2, ID_PKT_01, pkt_01) == HAL_OK) ? 1u : 0u;
 	
 	
 }
@@ -135,7 +140,8 @@ void Board_Tx_Pkt_02(Board_t* board)
 	pkt_02[7] = t4;
 	
 
-		CAN_SendData(&hfdcan2, ID_PKT_02, pkt_02);
+	board->status->gimbal_d2_tx_ok =
+		(CAN_SendData(&hfdcan2, ID_PKT_02, pkt_02) == HAL_OK) ? 1u : 0u;
 
 	
 //	board->status->offline_cnt ++;
@@ -220,7 +226,6 @@ void Board_Tx_Pkt_05(Board_t* board)
     uint8_t ctrl_source = BOARD_D5_CTRL_RC; /* 输入来源 */
     uint8_t cmd_type = BOARD_D5_CMD_RC_RATE; /* 控制量类型 */
     uint8_t button_bits = 0u; /* 鼠标键位 */
-    float uturn_rate = 0.0f;  /* 掉头动作角速度，deg/s */
 
     if (rc_dev.work_state == DEV_ONLINE)
     {
@@ -232,12 +237,9 @@ void Board_Tx_Pkt_05(Board_t* board)
             cmd_type = BOARD_D5_CMD_RC_RATE;
             button_bits = (uint8_t)((rc_dev.info->mouse_btn_l.value & 0x01u) |
                                     ((rc_dev.info->mouse_btn_r.value & 0x01u) << 1));
-            if (Chassis_Input_GetUturnYawRateDegS(&uturn_rate) != 0u)
+            if (Chassis_Input_IsUturnActive() != 0u)
             {
-                /* 跟随档掉头动作：屏蔽鼠标 Yaw，直接下发角速度指令 */
-                yaw_rate = constrain(uturn_rate,
-                                     -BOARD_D5_YAW_RATE_MAX_DEG_S,
-                                     BOARD_D5_YAW_RATE_MAX_DEG_S);
+                yaw_rate = 0.0f;
             }
             else
             {
@@ -304,7 +306,15 @@ void Board_Tx_Pkt_05(Board_t* board)
     pkt_05[6] = 0u;
     pkt_05[7] = 0u;
 
-    CAN_SendData(&hfdcan2, ID_PKT_05, pkt_05);
+    if ((CAN_SendData(&hfdcan2, ID_PKT_05, pkt_05) == HAL_OK) &&
+        (board->status->gimbal_d1_tx_ok != 0u) &&
+        (board->status->gimbal_d2_tx_ok != 0u) && (valid != 0u) &&
+        (ctrl_source == BOARD_D5_CTRL_KEYBOARD) && (yaw_raw == 0) &&
+        ((pkt_01[0] & 0x03u) != 0u))
+    {
+        Chassis_Input_NotifyUturnTxCycle((pkt_01[0] >> 2) & 0x01u,
+            ((uint16_t)pkt_02[6] << 8) | pkt_02[7]);
+    }
 }
 
 /* 解析 C1：上板设备状态与云台姿态 */
