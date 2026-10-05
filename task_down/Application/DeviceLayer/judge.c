@@ -5,6 +5,18 @@
 #include "cap.h"
 #include "drv_tick.h"
 
+typedef struct
+{
+    uint32_t limit_tick; // 上限帧接收时刻，ms
+    uint32_t buffer_tick; // 缓冲帧接收时刻，ms
+    uint16_t limit_w; // 最近上报功率上限，W
+    uint16_t buffer_j; // 最近上报缓冲能量，J
+    uint8_t limit_seen; // 上限帧已收到，0/1
+    uint8_t buffer_seen; // 缓冲帧已收到，0/1
+} judge_power_data_t;
+
+static volatile judge_power_data_t judge_power_data;
+
 Judge_Info_t Judge_Info;
 Judge_Pkt_t Judge_Pkt;
 Judge_Status_t Judge_Status = 
@@ -23,6 +35,12 @@ Judge_t judge =
 /* 裁判系统初始化 */
 void Judge_Init(Judge_t* judge)
 {
+	judge_power_data.limit_seen = 0u;
+	judge_power_data.buffer_seen = 0u;
+	judge_power_data.limit_tick = 0u;
+	judge_power_data.buffer_tick = 0u;
+	judge_power_data.limit_w = 0u;
+	judge_power_data.buffer_j = 0u;
 	judge->status->offline_cnt = judge->status->offline_cnt_max;
 	judge->status->status = DEV_OFFLINE;
 	
@@ -46,6 +64,32 @@ void Judge_Heart_Beat(Judge_t* judge)
 	}
 }
 
+
+uint8_t Judge_GetPowerData(uint16_t *limit_w, uint16_t *buffer_j)
+{
+    uint32_t irq_state;
+    uint32_t now;
+    uint8_t valid;
+
+    if ((limit_w == NULL) || (buffer_j == NULL))
+    {
+        return 0u;
+    }
+
+    /* 防止接收中断撕裂快照 */
+    irq_state = __get_PRIMASK();
+    __disable_irq();
+    now = HAL_GetTick();
+    *limit_w = judge_power_data.limit_w;
+    *buffer_j = judge_power_data.buffer_j;
+    valid = ((judge.status != NULL) && (judge.status->status == DEV_ONLINE) &&
+             (judge_power_data.limit_seen != 0u) &&
+             (judge_power_data.buffer_seen != 0u) &&
+             ((uint32_t)(now - judge_power_data.limit_tick) < JUDGE_OFFLINE_CNT_MAX) &&
+             ((uint32_t)(now - judge_power_data.buffer_tick) < JUDGE_OFFLINE_CNT_MAX)) ? 1u : 0u;
+    __set_PRIMASK(irq_state);
+    return valid;
+}
 
 void Judge_Data_Update(uint16_t id, uint8_t *rxBuf)
 {
@@ -117,7 +161,10 @@ void Judge_Data_Update(uint16_t id, uint8_t *rxBuf)
 		
 		  judge.pkt->robot_id = judge.info->robot_status.robot_id;
 		  judge.pkt->shooter_barrel_heat_limit = judge.info->robot_status.shooter_barrel_heat_limit; 
-      judge.pkt->chassis_power_limit = judge.info->robot_status.chassis_power_limit;          
+      judge.pkt->chassis_power_limit = judge.info->robot_status.chassis_power_limit;
+		  judge_power_data.limit_w = judge.pkt->chassis_power_limit;
+		  judge_power_data.limit_tick = HAL_GetTick();
+		  judge_power_data.limit_seen = 1u;
 		
 		  if(judge.pkt->robot_id < 10)
 		  {
@@ -135,6 +182,9 @@ void Judge_Data_Update(uint16_t id, uint8_t *rxBuf)
       memcpy(&judge.info->power_heat_data, rxBuf, LEN_power_heat_data);
 		
 		  judge.pkt->buffer_energy = judge.info->power_heat_data.buffer_energy;
+		  judge_power_data.buffer_j = judge.pkt->buffer_energy;
+		  judge_power_data.buffer_tick = HAL_GetTick();
+		  judge_power_data.buffer_seen = 1u;
 		  judge.pkt->shooter_17mm_1_barrel_heat = judge.info->power_heat_data.shooter_17mm_1_barrel_heat;
 		   
 		  judge.status->offline_cnt = 0;

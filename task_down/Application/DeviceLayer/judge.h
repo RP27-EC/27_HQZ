@@ -6,7 +6,7 @@
 #include "rp_config.h"
 #include "judge_protocol.h"
 #include <stdint.h>
-#define JUDGE_OFFLINE_CNT_MAX 1000
+#define JUDGE_OFFLINE_CNT_MAX 1000 // 心跳及功率帧超时，ms
 
  
 #define ID_game_status               0x0001U
@@ -514,6 +514,7 @@ extern bullet_data_t  shoot_statistics;
 void Judge_Init(Judge_t* judge);
 void Judge_Heart_Beat(Judge_t* judge);
 void Judge_Data_Update(uint16_t id, uint8_t *rxBuf);
+uint8_t Judge_GetPowerData(uint16_t *limit_w, uint16_t *buffer_j);
 
 void Shooting_Cmd_Excute_Tick_Calculating(uint8_t flag);
 void Speed_Statistic(void);

@@ -5,6 +5,9 @@
 #include "supercap.h"
 void DRIVER_Init(void)
 {
+    /* 裁判系统串口独立于调试分支，功率限制依赖它取功率上限与缓冲能量 */
+    USART1_Init();
+
 #if BOARD_COMM_DEBUG
     USART5_Init();
     CAN2_Filter_Init();
@@ -12,7 +15,6 @@ void DRIVER_Init(void)
     CAN1_Filter_Init();
 #endif
 #else
-	USART1_Init();
 	USART5_Init();
 	USART8_Init();
 	USART9_Init();

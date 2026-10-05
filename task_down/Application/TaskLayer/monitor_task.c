@@ -38,9 +38,8 @@ void StartMonitorTask(void const *argument)
         cap.heartbeat(&cap);
 #endif
 
-#if BOARD_JUDGE_ENABLE
+        /* 裁判掉线判定不再受编译开关控制，否则功率限制永远拿不到 DEV_OFFLINE */
         judge.heartbeat(&judge);
-#endif
 
 #if !BOARD_COMM_DEBUG
         infantry.heart_beat(&infantry);

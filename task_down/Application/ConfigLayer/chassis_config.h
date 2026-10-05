@@ -21,7 +21,7 @@
 #define CHASSIS_FEEDFORWARD_ENABLE      0u
 #define CHASSIS_GIMBAL_FOLLOW_ENABLE    1u
 #define CHASSIS_SPIN_ENABLE              1u
-#define CHASSIS_POWER_LIMIT_ENABLE      0u
+/* 功率限制参数见 power_limit_config.h，开关为 CHASSIS_POWER_LIMIT_ENABLE */
 
 #define CHASSIS_CONTROL_PERIOD_MS       1u
 

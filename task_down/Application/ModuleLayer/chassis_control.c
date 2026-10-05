@@ -6,6 +6,8 @@
 #include <stddef.h>
 
 #include "rp_math.h"
+#include "power_limit.h"
+#include "supercap.h"
 
 //目前纯P的控制器，目前响应速度还可以，跟随得也还行
 //但可以牺牲了一些操作手感，后续再看看
@@ -90,6 +92,7 @@ static void Chassis_Control_KinematicsInverse(const chassis_cmd_t *cmd)
 static uint8_t Chassis_Control_PidUpdate(void)
 {
     float torque_limit = CHASSIS_TEST_TORQUE_LIMIT_NM; /* 默认调试限矩 */
+    uint8_t i;
 
     if (chassis_ctrl.state.cmd.source == CHASSIS_SRC_RC_FOLLOW)
     {
@@ -100,8 +103,10 @@ static uint8_t Chassis_Control_PidUpdate(void)
         torque_limit = CHASSIS_SPIN_TORQUE_LIMIT_NM;
     }
 
-    for (uint8_t i = 0u; i < WHEEL_CNT; i++)
+    for (i = 0u; i < WHEEL_CNT; i++)
     {
+        pid_ctrl_t *pid;
+
         if (chassis_ctrl.wheel == NULL ||
             chassis_ctrl.wheel->motor[i] == NULL ||
             chassis_ctrl.wheel->motor[i]->ctrl == NULL ||
@@ -112,7 +117,7 @@ static uint8_t Chassis_Control_PidUpdate(void)
             return 0u;
         }
 
-        pid_ctrl_t *pid = chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl; /* 当前速度环 */
+        pid = chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl; /* 当前速度环 */
 
         chassis_ctrl.state.wheel_speed[i] =
             chassis_ctrl.wheel->motor[i]->rx_info->speed;
@@ -142,6 +147,9 @@ static uint8_t Chassis_Control_PidUpdate(void)
                       -torque_limit,
                       torque_limit);
     }
+
+    /* 公共比例不增大候选力矩 */
+    Power_Limit_Apply(chassis_ctrl.state.wheel_torque_out, chassis_ctrl.wheel->motor);
 
     return 1u;
 }
@@ -221,6 +229,8 @@ void Chassis_Control_Init(void)
     chassis_ctrl.state.all_online = 0u;
     chassis_ctrl.state.enabled = init_ok;
     chassis_ctrl.state.fault = (init_ok == 0u) ? 1u : 0u;
+
+    Power_Limit_Init(); /* 功率限制运行时状态清零 */
 }
 
 /* 使能或关闭底盘，关闭时立即卸力 */
@@ -239,20 +249,24 @@ void Chassis_Control_Stop(void)
 {
     if (chassis_ctrl.wheel == NULL)
     {
+        Power_Limit_Apply(chassis_ctrl.state.wheel_torque_out, NULL);
         return;
     }
 
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
+        chassis_ctrl.state.wheel_torque_out[i] = 0.0f;
         if (chassis_ctrl.wheel->motor[i] == NULL ||
             chassis_ctrl.wheel->motor[i]->tx_info == NULL)
         {
             continue;
         }
 
-        chassis_ctrl.state.wheel_torque_out[i] = 0.0f;
         chassis_ctrl.wheel->motor[i]->tx_info->torque = 0.0f;
     }
+
+    /* 停机观测对应零输出 */
+    Power_Limit_Apply(chassis_ctrl.state.wheel_torque_out, chassis_ctrl.wheel->motor);
 
     if (chassis_ctrl.wheel->group_set_torque != NULL)
     {
@@ -263,6 +277,19 @@ void Chassis_Control_Stop(void)
 /* 底盘周期更新，任何异常均回到停机 */
 void Chassis_Control_Update(const chassis_cmd_t *cmd)
 {
+    uint16_t limit_w;
+    uint16_t buffer_j;
+    uint8_t power_data_valid;
+
+    /* 预算先于力矩限幅刷新 */
+    power_data_valid = Judge_GetPowerData(&limit_w, &buffer_j);
+    Power_Limit_GetTarget((judge.status != NULL) ? judge.status->status : DEV_OFFLINE,
+                          power_data_valid, limit_w, buffer_j);
+
+    /* 超电计数只作观测 */
+    Power_Limit_SetCapFeedback(supercap.chassis_power,
+                             (supercap.state == SUPERCAP_STATE_ONLINE) ? 1u : 0u);
+
     if (cmd == NULL)
     {
         chassis_ctrl.state.fault = 1u;
@@ -296,6 +323,7 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
     }
 
     Chassis_Control_KinematicsInverse(cmd);
+
     if (Chassis_Control_PidUpdate() == 0u)
     {
         Chassis_Control_Stop();

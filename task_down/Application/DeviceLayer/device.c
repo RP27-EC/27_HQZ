@@ -22,6 +22,8 @@ void DEVICE_Init(void)
 #if SUPERCAP_BRINGUP_ENABLE
     SuperCap_Init();
 #endif
+    /* 裁判对象初始化独立于调试分支，功率限制依赖它的在线状态与超时计数 */
+    judge.init(&judge);
 #if BOARD_COMM_DEBUG
     rc_dev.init(&rc_dev);
     board.init(&board);
@@ -41,7 +43,6 @@ void DEVICE_Init(void)
     ht_motor_list_init();
     dm_motor_list_init();
 
-    judge.init(&judge);
     cap.init(&cap);
     board.init(&board);
 
