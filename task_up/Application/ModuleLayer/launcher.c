@@ -1,6 +1,7 @@
 #include "launcher.h"
 
 #include <math.h>
+#include <string.h>
 
 #include "communicate.h"
 #include "launcher_config.h"
@@ -10,6 +11,21 @@
 #include "rp_math.h"
 
 launcher_t launcher; /* 发射机构对外状态 */
+launcher_heat_t launcher_heat;
+
+typedef struct
+{
+    uint32_t update_tick; // 上次估算时刻，ms
+    uint32_t encoder_prev; // 上次累计编码器，count
+    int64_t travel; // 本段正向位移，count
+    int64_t high_water; // 已计热位移上界，count
+    uint8_t encoder_valid; // 角度基准有效，0/1
+    uint8_t repeat_tracking; // 连发及尾段计热，0/1
+    uint8_t seq_seen; // 裁判源序号有效，0/1
+    uint8_t heat_seq; // 上次源序号，0~255
+} launcher_heat_runtime_t;
+
+static launcher_heat_runtime_t launcher_heat_runtime;
 
 static uint16_t launcher_fric_ready_count; /* 摩擦轮达速确认计数 */
 uint8_t launcher_jam_count; /* 堵转次数，调试可观测 */
@@ -61,6 +77,209 @@ static uint8_t Launcher_FricOnline(uint8_t index)
 static uint8_t Launcher_DialOnline(void)
 {
     return (dail_motor.KT_motor_info.state_info.work_state == M_ONLINE) ? 1u : 0u;
+}
+
+static uint8_t Launcher_HeatConfigValid(void)
+{
+    return ((LAUNCHER_HEAT_PER_SHOT > 0.0f) &&
+            (LAUNCHER_DIAL_ONE_SHOT_ANGLE > 0.0f) &&
+            (LAUNCHER_HEAT_MAX_RATE > 0.0f) &&
+            (LAUNCHER_HEAT_STOP >= LAUNCHER_HEAT_PER_SHOT) &&
+            (LAUNCHER_HEAT_RESUME > LAUNCHER_HEAT_STOP) &&
+            (LAUNCHER_HEAT_SATURATE >= LAUNCHER_HEAT_RESUME) &&
+            (LAUNCHER_HEAT_WARN > LAUNCHER_HEAT_SATURATE)) ? 1u : 0u;
+}
+
+static void Launcher_HeatRefreshRate(void)
+{
+    float balanced_rate;
+    float max_rate = LAUNCHER_HEAT_MAX_RATE;
+    float mechanical_rate;
+    launcher_heat.remaining = launcher_heat.heat_limit - launcher_heat.heat;
+    launcher_heat.target_rate = 0.0f;
+    if ((Launcher_HeatConfigValid() == 0u) || (launcher_heat.ready == 0u))
+    {
+        launcher_heat.blocked = 1u;
+        return;
+    }
+    if (launcher_heat.remaining < LAUNCHER_HEAT_STOP)
+    {
+        launcher_heat.blocked = 1u;
+    }
+    else if (launcher_heat.remaining >= LAUNCHER_HEAT_RESUME)
+    {
+        launcher_heat.blocked = 0u;
+    }
+    if (launcher_heat.blocked != 0u)
+    {
+        return;
+    }
+    mechanical_rate = (float)LAUNCHER_DIAL_REPEAT_SPEED_DPS /
+                      (LAUNCHER_DIAL_ONE_SHOT_ANGLE * 360.0f / 65536.0f);
+    if (max_rate > mechanical_rate)
+    {
+        max_rate = mechanical_rate;
+    }
+    balanced_rate = constrain(launcher_heat.cooling_rate / LAUNCHER_HEAT_PER_SHOT,
+                             0.0f, max_rate);
+    if (launcher_heat.remaining >= LAUNCHER_HEAT_WARN)
+    {
+        launcher_heat.target_rate = max_rate;
+    }
+    else if (launcher_heat.remaining >= LAUNCHER_HEAT_SATURATE)
+    {
+        launcher_heat.target_rate = balanced_rate + (max_rate - balanced_rate) *
+            (launcher_heat.remaining - LAUNCHER_HEAT_SATURATE) /
+            (LAUNCHER_HEAT_WARN - LAUNCHER_HEAT_SATURATE);
+    }
+    else
+    {
+        launcher_heat.target_rate = balanced_rate;
+    }
+}
+
+static void Launcher_HeatObserveFriction(uint8_t index,
+                                        launcher_fric_observation_t *observation)
+{
+    uint32_t irq_state = __get_PRIMASK();
+    rm_rx_t *feedback = rm_motor[index].rx_info;
+    __disable_irq();
+    observation->current_a = feedback->torque_current;
+    observation->speed_rpm = (float)feedback->encoder_speed;
+    observation->feedback_tick = feedback->feedback_tick;
+    observation->feedback_seq = feedback->feedback_seq;
+    observation->online = Launcher_FricOnline(index);
+    __set_PRIMASK(irq_state);
+    observation->feedback_age_ms = HAL_GetTick() - observation->feedback_tick;
+}
+
+static void Launcher_HeatUpdate(uint32_t now)
+{
+#if !LAUNCHER_HEAT_TRAINING_ENABLE
+    Board_Heat_Pkt_t snapshot;
+    uint8_t live;
+#endif
+    uint32_t elapsed = now - launcher_heat_runtime.update_tick;
+    uint32_t encoder = (uint32_t)dail_motor.KT_motor_info.rx_info.encoder_sum;
+    uint32_t raw_delta;
+    int64_t delta;
+    launcher_heat_runtime.update_tick = now;
+    launcher_heat.heat = fmaxf(0.0f, launcher_heat.heat -
+                              launcher_heat.cooling_rate * ((float)elapsed * 0.001f));
+
+    if (launcher.dial_online == 0u)
+    {
+        launcher_heat_runtime.encoder_valid = 0u;
+        launcher_heat_runtime.repeat_tracking = 0u;
+    }
+    else if (launcher_heat_runtime.encoder_valid == 0u)
+    {
+        launcher_heat_runtime.encoder_prev = encoder;
+        launcher_heat_runtime.encoder_valid = 1u;
+    }
+    else
+    {
+        /* 模减避免累计编码器跨界 */
+        raw_delta = encoder - launcher_heat_runtime.encoder_prev;
+        delta = (raw_delta <= 0x7FFFFFFFu) ? (int64_t)raw_delta :
+                (int64_t)raw_delta - 4294967296LL;
+        launcher_heat_runtime.encoder_prev = encoder;
+        if (LAUNCHER_DIAL_ANGLE_SIGN < 0.0f)
+        {
+            delta = -delta;
+        }
+        if (LAUNCHER_DIAL_DIRECTION < 0.0f)
+        {
+            delta = -delta;
+        }
+        if (launcher_heat_runtime.repeat_tracking != 0u)
+        {
+            launcher_heat_runtime.travel += delta;
+            if (launcher_heat_runtime.travel > launcher_heat_runtime.high_water)
+            {
+                launcher_heat.heat += LAUNCHER_HEAT_PER_SHOT *
+                    (float)(launcher_heat_runtime.travel - launcher_heat_runtime.high_water) /
+                    LAUNCHER_DIAL_ONE_SHOT_ANGLE;
+                launcher_heat_runtime.high_water = launcher_heat_runtime.travel;
+            }
+            if ((launcher.state != LAUNCHER_REPEAT) && (launcher_dial_stopped != 0u) &&
+                (fabsf((float)dail_motor.KT_motor_info.rx_info.speed) <=
+                 (float)LAUNCHER_DIAL_BRAKE_STOP_SPEED_DPS))
+            {
+                launcher_heat_runtime.repeat_tracking = 0u;
+            }
+        }
+    }
+
+#if LAUNCHER_HEAT_TRAINING_ENABLE
+    launcher_heat.source = LAUNCHER_HEAT_TRAINING;
+    launcher_heat.heat_limit = LAUNCHER_HEAT_TRAINING_LIMIT;
+    launcher_heat.cooling_rate = LAUNCHER_HEAT_TRAINING_COOLING;
+    launcher_heat.ready = ((LAUNCHER_HEAT_TRAINING_LIMIT > LAUNCHER_HEAT_RESUME) &&
+                          (LAUNCHER_HEAT_TRAINING_COOLING > 0.0f)) ? 1u : 0u;
+    launcher_heat_runtime.seq_seen = 0u;
+#else
+    Board_GetHeatSnapshot(&snapshot);
+    live = ((snapshot.seen != 0u) &&
+            ((uint32_t)(HAL_GetTick() - snapshot.rx_tick) <
+             LAUNCHER_HEAT_D3_TIMEOUT_MS)) ? 1u : 0u;
+    if ((live != 0u) && ((snapshot.flags & 0x01u) != 0u) &&
+        (snapshot.heat_limit != 0u))
+    {
+        launcher_heat.heat_limit = (float)snapshot.heat_limit;
+        launcher_heat.cooling_rate = (float)snapshot.cooling_rate;
+    }
+    if ((live != 0u) && ((snapshot.flags & 0x02u) != 0u))
+    {
+        if ((launcher_heat.ready == 0u) || (launcher_heat_runtime.seq_seen == 0u) ||
+            (launcher_heat_runtime.heat_seq != snapshot.heat_seq))
+        {
+            launcher_heat.referee_heat = (float)snapshot.barrel_heat;
+            launcher_heat.heat = fmaxf(launcher_heat.heat, launcher_heat.referee_heat);
+            launcher_heat_runtime.heat_seq = snapshot.heat_seq;
+            launcher_heat_runtime.seq_seen = 1u;
+        }
+        if (((snapshot.flags & 0x01u) != 0u) && (snapshot.heat_limit != 0u))
+        {
+            launcher_heat.ready = 1u;
+        }
+    }
+    else
+    {
+        launcher_heat_runtime.seq_seen = 0u;
+    }
+    launcher_heat.source = (launcher_heat.ready == 0u) ? LAUNCHER_HEAT_NONE :
+        (((live != 0u) && (snapshot.flags == 0x03u)) ?
+         LAUNCHER_HEAT_REFEREE : LAUNCHER_HEAT_ESTIMATE);
+#endif
+    Launcher_HeatObserveFriction(SHOOT_FRIC_L, &launcher_heat.fric_l);
+    Launcher_HeatObserveFriction(SHOOT_FRIC_R, &launcher_heat.fric_r);
+    Launcher_HeatRefreshRate();
+}
+
+static uint8_t Launcher_HeatReserveSingle(void)
+{
+    if ((launcher_heat.ready == 0u) || (launcher_heat.blocked != 0u) ||
+        (launcher_heat.remaining < LAUNCHER_HEAT_STOP) ||
+        ((launcher_heat.heat + LAUNCHER_HEAT_PER_SHOT) > launcher_heat.heat_limit))
+    {
+        return 0u;
+    }
+    /* 单发预占不因取消而退还 */
+    launcher_heat_runtime.repeat_tracking = 0u;
+    launcher_heat.heat += LAUNCHER_HEAT_PER_SHOT;
+    Launcher_HeatRefreshRate();
+    return 1u;
+}
+
+static void Launcher_HeatStartRepeat(void)
+{
+    if (launcher_heat_runtime.repeat_tracking == 0u)
+    {
+        launcher_heat_runtime.travel = 0;
+        launcher_heat_runtime.high_water = 0;
+        launcher_heat_runtime.repeat_tracking = 1u;
+    }
 }
 
 /* 拨盘角度按配置方向取符号 */
@@ -203,7 +422,8 @@ static void Launcher_DialSpeedControl(void)
     }
 
     launcher_dial_repeat_pid.target = /* 连发目标速度 */
-        LAUNCHER_DIAL_DIRECTION * (float)LAUNCHER_DIAL_REPEAT_SPEED_DPS;
+        LAUNCHER_DIAL_DIRECTION * launcher_heat.target_rate *
+        (LAUNCHER_DIAL_ONE_SHOT_ANGLE * 360.0f / 65536.0f);
     launcher_dial_repeat_pid.measure =
         LAUNCHER_DIAL_SPEED_SIGN *
         (float)dail_motor.KT_motor_info.rx_info.speed;
@@ -304,6 +524,10 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
     uint32_t now = HAL_GetTick(); /* 本次调度时刻 */
     int64_t current_angle = (int64_t)Launcher_DialAngle(); /* 当前绝对角度 */
 
+    continuous = ((continuous != 0u) && (launcher_heat.ready != 0u) &&
+                  (launcher_heat.blocked == 0u) &&
+                  (launcher_heat.target_rate > 0.0f)) ? 1u : 0u;
+
     /* 首次对齐反馈，避免上电跳变 */
     if (launcher_dial_target_synced == 0u)
     {
@@ -311,6 +535,10 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
         launcher_dial_feed_target = current_angle;
         launcher_dial_target_synced = 1u;
         launcher.state = (continuous != 0u) ? LAUNCHER_REPEAT : LAUNCHER_READY;
+        if (continuous != 0u)
+        {
+            Launcher_HeatStartRepeat();
+        }
         launcher.state_tick = now;
         Launcher_DialClearPid();
     }
@@ -319,7 +547,7 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
     {
     /* 待发：单发升沿或连发请求触发供弹 */
     case LAUNCHER_READY:
-        if (single_rising != 0u)
+        if ((single_rising != 0u) && (Launcher_HeatReserveSingle() != 0u))
         {
             launcher_dial_target +=
                 (int64_t)(LAUNCHER_DIAL_DIRECTION *
@@ -336,6 +564,7 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
             launcher_dial_target = current_angle;
             launcher_dial_feed_target = current_angle;
             launcher.state = LAUNCHER_REPEAT;
+            Launcher_HeatStartRepeat();
             launcher.state_tick = now;
             launcher.jam_tick = 0u;
             Launcher_DialClearPid();
@@ -403,9 +632,10 @@ static void Launcher_DialUpdate(uint8_t single_rising, uint8_t continuous)
              LAUNCHER_DIAL_RELOAD_TIMEOUT_MS))
         {
             launcher.jam_tick = 0u;
-            if (launcher_dial_recovery_repeat != 0u) /* 恢复连发 */
+            if ((launcher_dial_recovery_repeat != 0u) && (continuous != 0u))
             {
                 launcher.state = LAUNCHER_REPEAT;
+                Launcher_HeatStartRepeat();
             }
             else
             {
@@ -591,6 +821,11 @@ void Launcher_Init(void)
 {
     pid_ctrl_t *pid; /* 摩擦轮速度环临时指针 */
 
+    memset(&launcher_heat, 0, sizeof(launcher_heat));
+    memset(&launcher_heat_runtime, 0, sizeof(launcher_heat_runtime));
+    launcher_heat_runtime.update_tick = HAL_GetTick();
+    launcher_heat.blocked = 1u;
+
     launcher.state = LAUNCHER_SLEEP;
     launcher.state_tick = 0u;
     launcher.last_repeat_tick = 0u;
@@ -697,6 +932,7 @@ void Launcher_Work(void)
     current_angle = Launcher_DialAngle(); /* 当前拨盘角 */
     launcher.dial_angle = current_angle;
     launcher.dial_online = Launcher_DialOnline(); /* 拨盘在线 */
+    Launcher_HeatUpdate(now);
 
     if ((launcher_dial_last_online == 0u) && (launcher.dial_online != 0u))
     {
@@ -725,7 +961,7 @@ void Launcher_Work(void)
     if (fric_on == 0u)
     {
         launcher.enabled = 0u;
-        launcher.last_shoot_level = 0u;
+        launcher.last_shoot_level = Board_Rx_Info.shoot_pkt.shoot_level;
         Launcher_UpdateFrictionReady(0u);
 
         if (launcher.state == LAUNCHER_SLEEP)
@@ -803,6 +1039,20 @@ void Launcher_Work(void)
                      (shoot_mode == 0u)) ? 1u : 0u;
     shoot_active = (shoot_level != 0u) ? 1u : 0u; /* 发射保持 */
 
+    /* 已预占的单发可完成本发 */
+    if ((launcher_heat.ready == 0u) ||
+        ((launcher.state == LAUNCHER_SINGLE) ?
+         (launcher_heat.heat > launcher_heat.heat_limit) :
+         ((launcher_heat.blocked != 0u) ||
+          ((shoot_mode != 0u) && (launcher_heat.target_rate <= 0.0f)))))
+    {
+        shoot_active = 0u;
+        single_rising = 0u;
+    }
+
+    /* 拒绝的点击不延后补射 */
+    launcher.last_shoot_level = shoot_level;
+
     /* 拨盘离线不影响摩擦轮持续运行。 */
     if (dial_on == 0u)
     {
@@ -824,8 +1074,6 @@ void Launcher_Work(void)
         }
         launcher_dial_stopped = 0u;
     }
-
-    launcher.last_shoot_level = shoot_level;
 
     switch (launcher.state)
     {
@@ -870,7 +1118,7 @@ void Launcher_Work(void)
     case LAUNCHER_RELOAD:
         Launcher_DialUpdate(
             single_rising,
-            ((shoot_mode != 0u) && (shoot_level != 0u)) ? 1u : 0u);
+            ((shoot_mode != 0u) && (shoot_active != 0u)) ? 1u : 0u);
         break;
 
     case LAUNCHER_FAULT:

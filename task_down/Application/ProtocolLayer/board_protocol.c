@@ -2,6 +2,7 @@
 
 #include "board_protocol.h"
 #include "judge.h"
+#include "board_comm_config.h"
 #include "rc_sensor.h"
 #include "string.h"
 #include <stdbool.h>
@@ -45,6 +46,13 @@ void Board_Init(Board_t* board)
 	board->status->gimbal_data_valid = 0u;
 	board->status->gimbal_d1_tx_ok = 0u;
 	board->status->gimbal_d2_tx_ok = 0u;
+	board->status->heat_d3_tx_ok = 0u;
+	board->status->heat_d3_tx_ok_count = 0u;
+	board->status->heat_d3_tx_fail_count = 0u;
+	board->status->heat_d3_tx_tick = 0u;
+	board->status->heat_d3_tx_gap_ms = 0u;
+	board->status->heat_d3_tx_max_gap_ms = 0u;
+	board->status->control_tx_defer_count = 0u;
 	
 	board->tx_01 = Board_Tx_Pkt_01;
 	board->tx_02 = Board_Tx_Pkt_02;
@@ -151,27 +159,52 @@ void Board_Tx_Pkt_02(Board_t* board)
 /* 打包 D3：射击热量与冷却信息 */
 void Board_Tx_Pkt_03(Board_t* board)
 {
-	uint16_t t1,t2; /* 弹速与射频压缩值 */
-	
-	t1 = float_to_uint(board->tx_pkt->judge_shoot_pkt.shoot_speed,-50.f,50.f,16);    
-	t2 = float_to_uint(board->tx_pkt->judge_shoot_pkt.shoot_freq,-50.f,50.f,16);  
-	
-	board->tx_pkt->judge_shoot_pkt.shoot_heat_err = judge.pkt->shooter_barrel_heat_limit - judge.pkt->shooter_17mm_1_barrel_heat;
-	
-	pkt_03[0] = t1>>8;
-	pkt_03[1] = t1;
-	pkt_03[2] = t2>>8;
-	pkt_03[3] = t2;
-	pkt_03[4] = board->tx_pkt->judge_shoot_pkt.shoot_heat_err>>8;
-	pkt_03[5] = board->tx_pkt->judge_shoot_pkt.shoot_heat_err;
-	pkt_03[6] = judge.info->robot_status.shooter_barrel_cooling_value>>8;
-	pkt_03[7] = judge.info->robot_status.shooter_barrel_cooling_value;
-	
-
-	CAN_SendData(&hfdcan2, ID_PKT_03, pkt_03);
-	
-//	board->status->offline_cnt ++;
-	
+    judge_heat_snapshot_t snapshot;
+    uint32_t now;
+    uint32_t gap;
+    uint8_t flags = 0u;
+    board->status->heat_d3_tx_ok = 0u;
+    if (Judge_GetHeatSnapshot(&snapshot) == 0u)
+    {
+        return;
+    }
+    now = HAL_GetTick();
+    if ((snapshot.limit_seen != 0u) && (snapshot.heat_limit != 0u) &&
+        ((uint32_t)(now - snapshot.limit_tick) < BOARD_HEAT_LIMIT_TIMEOUT_MS))
+    {
+        flags |= 0x01u;
+    }
+    if ((snapshot.heat_seen != 0u) &&
+        ((uint32_t)(now - snapshot.heat_tick) < BOARD_HEAT_VALUE_TIMEOUT_MS))
+    {
+        flags |= 0x02u;
+    }
+    pkt_03[0] = (uint8_t)(snapshot.heat_limit >> 8);
+    pkt_03[1] = (uint8_t)snapshot.heat_limit;
+    pkt_03[2] = (uint8_t)(snapshot.barrel_heat >> 8);
+    pkt_03[3] = (uint8_t)snapshot.barrel_heat;
+    pkt_03[4] = (uint8_t)(snapshot.cooling_rate >> 8);
+    pkt_03[5] = (uint8_t)snapshot.cooling_rate;
+    pkt_03[6] = snapshot.heat_seq;
+    pkt_03[7] = flags;
+    if (CAN_SendData(&hfdcan2, ID_PKT_03, pkt_03) != HAL_OK)
+    {
+        board->status->heat_d3_tx_fail_count++;
+        return;
+    }
+    now = HAL_GetTick();
+    if (board->status->heat_d3_tx_ok_count != 0u)
+    {
+        gap = now - board->status->heat_d3_tx_tick;
+        board->status->heat_d3_tx_gap_ms = gap;
+        if (gap > board->status->heat_d3_tx_max_gap_ms)
+        {
+            board->status->heat_d3_tx_max_gap_ms = gap;
+        }
+    }
+    board->status->heat_d3_tx_tick = now;
+    board->status->heat_d3_tx_ok_count++;
+    board->status->heat_d3_tx_ok = 1u;
 }
 
 

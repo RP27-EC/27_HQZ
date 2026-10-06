@@ -6,6 +6,7 @@
 #include "lift.h"
 #include "imu_sensor.h"
 #include "motor.h"
+#include "board_remote_config.h"
 
 #include <string.h>
 
@@ -27,6 +28,8 @@ Board_HeartBeat_t Board_HeartBeat = /* 板间链路状态 */
 
 static uint8_t board_tx_buf1[8]; /* C1 发送缓存 */
 static uint8_t board_tx_buf2[8]; /* C2 发送缓存 */
+volatile Board_Feedback_Debug_t board_feedback_debug;
+static uint8_t board_feedback_next; /* 下一反馈类型，0/1 */
 
 /* 浮点按线性量程压入 16 位协议字段 */
 
@@ -141,7 +144,7 @@ static void Board_Tx_Update(void)
 }
 
 /* 打包 C1：设备在线状态 */
-static void Board_Tx_Meg_01(uint8_t *txbuf)
+static HAL_StatusTypeDef Board_Tx_Meg_01(uint8_t *txbuf)
 {
     uint16_t zero = board_float_to_uint(0.0f, -360.0f, 360.0f);
 
@@ -160,11 +163,11 @@ static void Board_Tx_Meg_01(uint8_t *txbuf)
     txbuf[5] = (uint8_t)zero;
     txbuf[6] = 0;
 
-    CAN_SendData(&hcan2, ID_BOARD_TX1, txbuf);
+    return CAN_SendData(&hcan2, ID_BOARD_TX1, txbuf);
 }
 
 /* 打包 C2：云台机械角与 IMU 角 */
-static void Board_Tx_Meg_02(uint8_t *txbuf)
+static HAL_StatusTypeDef Board_Tx_Meg_02(uint8_t *txbuf)
 {
     uint16_t yaw_mec = board_float_to_uint(Board_Tx_Info.gimbal_meg.yaw_mec, -4.0f, 4.0f);       /* Yaw 机械角 */
     uint16_t pitch_mec = board_float_to_uint(Board_Tx_Info.gimbal_meg.pitch_mec, -4.0f, 4.0f);   /* Pitch 机械角 */
@@ -180,7 +183,7 @@ static void Board_Tx_Meg_02(uint8_t *txbuf)
     txbuf[6] = (uint8_t)(pitch_imu >> 8);
     txbuf[7] = (uint8_t)pitch_imu;
 
-    CAN_SendData(&hcan2, ID_BOARD_TX2, txbuf);
+    return CAN_SendData(&hcan2, ID_BOARD_TX2, txbuf);
 }
 
 /* 收到 D1，清零对应心跳计数 */
@@ -197,11 +200,31 @@ void Board_Rx_02(uint8_t *rxbuf)
     Board_HeartBeat.offline_cnt_2 = 0;
 }
 
-/* D3 暂无数据字段，仅维持心跳 */
+/* D3只更新时间，不代替源有效性 */
 void Board_Rx_03(uint8_t *rxbuf)
 {
-    (void)rxbuf;
+    Board_Rx_Info.heat_pkt.heat_limit = (uint16_t)(((uint16_t)rxbuf[0] << 8) | rxbuf[1]);
+    Board_Rx_Info.heat_pkt.barrel_heat = (uint16_t)(((uint16_t)rxbuf[2] << 8) | rxbuf[3]);
+    Board_Rx_Info.heat_pkt.cooling_rate = (uint16_t)(((uint16_t)rxbuf[4] << 8) | rxbuf[5]);
+    Board_Rx_Info.heat_pkt.heat_seq = rxbuf[6];
+    Board_Rx_Info.heat_pkt.flags = rxbuf[7] & 0x03u;
+    Board_Rx_Info.heat_pkt.rx_tick = HAL_GetTick();
+    Board_Rx_Info.heat_pkt.seen = 1u;
     Board_HeartBeat.offline_cnt_3 = 0;
+}
+
+void Board_GetHeatSnapshot(Board_Heat_Pkt_t *snapshot)
+{
+    uint32_t irq_state;
+    if (snapshot == NULL)
+    {
+        return;
+    }
+    /* 防止接收中断撕裂快照 */
+    irq_state = __get_PRIMASK();
+    __disable_irq();
+    *snapshot = Board_Rx_Info.heat_pkt;
+    __set_PRIMASK(irq_state);
 }
 
 /* D4 暂无数据字段，仅维持心跳 */
@@ -218,12 +241,56 @@ void Board_Rx_05(uint8_t *rxbuf)
     Board_HeartBeat.offline_cnt_5 = 0;
 }
 
-/* 上板周期发送 C1/C2 到通信 CAN */
+/* 每轮最多一帧，失败保留到期状态 */
 void Send_To_Down_Board(void)
 {
+    uint32_t now = HAL_GetTick();
+    uint32_t c1_age = now - board_feedback_debug.c1_tx_tick;
+    uint32_t c2_age = now - board_feedback_debug.c2_tx_tick;
+    uint8_t selected = board_feedback_next;
+    HAL_StatusTypeDef result;
+
+    if (((selected == 0u) ? c1_age : c2_age) < BOARD_FEEDBACK_PERIOD_MS)
+    {
+        selected ^= 1u;
+    }
+    if (((selected == 0u) ? c1_age : c2_age) < BOARD_FEEDBACK_PERIOD_MS)
+    {
+        return;
+    }
+    if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan2) == 0u)
+    {
+        board_feedback_debug.defer_count++;
+        return;
+    }
+    board_feedback_next = selected ^ 1u;
     Board_Tx_Update();
-    Board_Tx_Meg_01(board_tx_buf1);
-    Board_Tx_Meg_02(board_tx_buf2);
+    if (selected == 0u)
+    {
+        result = Board_Tx_Meg_01(board_tx_buf1);
+        if (result == HAL_OK)
+        {
+            board_feedback_debug.c1_tx_tick = HAL_GetTick();
+            board_feedback_debug.c1_ok_count++;
+        }
+        else
+        {
+            board_feedback_debug.c1_fail_count++;
+        }
+    }
+    else
+    {
+        result = Board_Tx_Meg_02(board_tx_buf2);
+        if (result == HAL_OK)
+        {
+            board_feedback_debug.c2_tx_tick = HAL_GetTick();
+            board_feedback_debug.c2_ok_count++;
+        }
+        else
+        {
+            board_feedback_debug.c2_fail_count++;
+        }
+    }
 }
 
 /* 板间心跳：D1/D2 任一超时即判离线 */

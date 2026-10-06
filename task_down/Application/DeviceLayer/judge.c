@@ -17,6 +17,7 @@ typedef struct
 } judge_power_data_t;
 
 static volatile judge_power_data_t judge_power_data;
+static volatile judge_heat_snapshot_t judge_heat_data;
 
 Judge_Info_t Judge_Info;
 Judge_Pkt_t Judge_Pkt;
@@ -36,6 +37,14 @@ Judge_t judge =
 /* 裁判系统初始化 */
 void Judge_Init(Judge_t* judge)
 {
+    judge_heat_data.limit_tick = 0u;
+    judge_heat_data.heat_tick = 0u;
+    judge_heat_data.heat_limit = 0u;
+    judge_heat_data.barrel_heat = 0u;
+    judge_heat_data.cooling_rate = 0u;
+    judge_heat_data.heat_seq = 0u;
+    judge_heat_data.limit_seen = 0u;
+    judge_heat_data.heat_seen = 0u;
 	judge_power_data.limit_seen = 0u;
 	judge_power_data.buffer_seen = 0u;
 	judge_power_data.limit_tick = 0u;
@@ -93,6 +102,21 @@ uint8_t Judge_GetPowerSnapshot(judge_power_snapshot_t *snapshot)
              ((uint32_t)(now - judge_power_data.buffer_tick) < JUDGE_OFFLINE_CNT_MAX)) ? 1u : 0u;
     __set_PRIMASK(irq_state);
     return snapshot->valid;
+}
+
+uint8_t Judge_GetHeatSnapshot(judge_heat_snapshot_t *snapshot)
+{
+    uint32_t irq_state;
+    if (snapshot == NULL)
+    {
+        return 0u;
+    }
+    /* 防止接收中断撕裂快照 */
+    irq_state = __get_PRIMASK();
+    __disable_irq();
+    *snapshot = judge_heat_data;
+    __set_PRIMASK(irq_state);
+    return 1u;
 }
 
 uint8_t Judge_GetPowerData(uint16_t *limit_w, uint16_t *buffer_j)
@@ -175,6 +199,10 @@ void Judge_Data_Update(uint16_t id, uint8_t *rxBuf)
 
     case ID_robot_status:
       memcpy(&judge.info->robot_status, rxBuf, LEN_robot_status);
+      judge_heat_data.heat_limit = judge.info->robot_status.shooter_barrel_heat_limit;
+      judge_heat_data.cooling_rate = judge.info->robot_status.shooter_barrel_cooling_value;
+      judge_heat_data.limit_tick = HAL_GetTick();
+      judge_heat_data.limit_seen = 1u;
 		
 		  judge.pkt->robot_id = judge.info->robot_status.robot_id;
 		  judge.pkt->shooter_barrel_heat_limit = judge.info->robot_status.shooter_barrel_heat_limit; 
@@ -197,6 +225,10 @@ void Judge_Data_Update(uint16_t id, uint8_t *rxBuf)
 
     case ID_power_heat_data:
       memcpy(&judge.info->power_heat_data, rxBuf, LEN_power_heat_data);
+      judge_heat_data.barrel_heat = judge.info->power_heat_data.shooter_17mm_1_barrel_heat;
+      judge_heat_data.heat_tick = HAL_GetTick();
+      judge_heat_data.heat_seq++;
+      judge_heat_data.heat_seen = 1u;
 		
 		  judge.pkt->buffer_energy = judge.info->power_heat_data.buffer_energy;
 		  judge_power_data.buffer_j = judge.pkt->buffer_energy;

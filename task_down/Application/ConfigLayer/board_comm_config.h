@@ -7,8 +7,12 @@
 #define BOARD_COMM_DEBUG                1u
 #define BOARD_COMM_TX_ENABLE            1u
 #define BOARD_COMM_D1D2_PERIOD_MS       1u
-#define BOARD_COMM_D3D4_PERIOD_MS       10u
-#define BOARD_COMM_D3D4_ENABLE          0u
+#define BOARD_COMM_D3_PERIOD_MS         10u // 热量报文间隔，ms
+#define BOARD_COMM_D3_ENABLE             1u // 热量发送使能，0/1
+#define BOARD_COMM_D4_PERIOD_MS         10u // 血量报文间隔，ms
+#define BOARD_COMM_D4_ENABLE             0u // 血量发送使能，0/1
+#define BOARD_HEAT_LIMIT_TIMEOUT_MS   1500u // 裁判参数超时，ms
+#define BOARD_HEAT_VALUE_TIMEOUT_MS    300u // 裁判热量超时，ms
 #define BOARD_COMM_D5_ENABLE            1u
 
 /* S2 档位软件消抖，单位：1 ms 控制周期。 */

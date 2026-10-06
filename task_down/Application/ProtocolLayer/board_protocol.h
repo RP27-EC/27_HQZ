@@ -48,12 +48,11 @@ typedef struct{
 }Board_Car_Pkt_t;
 
 
-/* 射击与热量信息 */
+/* 裁判射击统计，D3不透传 */
 typedef struct{
-  float shoot_speed;          /* 弹速 */
-  float shoot_freq;           /* 射频 */
-  int16_t shoot_heat_err;     /* 热量余量 */
-  uint16_t allowance_max;     /* 最大发弹量 */
+  float shoot_speed;          /* 实测弹速，m/s */
+  float shoot_freq;           /* 实测射频，发/s */
+  uint16_t allowance_max;     /* 允许发弹量，发 */
 }Board_Judge_Shoot_Pkt_t;
 
 
@@ -130,14 +129,20 @@ typedef struct{
 
 /* 板间链路状态 */
 typedef struct{
-	uint16_t offline_cnt_max; /* 离线判定阈值 */
-	dev_work_state_t status;  /* 链路在线状态 */
-	uint16_t offline_cnt;     /* 当前离线计数 */
-
-	volatile uint32_t gimbal_rx_time_ms; /* 云台反馈接收时刻 */
-	volatile uint8_t gimbal_d1_tx_ok;
-	volatile uint8_t gimbal_d2_tx_ok;
-	volatile uint8_t gimbal_data_valid;  /* 云台反馈数据有效 */
+    uint16_t offline_cnt_max; /* 离线阈值，任务周期数 */
+    dev_work_state_t status; /* 链路状态，见枚举 */
+    uint16_t offline_cnt; /* 离线计数，任务周期数 */
+    volatile uint32_t gimbal_rx_time_ms; /* C2接收时刻，ms */
+    volatile uint8_t gimbal_d1_tx_ok; /* 本组D1入队成功，0/1 */
+    volatile uint8_t gimbal_d2_tx_ok; /* 本组D2入队成功，0/1 */
+    volatile uint8_t gimbal_data_valid; /* 云台反馈有效，0/1 */
+    volatile uint8_t heat_d3_tx_ok; /* 最近D3入队成功，0/1 */
+    volatile uint32_t heat_d3_tx_ok_count; /* D3成功次数，uint32循环 */
+    volatile uint32_t heat_d3_tx_fail_count; /* D3失败次数，uint32循环 */
+    volatile uint32_t heat_d3_tx_tick; /* 最近D3成功时刻，ms */
+    volatile uint32_t heat_d3_tx_gap_ms; /* 最近D3成功间隔，ms */
+    volatile uint32_t heat_d3_tx_max_gap_ms; /* 最大D3成功间隔，ms */
+    volatile uint32_t control_tx_defer_count; /* 整组延后次数，uint32循环 */
 }Board_Status_t;
 
 /* 板间通信对象，函数指针便于统一调度 */

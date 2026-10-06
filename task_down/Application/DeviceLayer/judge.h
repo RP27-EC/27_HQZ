@@ -527,6 +527,20 @@ typedef struct
 uint8_t Judge_GetPowerSnapshot(judge_power_snapshot_t *snapshot);
 uint8_t Judge_GetPowerData(uint16_t *limit_w, uint16_t *buffer_j);
 
+typedef struct
+{
+    uint32_t limit_tick; // 参数接收时刻，ms
+    uint32_t heat_tick; // 热量接收时刻，ms
+    uint16_t heat_limit; // 枪管热量上限，热量单位
+    uint16_t barrel_heat; // 第一枪管热量，热量单位
+    uint16_t cooling_rate; // 冷却速率，热量单位/s
+    uint8_t heat_seq; // 热量源序号，0~255循环
+    uint8_t limit_seen; // 参数已接收，0/1
+    uint8_t heat_seen; // 热量已接收，0/1
+} judge_heat_snapshot_t;
+
+uint8_t Judge_GetHeatSnapshot(judge_heat_snapshot_t *snapshot);
+
 void Shooting_Cmd_Excute_Tick_Calculating(uint8_t flag);
 void Speed_Statistic(void);
 

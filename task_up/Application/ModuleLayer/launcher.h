@@ -43,6 +43,41 @@ typedef struct
 
 extern launcher_t launcher;
 
+typedef enum
+{
+    LAUNCHER_HEAT_NONE = 0, // 无有效初始参数，禁发
+    LAUNCHER_HEAT_REFEREE, // 裁判有效，值1
+    LAUNCHER_HEAT_ESTIMATE, // 断链本地估算，值2
+    LAUNCHER_HEAT_TRAINING, // 固定参数训练，值3
+} launcher_heat_source_e;
+
+typedef struct
+{
+    float current_a; // 反馈电流，A
+    float speed_rpm; // 反馈转速，rpm
+    uint32_t feedback_tick; // 反馈接收时刻，ms
+    uint32_t feedback_seq; // 反馈序号，uint32循环
+    uint32_t feedback_age_ms; // 反馈距今时间，ms
+    uint8_t online; // 电机在线，0/1
+} launcher_fric_observation_t;
+
+typedef struct
+{
+    float heat; // 本地估计，热量单位
+    float referee_heat; // 最新裁判值，热量单位
+    float heat_limit; // 使用中上限，热量单位
+    float cooling_rate; // 使用中冷却，热量单位/s
+    float remaining; // 剩余预算，热量单位
+    float target_rate; // 连发射频，发/s
+    launcher_heat_source_e source; // 参数来源，0~3
+    uint8_t ready; // 初始热量已建立，0/1
+    uint8_t blocked; // 热停发锁定，0/1
+    launcher_fric_observation_t fric_l; // 左轮观测，单位见类型
+    launcher_fric_observation_t fric_r; // 右轮观测，单位见类型
+} launcher_heat_t;
+
+extern launcher_heat_t launcher_heat;
+
 void Launcher_Init(void);
 void Launcher_Work(void);
 

@@ -79,4 +79,16 @@
 #define LAUNCHER_DIAL_BRAKE_STOP_SPEED_DPS 20u
 #define LAUNCHER_DIAL_BRAKE_TIMEOUT_MS    120u
 
+/* 17 mm热量预算与限频 */
+#define LAUNCHER_HEAT_PER_SHOT             10.0f // 每发增热，热量单位
+#define LAUNCHER_HEAT_WARN                200.0f // 降速起点，热量单位
+#define LAUNCHER_HEAT_SATURATE             50.0f // 平衡区起点，热量单位
+#define LAUNCHER_HEAT_STOP                 20.0f // 停发余量，热量单位
+#define LAUNCHER_HEAT_RESUME               30.0f // 恢复余量，热量单位
+#define LAUNCHER_HEAT_MAX_RATE             15.0f // 最高射频，发/s
+#define LAUNCHER_HEAT_D3_TIMEOUT_MS        100u // 热量链路超时，ms
+#define LAUNCHER_HEAT_TRAINING_ENABLE        0u // 固定参数训练，0/1
+#define LAUNCHER_HEAT_TRAINING_LIMIT       0.0f // 训练上限，热量单位
+#define LAUNCHER_HEAT_TRAINING_COOLING     0.0f // 训练冷却，热量单位/s
+
 #endif
