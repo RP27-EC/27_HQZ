@@ -72,6 +72,8 @@ static void Board_Rx_Pkt_01(uint8_t *rxbuf)
     Board_Rx_Info.shoot_pkt.shoot_mode = (rxbuf[5] >> 1) & 0x01;  /* 发射模式 */
     Board_Rx_Info.shoot_pkt.shoot_level = (rxbuf[5] >> 2) & 0x01; /* 触发电平 */
     Board_Rx_Info.shoot_pkt.is_hole = (rxbuf[5] >> 3) & 0x01;     /* 过洞标志 */
+    Board_Rx_Info.shoot_pkt.single_seq = rxbuf[6];
+    Board_Rx_Info.shoot_pkt.reset_seq = rxbuf[7];
 }
 
 /* 解析 D2：云台目标角度 */

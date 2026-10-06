@@ -45,6 +45,63 @@ extern launcher_t launcher;
 
 typedef enum
 {
+    LAUNCHER_REJECT_NONE = 0, // 无拒绝，值0
+    LAUNCHER_REJECT_DISABLED, // 许可关闭，值1
+    LAUNCHER_REJECT_BUSY, // 单发或启动忙，值2
+    LAUNCHER_REJECT_FRIC_NOT_READY, // 转轮未达速，值3
+    LAUNCHER_REJECT_DIAL_OFFLINE, // 拨盘离线，值4
+    LAUNCHER_REJECT_HEAT, // 热量禁止，值5
+    LAUNCHER_REJECT_START_FAILED, // 启动超时，值6
+    LAUNCHER_REJECT_SINGLE_TIMEOUT, // 单发未到位，值7
+    LAUNCHER_REJECT_FRIC_JAM, // 转轮解堵中，值8
+    LAUNCHER_REJECT_FRIC_FAULT, // 转轮锁停，值9
+    LAUNCHER_REJECT_RELEASE_REQUIRED, // 等待释放，值10
+    LAUNCHER_REJECT_ABORTED, // 许可中断，值11
+} launcher_reject_e;
+
+typedef enum
+{
+    LAUNCHER_FRIC_NORMAL = 0, // 常规速度环，值0
+    LAUNCHER_FRIC_BOOST, // 限时增强，值1
+    LAUNCHER_FRIC_LOCKED, // 失败锁停，值2
+} launcher_fric_state_e;
+
+typedef struct
+{
+    uint32_t received; // 收到事件数，uint32循环
+    uint32_t accepted; // 接受单发数，uint32循环
+    uint32_t rejected; // 拒绝事件数，uint32循环
+    uint32_t completed; // 单发到位数，uint32循环
+    uint32_t timed_out; // 单发超时数，uint32循环
+    uint32_t start_failed; // 启动失败数，uint32循环
+    uint32_t aborted; // 已接受中止数，uint32循环
+    uint32_t jam_count; // 转轮堵转数，uint32循环
+    uint32_t recovery_ok; // 解堵成功数，uint32循环
+    uint32_t recovery_failed; // 解堵失败数，uint32循环
+    int64_t dial_target; // 拨盘目标，count
+    int32_t dial_angle; // 拨盘反馈角，count
+    float dial_speed; // 拨盘反馈速度，deg/s
+    float dial_speed_target; // 拨盘目标速度，deg/s
+    float dial_output; // 拨盘控制电流，原始值
+    float dial_current; // 拨盘反馈电流，原始值
+    float fric_output[2]; // 左右轮控制电流，原始值
+    float fric_speed[2]; // 左右轮反馈速度，rpm
+    float fric_current[2]; // 左右轮反馈电流，A
+    launcher_reject_e reject_reason; // 最近事件结果，0~11
+    launcher_reject_e inhibit_reason; // 当前禁止原因，0~11
+    launcher_fric_state_e fric_state; // 转轮阶段，0~2
+    uint32_t jam_elapsed_ms; // 堵转确认时间，ms
+    uint32_t boost_elapsed_ms; // 增强运行时间，ms
+    uint8_t single_seq; // 最近单发序号，0~255
+    uint8_t reset_seq; // 最近复位序号，0~255
+    uint8_t start_pending; // 单发启动等待，0/1
+    uint8_t release_required; // 供弹等待释放，0/1
+} launcher_debug_t;
+
+extern volatile launcher_debug_t launcher_debug;
+
+typedef enum
+{
     LAUNCHER_HEAT_NONE = 0, // 无有效初始参数，禁发
     LAUNCHER_HEAT_REFEREE, // 裁判有效，值1
     LAUNCHER_HEAT_ESTIMATE, // 断链本地估算，值2

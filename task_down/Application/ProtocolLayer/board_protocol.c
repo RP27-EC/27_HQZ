@@ -120,6 +120,8 @@ void Board_Tx_Pkt_01(Board_t* board)
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_mode & 0x01) << 1; /* 发射模式 */
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_level & 0x01) << 2; /* 触发电平 */
 	pkt_01[5] |= (board->tx_pkt->gimbal_target_pkt.is_hole & 0x01) << 3; /* 过洞标志 */
+    pkt_01[6] = board->tx_pkt->shoot_pkt.single_seq;
+    pkt_01[7] = board->tx_pkt->shoot_pkt.reset_seq;
 	
 
 	board->status->gimbal_d1_tx_ok =

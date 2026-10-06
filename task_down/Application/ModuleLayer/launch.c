@@ -5,6 +5,7 @@
 #include "rc_sensor.h"
 #include "chassis_input.h"
 #include "board_comm_config.h"
+#include "rc_protocol.h"
 
 static void Launch_Init(Launch_t *launch);
 static void Launch_Work(Launch_t *launch);
@@ -18,6 +19,15 @@ static uint8_t launch_s2_filter_initialized;
 static uint8_t launch_s2_raw_last;
 static uint8_t launch_s2_filtered;
 static uint8_t launch_s2_stable_ticks;
+
+static uint8_t launch_single_seq;
+static uint8_t launch_reset_seq;
+static uint8_t launch_s1_seen;
+static uint8_t launch_s1_previous;
+static uint8_t launch_source = 2u;
+static uint8_t launch_mouse_armed;
+static uint32_t launch_mouse_press_seq;
+static uint32_t launch_mouse_release_seq;
 
 /* 发射机构全局对象 */
 
@@ -86,108 +96,111 @@ static void Launch_Init(Launch_t *launch)
     Launch_Reset_Shoot_Arm();
 }
 
-/* 根据键鼠或遥控拨杆更新发射状态与模式 */
+/* 转轮许可与供弹解锁分离 */
 static void Launch_Data_Update(Launch_t *launch)
 {
-    uint8_t s1; /* S1 档位 */
-    uint8_t s2; /* S2 档位 */
+    rc_mouse_shot_t mouse;
+    uint8_t s1;
+    uint8_t s2;
+    uint8_t keyboard;
+    uint8_t previous_s2;
 
-    if (Chassis_Input_IsKeyboardMode() != 0u)
-    {
-        Launch_Reset_Shoot_Arm();
-        Launch_Reset_S2_Filter();
-        launch->state = L_UNLOCK; /* 键鼠直接解锁 */
-
-        /* 键鼠：左键按下发射，长按切连发 */
-        if ((rc_dev.info->mouse_btn_l.value & 0x01u) != 0u)
-        {
-            launch->mode = (rc_dev.info->mouse_btn_l.status == long_press) ?
-                           REPEAT_SHOT : SINGLE_SHOT;
-            launch->shoot_level = 1u; /* 触发发射 */
-        }
-        else
-        {
-            launch->mode = SINGLE_SHOT; /* 松开回单发 */
-            launch->shoot_level = 0u;   /* 取消触发 */
-        }
-
-        return;
-    }
-
-    /* 遥控掉线立即锁定 */
-    if (rc_dev.work_state != DEV_ONLINE)
-    {
-    Launch_Reset_Shoot_Arm(); /* 掉线清除解锁 */
-    Launch_Reset_S2_Filter();
+    Rc_GetMouseShotSnapshot(&mouse);
     launch->state = L_LOCK;
     launch->mode = SINGLE_SHOT;
     launch->shoot_level = 0u;
-    return;
+    if (rc_dev.work_state != DEV_ONLINE)
+    {
+        Launch_Reset_Shoot_Arm();
+        Launch_Reset_S2_Filter();
+        launch_s1_seen = 0u;
+        launch_source = 2u;
+        launch_mouse_armed = 0u;
+        launch_mouse_press_seq = mouse.press_seq;
+        launch_mouse_release_seq = mouse.release_seq;
+        return;
     }
 
+    s1 = (uint8_t)rc_dev.info->s1.value;
+    if ((launch_s1_seen != 0u) &&
+        (launch_s1_previous == RC_SW_DOWN) && (s1 == RC_SW_MID))
+    {
+        launch_reset_seq++;
+    }
+    launch_s1_seen = 1u;
+    launch_s1_previous = s1;
+    keyboard = Chassis_Input_IsKeyboardMode();
+    if (launch_source != keyboard)
+    {
+        Launch_Reset_Shoot_Arm();
+        Launch_Reset_S2_Filter();
+        launch_mouse_press_seq = mouse.press_seq;
+        launch_mouse_release_seq = mouse.release_seq;
+        launch_mouse_armed = (mouse.pressed == 0u) ? 1u : 0u;
+        launch_source = keyboard;
+    }
+
+    if (keyboard != 0u)
+    {
+        launch->state = L_UNLOCK;
+        if ((mouse.pressed == 0u) ||
+            (mouse.release_seq != launch_mouse_release_seq))
+        {
+            launch_mouse_armed = 1u;
+        }
+        if ((mouse.press_seq != launch_mouse_press_seq) &&
+            (launch_mouse_armed != 0u))
+        {
+            launch_single_seq++;
+        }
+        launch_mouse_press_seq = mouse.press_seq;
+        launch_mouse_release_seq = mouse.release_seq;
+        if ((mouse.pressed != 0u) && (launch_mouse_armed != 0u))
+        {
+            launch->shoot_level = 1u;
+            launch->mode = (rc_dev.info->mouse_btn_l.status == long_press) ?
+                           REPEAT_SHOT : SINGLE_SHOT;
+        }
+        return;
+    }
+
+    launch_mouse_press_seq = mouse.press_seq;
+    launch_mouse_release_seq = mouse.release_seq;
 #if BOARD_LIFT_ENABLE
     if ((board.tx_pkt->gimbal_target_pkt.is_hole != 0u) ||
         (board.rx_meg->state_meg.is_down != 2u))
     {
         Launch_Reset_Shoot_Arm();
         Launch_Reset_S2_Filter();
-        launch->state = L_LOCK;
-        launch->mode = SINGLE_SHOT;
-        launch->shoot_level = 0u;
         return;
     }
 #endif
-
-    s1 = (uint8_t)rc_dev.info->s1.value; /* 读取 S1 */
-    s2 = Launch_Filter_S2((uint8_t)rc_dev.info->s2.value); /* 消抖后的 S2 */
-
-    /* 小陀螺档位禁止发射，避免机构互锁 */
-    if ((s1 == RC_SW_UP) && (s2 == RC_SW_DOWN))
+    s2 = Launch_Filter_S2((uint8_t)rc_dev.info->s2.value);
+    if (((s1 != RC_SW_UP) && (s1 != RC_SW_MID)) ||
+        ((s1 == RC_SW_UP) && (s2 == RC_SW_DOWN)))
     {
         Launch_Reset_Shoot_Arm();
-        launch->state = L_LOCK;
-        launch->mode = SINGLE_SHOT;
-        launch->shoot_level = 0u;
         return;
     }
 
-    if ((s1 != RC_SW_UP) && (s1 != RC_SW_MID))
+    launch->state = L_UNLOCK;
+    previous_s2 = launch_shoot_previous_switch;
+    if (s2 == RC_SW_MID)
     {
-        Launch_Reset_Shoot_Arm();
-        launch->state = L_LOCK;
-        launch->mode = SINGLE_SHOT;
-        launch->shoot_level = 0u;
-        return;
+        launch_shoot_armed = 1u;
     }
-
-    /* 上电后必须先变化 S2，避免开机停在上位直接发射。 */
-    /* 安全解锁：上电后 S2 必须再动作一次 */
     if ((launch_shoot_switch_seen != 0u) &&
-        (s2 != launch_shoot_previous_switch))
+        (launch_shoot_armed != 0u) && (s2 == RC_SW_UP))
     {
-        launch_shoot_armed = 1u; /* 拨杆动作后解锁 */
+        launch->mode = (s1 == RC_SW_UP) ? REPEAT_SHOT : SINGLE_SHOT;
+        launch->shoot_level = 1u;
+        if ((previous_s2 != RC_SW_UP) && (launch->mode == SINGLE_SHOT))
+        {
+            launch_single_seq++;
+        }
     }
     launch_shoot_switch_seen = 1u;
     launch_shoot_previous_switch = s2;
-
-    if ((launch_shoot_armed != 0u) && (s2 == RC_SW_UP))
-    {
-        launch->state = L_UNLOCK; /* S2 上拨发射 */
-        launch->mode = (s1 == RC_SW_UP) ? REPEAT_SHOT : SINGLE_SHOT;
-        launch->shoot_level = 1u;
-    }
-    else if ((launch_shoot_armed != 0u) && (s2 == RC_SW_MID))
-    {
-        launch->state = L_UNLOCK; /* S2 中位待发 */
-        launch->mode = SINGLE_SHOT;
-        launch->shoot_level = 0u;
-    }
-    else
-    {
-        launch->state = L_LOCK; /* 未解锁 */
-        launch->mode = SINGLE_SHOT;
-        launch->shoot_level = 0u;
-    }
 }
 
 /* 从板间状态同步发射子设备在线信息 */
@@ -201,9 +214,15 @@ static void Launch_Offline_Update(Launch_t *launch)
 /* 将许可、模式和触发电平写入板间报文 */
 static void Launch_Cmd_Transmit(Launch_t *launch)
 {
-    board.tx_pkt->shoot_pkt.launch_state = launch->state;  /* 发射许可 */
-    board.tx_pkt->shoot_pkt.shoot_mode = launch->mode;    /* 单发/连发 */
-    board.tx_pkt->shoot_pkt.shoot_level = launch->shoot_level; /* 触发 */
+    uint32_t irq_state = __get_PRIMASK();
+    /* 防止发送任务读到半更新字段 */
+    __disable_irq();
+    board.tx_pkt->shoot_pkt.launch_state = (uint8_t)launch->state;
+    board.tx_pkt->shoot_pkt.shoot_mode = (uint8_t)launch->mode;
+    board.tx_pkt->shoot_pkt.shoot_level = launch->shoot_level;
+    board.tx_pkt->shoot_pkt.single_seq = launch_single_seq;
+    board.tx_pkt->shoot_pkt.reset_seq = launch_reset_seq;
+    __set_PRIMASK(irq_state);
 }
 
 /* 发射机构周期任务 */

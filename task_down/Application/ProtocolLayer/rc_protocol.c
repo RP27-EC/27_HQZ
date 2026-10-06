@@ -6,6 +6,18 @@ void keyboard_status_update(kb_key_t *key);
 
 extern uint32_t micros(void);
 uint32_t tt1, tt2, ttp1; /* 遥控帧间隔计时 */
+static volatile rc_mouse_shot_t rc_mouse_shot;
+static uint8_t rc_mouse_shot_seen;
+
+void Rc_GetMouseShotSnapshot(rc_mouse_shot_t *snapshot)
+{
+    uint32_t irq_state = __get_PRIMASK();
+    __disable_irq();
+    snapshot->press_seq = rc_mouse_shot.press_seq;
+    snapshot->release_seq = rc_mouse_shot.release_seq;
+    snapshot->pressed = rc_mouse_shot.pressed;
+    __set_PRIMASK(irq_state);
+}
 
 /* 初始化遥控设备状态，默认离线 */
 void rc_init(rc_dev_t *rc_sen)
@@ -76,6 +88,22 @@ void rc_update(rc_dev_t *rc_sen, uint8_t *rxBuf)
 {
 
 	rc_data_t *rc_info = rc_sen->info;
+    uint8_t mouse_pressed = rxBuf[12] & 0x01u;
+    uint8_t reconnect = (rc_info->offline_cnt >= rc_info->offline_max_cnt) ? 1u : 0u;
+    /* 重连首帧只建立按键基准 */
+    if ((rc_mouse_shot_seen != 0u) && (reconnect == 0u))
+    {
+        if ((mouse_pressed != 0u) && (rc_mouse_shot.pressed == 0u))
+        {
+            rc_mouse_shot.press_seq++;
+        }
+        else if ((mouse_pressed == 0u) && (rc_mouse_shot.pressed != 0u))
+        {
+            rc_mouse_shot.release_seq++;
+        }
+    }
+    rc_mouse_shot.pressed = mouse_pressed;
+    rc_mouse_shot_seen = 1u;
 	rc_info->offline_cnt=0; /* 收到帧则在线 */
 	/* 遥控器 */
 	rc_info->ch0 = (rxBuf[0] | rxBuf[1] << 8) & 0x07FF; /* 右横 */

@@ -67,9 +67,11 @@ typedef struct{
 
 /* 发射控制 */
 typedef struct{
-	uint8_t launch_state; /* 发射机构使能 */
+	uint8_t launch_state; /* 摩擦轮许可，0/1 */
   uint8_t shoot_mode;   /* 0 = 单发，1 = 连发 */
-	uint8_t shoot_level;  /* 发射触发电平 */
+	uint8_t shoot_level;  /* 发射触发电平，0/1 */
+    uint8_t single_seq; // 单发事件序号，0~255循环
+    uint8_t reset_seq; // 人工复位序号，0~255循环
 }Board_Shoot_Pkt_t;
 
 
