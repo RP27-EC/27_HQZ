@@ -84,7 +84,8 @@ static uint8_t Launcher_HeatConfigValid(void)
     return ((LAUNCHER_HEAT_PER_SHOT > 0.0f) &&
             (LAUNCHER_DIAL_ONE_SHOT_ANGLE > 0.0f) &&
             (LAUNCHER_HEAT_MAX_RATE > 0.0f) &&
-            (LAUNCHER_HEAT_STOP >= LAUNCHER_HEAT_PER_SHOT) &&
+            (LAUNCHER_HEAT_MARGIN >= LAUNCHER_HEAT_PER_SHOT) &&
+            (LAUNCHER_HEAT_STOP >= LAUNCHER_HEAT_MARGIN) &&
             (LAUNCHER_HEAT_RESUME > LAUNCHER_HEAT_STOP) &&
             (LAUNCHER_HEAT_SATURATE >= LAUNCHER_HEAT_RESUME) &&
             (LAUNCHER_HEAT_WARN > LAUNCHER_HEAT_SATURATE)) ? 1u : 0u;
@@ -235,7 +236,8 @@ static void Launcher_HeatUpdate(uint32_t now)
             (launcher_heat_runtime.heat_seq != snapshot.heat_seq))
         {
             launcher_heat.referee_heat = (float)snapshot.barrel_heat;
-            launcher_heat.heat = fmaxf(launcher_heat.heat, launcher_heat.referee_heat);
+            /* 新源序号覆盖旧估算 */
+            launcher_heat.heat = launcher_heat.referee_heat;
             launcher_heat_runtime.heat_seq = snapshot.heat_seq;
             launcher_heat_runtime.seq_seen = 1u;
         }
@@ -261,11 +263,12 @@ static uint8_t Launcher_HeatReserveSingle(void)
 {
     if ((launcher_heat.ready == 0u) || (launcher_heat.blocked != 0u) ||
         (launcher_heat.remaining < LAUNCHER_HEAT_STOP) ||
-        ((launcher_heat.heat + LAUNCHER_HEAT_PER_SHOT) > launcher_heat.heat_limit))
+        ((launcher_heat.heat + LAUNCHER_HEAT_PER_SHOT) >
+         (launcher_heat.heat_limit - LAUNCHER_HEAT_MARGIN)))
     {
         return 0u;
     }
-    /* 单发预占不因取消而退还 */
+    /* 预占保留至下次裁判校准 */
     launcher_heat_runtime.repeat_tracking = 0u;
     launcher_heat.heat += LAUNCHER_HEAT_PER_SHOT;
     Launcher_HeatRefreshRate();

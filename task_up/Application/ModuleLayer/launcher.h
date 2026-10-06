@@ -63,7 +63,7 @@ typedef struct
 
 typedef struct
 {
-    float heat; // 本地估计，热量单位
+    float heat; // 裁判校准后的估计，热量单位
     float referee_heat; // 最新裁判值，热量单位
     float heat_limit; // 使用中上限，热量单位
     float cooling_rate; // 使用中冷却，热量单位/s

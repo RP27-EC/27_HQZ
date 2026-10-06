@@ -83,7 +83,8 @@
 #define LAUNCHER_HEAT_PER_SHOT             10.0f // 每发增热，热量单位
 #define LAUNCHER_HEAT_WARN                200.0f // 降速起点，热量单位
 #define LAUNCHER_HEAT_SATURATE             50.0f // 平衡区起点，热量单位
-#define LAUNCHER_HEAT_STOP                 20.0f // 停发余量，热量单位
+#define LAUNCHER_HEAT_MARGIN               20.0f // 安全余量，热量单位，至少10
+#define LAUNCHER_HEAT_STOP LAUNCHER_HEAT_MARGIN // 连发停发余量，热量单位
 #define LAUNCHER_HEAT_RESUME               30.0f // 恢复余量，热量单位
 #define LAUNCHER_HEAT_MAX_RATE             15.0f // 最高射频，发/s
 #define LAUNCHER_HEAT_D3_TIMEOUT_MS        100u // 热量链路超时，ms

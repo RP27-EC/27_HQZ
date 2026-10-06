@@ -11,7 +11,8 @@
 #define LAUNCHER_HEAT_PER_SHOT             10.0f // 每发增热，热量单位
 #define LAUNCHER_HEAT_WARN                200.0f // 降速起点，热量单位
 #define LAUNCHER_HEAT_SATURATE             50.0f // 平衡区起点，热量单位
-#define LAUNCHER_HEAT_STOP                 20.0f // 停发余量，热量单位
+#define LAUNCHER_HEAT_MARGIN               20.0f // 安全余量，热量单位，至少10
+#define LAUNCHER_HEAT_STOP LAUNCHER_HEAT_MARGIN // 连发停发余量，热量单位
 #define LAUNCHER_HEAT_RESUME               30.0f // 恢复余量，热量单位
 #define LAUNCHER_HEAT_MAX_RATE             15.0f // 最高射频，发/s
 #define LAUNCHER_HEAT_D3_TIMEOUT_MS        100u // 热量链路超时，ms
@@ -70,7 +71,7 @@ typedef struct
 ```c
 typedef struct
 {
-    float heat; // 本地估计，热量单位
+    float heat; // 裁判校准后的估计，热量单位
     float referee_heat; // 最新裁判值，热量单位
     float heat_limit; // 使用中上限，热量单位
     float cooling_rate; // 使用中冷却，热量单位/s
@@ -239,7 +240,8 @@ static uint8_t Launcher_HeatConfigValid(void)
     return ((LAUNCHER_HEAT_PER_SHOT > 0.0f) &&
             (LAUNCHER_DIAL_ONE_SHOT_ANGLE > 0.0f) &&
             (LAUNCHER_HEAT_MAX_RATE > 0.0f) &&
-            (LAUNCHER_HEAT_STOP >= LAUNCHER_HEAT_PER_SHOT) &&
+            (LAUNCHER_HEAT_MARGIN >= LAUNCHER_HEAT_PER_SHOT) &&
+            (LAUNCHER_HEAT_STOP >= LAUNCHER_HEAT_MARGIN) &&
             (LAUNCHER_HEAT_RESUME > LAUNCHER_HEAT_STOP) &&
             (LAUNCHER_HEAT_SATURATE >= LAUNCHER_HEAT_RESUME) &&
             (LAUNCHER_HEAT_WARN > LAUNCHER_HEAT_SATURATE)) ? 1u : 0u;
@@ -408,7 +410,8 @@ static void Launcher_HeatUpdate(uint32_t now)
             (launcher_heat_runtime.heat_seq != snapshot.heat_seq))
         {
             launcher_heat.referee_heat = (float)snapshot.barrel_heat;
-            launcher_heat.heat = fmaxf(launcher_heat.heat, launcher_heat.referee_heat);
+            /* 新源序号覆盖旧估算 */
+            launcher_heat.heat = launcher_heat.referee_heat;
             launcher_heat_runtime.heat_seq = snapshot.heat_seq;
             launcher_heat_runtime.seq_seen = 1u;
         }
@@ -440,11 +443,12 @@ static uint8_t Launcher_HeatReserveSingle(void)
 {
     if ((launcher_heat.ready == 0u) || (launcher_heat.blocked != 0u) ||
         (launcher_heat.remaining < LAUNCHER_HEAT_STOP) ||
-        ((launcher_heat.heat + LAUNCHER_HEAT_PER_SHOT) > launcher_heat.heat_limit))
+        ((launcher_heat.heat + LAUNCHER_HEAT_PER_SHOT) >
+         (launcher_heat.heat_limit - LAUNCHER_HEAT_MARGIN)))
     {
         return 0u;
     }
-    /* 单发预占不因取消而退还 */
+    /* 预占保留至下次裁判校准 */
     launcher_heat_runtime.repeat_tracking = 0u;
     launcher_heat.heat += LAUNCHER_HEAT_PER_SHOT;
     Launcher_HeatRefreshRate();
@@ -1443,7 +1447,7 @@ void StartConnectTask(void const *argument)
 
 - D3 协议已替换，须同步更新上下板。
 - 无有效初始裁判快照时默认禁止供弹；无裁判训练必须显式配置。
-- 单发预算不退款，空拨可能多计；停止余弹须人工实测。
+- 单发预算不主动退款，新有效裁判热量会覆盖预算；20 热量单位余量及停止余弹须人工实测。
 - 摩擦轮电流仅用于标定观测，未用于出弹识别。
 
 ## 执行记录
@@ -1457,3 +1461,11 @@ void StartConnectTask(void const *argument)
 ## CAN2 发送调度更新
 
 2026-10-06：C1/C2 降为各 5 ms，D3 到期优先且失败重试。完整修改单元及人工观察项见 [CAN2 发送拥堵修复交付](can2_tx_delivery.md)。
+
+## 裁判直接同步方案
+
+新有效裁判热量允许上调或下调本地估计，重复源序号不覆盖；断链继续本地计热冷却，恢复首份有效快照重新校准。同步时不重置编码器计热基准。
+
+安全余量 `LAUNCHER_HEAT_MARGIN=20`，连发低于余量停发、恢复到 30 解除；单发获准时预占 10，预占后须仍保留 20，即默认余量至少 30。`remaining` 为原始余量，不重复扣减安全余量。
+
+人工观察：新的 `heat_seq` 到来时 `heat` 对齐 `referee_heat`；两次反馈之间仍计热冷却。同一序号的 D3 转发不得把本地增热清除。只需更新上板固件，本次没有改变 D3 协议。
