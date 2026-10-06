@@ -277,18 +277,31 @@ void Chassis_Control_Stop(void)
 /* 底盘周期更新，任何异常均回到停机 */
 void Chassis_Control_Update(const chassis_cmd_t *cmd)
 {
-    uint16_t limit_w;
-    uint16_t buffer_j;
-    uint8_t power_data_valid;
+    judge_power_snapshot_t power_snapshot;
+    uint8_t all_online = Chassis_Control_CheckOnline();
+    uint8_t active = 0u;
+
+    if ((cmd != NULL) && (cmd->valid != 0u) &&
+        (chassis_ctrl.state.enabled != 0u) && (all_online != 0u) &&
+        Chassis_Control_ValueValid(cmd->vx) &&
+        Chassis_Control_ValueValid(cmd->vy) &&
+        Chassis_Control_ValueValid(cmd->wz))
+    {
+        active = ((fabsf(cmd->vx) > CHASSIS_POWER_ACTIVE_V_M_S) ||
+                  (fabsf(cmd->vy) > CHASSIS_POWER_ACTIVE_V_M_S) ||
+                  (fabsf(cmd->wz) > CHASSIS_POWER_ACTIVE_W_RAD_S)) ? 1u : 0u;
+    }
 
     /* 预算先于力矩限幅刷新 */
-    power_data_valid = Judge_GetPowerData(&limit_w, &buffer_j);
-    Power_Limit_GetTarget((judge.status != NULL) ? judge.status->status : DEV_OFFLINE,
-                          power_data_valid, limit_w, buffer_j);
+    Judge_GetPowerSnapshot(&power_snapshot);
+    Power_Limit_GetTarget(&power_snapshot, active);
 
-    /* 超电计数只作观测 */
+    /* 超电反馈仅作观测，不参与限功闭环 */
     Power_Limit_SetCapFeedback(supercap.chassis_power,
-                             (supercap.state == SUPERCAP_STATE_ONLINE) ? 1u : 0u);
+                               supercap.cap_voltage,
+                               supercap.cap_current,
+                               supercap.feedback.ability,
+                               (supercap.state == SUPERCAP_STATE_ONLINE) ? 1u : 0u);
 
     if (cmd == NULL)
     {
@@ -315,7 +328,7 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
         return;
     }
 
-    if (Chassis_Control_CheckOnline() == 0u)
+    if (all_online == 0u)
     {
         chassis_ctrl.state.fault = 1u;
         Chassis_Control_Stop();

@@ -9,6 +9,7 @@ typedef struct
 {
     uint32_t limit_tick; // 上限帧接收时刻，ms
     uint32_t buffer_tick; // 缓冲帧接收时刻，ms
+    uint32_t buffer_seq; // 缓冲帧序号，循环计数
     uint16_t limit_w; // 最近上报功率上限，W
     uint16_t buffer_j; // 最近上报缓冲能量，J
     uint8_t limit_seen; // 上限帧已收到，0/1
@@ -39,6 +40,7 @@ void Judge_Init(Judge_t* judge)
 	judge_power_data.buffer_seen = 0u;
 	judge_power_data.limit_tick = 0u;
 	judge_power_data.buffer_tick = 0u;
+	judge_power_data.buffer_seq = 0u;
 	judge_power_data.limit_w = 0u;
 	judge_power_data.buffer_j = 0u;
 	judge->status->offline_cnt = judge->status->offline_cnt_max;
@@ -65,13 +67,11 @@ void Judge_Heart_Beat(Judge_t* judge)
 }
 
 
-uint8_t Judge_GetPowerData(uint16_t *limit_w, uint16_t *buffer_j)
+uint8_t Judge_GetPowerSnapshot(judge_power_snapshot_t *snapshot)
 {
     uint32_t irq_state;
     uint32_t now;
-    uint8_t valid;
-
-    if ((limit_w == NULL) || (buffer_j == NULL))
+    if (snapshot == NULL)
     {
         return 0u;
     }
@@ -80,15 +80,32 @@ uint8_t Judge_GetPowerData(uint16_t *limit_w, uint16_t *buffer_j)
     irq_state = __get_PRIMASK();
     __disable_irq();
     now = HAL_GetTick();
-    *limit_w = judge_power_data.limit_w;
-    *buffer_j = judge_power_data.buffer_j;
-    valid = ((judge.status != NULL) && (judge.status->status == DEV_ONLINE) &&
+    snapshot->limit_w = judge_power_data.limit_w;
+    snapshot->buffer_j = judge_power_data.buffer_j;
+    snapshot->buffer_seq = judge_power_data.buffer_seq;
+    snapshot->buffer_tick = judge_power_data.buffer_tick;
+    snapshot->judge_online = ((judge.status != NULL) &&
+                             (judge.status->status == DEV_ONLINE)) ? 1u : 0u;
+    snapshot->valid = ((snapshot->judge_online != 0u) &&
              (judge_power_data.limit_seen != 0u) &&
              (judge_power_data.buffer_seen != 0u) &&
              ((uint32_t)(now - judge_power_data.limit_tick) < JUDGE_OFFLINE_CNT_MAX) &&
              ((uint32_t)(now - judge_power_data.buffer_tick) < JUDGE_OFFLINE_CNT_MAX)) ? 1u : 0u;
     __set_PRIMASK(irq_state);
-    return valid;
+    return snapshot->valid;
+}
+
+uint8_t Judge_GetPowerData(uint16_t *limit_w, uint16_t *buffer_j)
+{
+    judge_power_snapshot_t snapshot;
+    if ((limit_w == NULL) || (buffer_j == NULL))
+    {
+        return 0u;
+    }
+    Judge_GetPowerSnapshot(&snapshot);
+    *limit_w = snapshot.limit_w;
+    *buffer_j = snapshot.buffer_j;
+    return snapshot.valid;
 }
 
 void Judge_Data_Update(uint16_t id, uint8_t *rxBuf)
@@ -184,6 +201,7 @@ void Judge_Data_Update(uint16_t id, uint8_t *rxBuf)
 		  judge.pkt->buffer_energy = judge.info->power_heat_data.buffer_energy;
 		  judge_power_data.buffer_j = judge.pkt->buffer_energy;
 		  judge_power_data.buffer_tick = HAL_GetTick();
+		  judge_power_data.buffer_seq++;
 		  judge_power_data.buffer_seen = 1u;
 		  judge.pkt->shooter_17mm_1_barrel_heat = judge.info->power_heat_data.shooter_17mm_1_barrel_heat;
 		   

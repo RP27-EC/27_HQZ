@@ -514,6 +514,17 @@ extern bullet_data_t  shoot_statistics;
 void Judge_Init(Judge_t* judge);
 void Judge_Heart_Beat(Judge_t* judge);
 void Judge_Data_Update(uint16_t id, uint8_t *rxBuf);
+typedef struct
+{
+    uint32_t buffer_seq; // 缓冲帧序号，循环计数
+    uint32_t buffer_tick; // 缓冲接收时刻，ms
+    uint16_t limit_w; // 裁判功率上限，W
+    uint16_t buffer_j; // 裁判缓冲，J
+    uint8_t judge_online; // 裁判心跳在线，0/1
+    uint8_t valid; // 两类功率帧有效，0/1
+} judge_power_snapshot_t;
+
+uint8_t Judge_GetPowerSnapshot(judge_power_snapshot_t *snapshot);
 uint8_t Judge_GetPowerData(uint16_t *limit_w, uint16_t *buffer_j);
 
 void Shooting_Cmd_Excute_Tick_Calculating(uint8_t flag);

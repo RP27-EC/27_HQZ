@@ -9,6 +9,15 @@
 
 power_limit_state_t power_limit_state;
 
+typedef struct
+{
+    uint32_t buffer_seq; // 已处理帧序号，循环计数
+    uint32_t buffer_tick; // 已处理接收时刻，ms
+    uint8_t online; // 在线预算已初始化，0/1
+} power_buffer_runtime_t;
+
+static power_buffer_runtime_t buffer_runtime;
+
 /* 沿用模板四轮系数 */
 static const power_coeff_t power_coeff[WHEEL_CNT] = {
     {{1.4268163740611692f,  0.0004488821106870444f,  8.492604098272384e-05f,  1.7818822187359053e-06f, 1.3769792187274362e-07f, 3.5482352783775733e-07f}},
@@ -20,8 +29,11 @@ static const power_coeff_t power_coeff[WHEEL_CNT] = {
 void Power_Limit_Init(void)
 {
     power_limit_state_t initial = {0};
+    power_buffer_runtime_t runtime_initial = {0};
     power_limit_state = initial;
+    buffer_runtime = runtime_initial;
     power_limit_state.target_power = CHASSIS_POWER_FALLBACK_W;
+    power_limit_state.base_budget_w = CHASSIS_POWER_FALLBACK_W;
     power_limit_state.scale = 1.0f;
     power_limit_state.fallback_used = 1u;
 }
@@ -82,40 +94,145 @@ static float Power_Limit_Predict(const float torque[WHEEL_CNT],
     return sum;
 }
 
-float Power_Limit_GetTarget(dev_work_state_t judge_status, uint8_t power_data_valid,
-                            uint16_t limit_w, uint16_t buffer_j)
+float Power_Limit_GetTarget(const judge_power_snapshot_t *snapshot, uint8_t active)
 {
     float buffer;
-    float factor;
+    float limit;
+    float integral_max;
+    float guard_limit;
+    float desired;
+    float dt = 0.0f;
+    uint8_t new_frame = 0u;
+    uint8_t first_frame = 0u;
 
-    power_limit_state.judge_online = (judge_status == DEV_ONLINE) ? 1u : 0u;
-    power_limit_state.fallback_used = 1u;
-    power_limit_state.buffer_energy = 0.0f;
-    power_limit_state.target_power = CHASSIS_POWER_FALLBACK_W;
-
-    if ((judge_status != DEV_ONLINE) || (power_data_valid == 0u) ||
-        ((float)limit_w < CHASSIS_POWER_MIN_W) ||
-        ((float)limit_w > CHASSIS_POWER_MAX_W))
+    power_limit_state.judge_online =
+        ((snapshot != NULL) && (snapshot->judge_online != 0u)) ? 1u : 0u;
+    if ((snapshot == NULL) || (snapshot->judge_online == 0u) ||
+        (snapshot->valid == 0u) ||
+        ((float)snapshot->limit_w < CHASSIS_POWER_MIN_W) ||
+        ((float)snapshot->limit_w > CHASSIS_POWER_MAX_W))
     {
+        power_buffer_runtime_t initial = {0};
+        buffer_runtime = initial;
+        power_limit_state.fallback_used = 1u;
+        power_limit_state.buffer_energy = 0.0f;
+        power_limit_state.buffer_error = 0.0f;
+        power_limit_state.buffer_integral_w = 0.0f;
+        power_limit_state.buffer_budget_w = CHASSIS_POWER_FALLBACK_W;
+        power_limit_state.base_budget_w = CHASSIS_POWER_FALLBACK_W;
+        power_limit_state.buffer_guard_active = 0u;
+        power_limit_state.target_power = CHASSIS_POWER_FALLBACK_W;
         return power_limit_state.target_power;
     }
 
-    buffer = constrain((float)buffer_j, 0.0f, CHASSIS_POWER_BUFFER_FULL_J);
-    factor = CHASSIS_POWER_BUFFER_FLOOR +
-             (1.0f - CHASSIS_POWER_BUFFER_FLOOR) * buffer / CHASSIS_POWER_BUFFER_FULL_J;
+    limit = fmaxf(CHASSIS_POWER_MIN_W,
+                  (float)snapshot->limit_w - CHASSIS_POWER_MARGIN_W);
+    power_limit_state.base_budget_w = limit;
+    buffer = constrain((float)snapshot->buffer_j, 0.0f, CHASSIS_POWER_BUFFER_FULL_J);
+    integral_max = limit - CHASSIS_POWER_MIN_W;
     power_limit_state.buffer_energy = buffer;
     power_limit_state.fallback_used = 0u;
-    power_limit_state.target_power = (float)limit_w * CHASSIS_POWER_SAFETY_K * factor;
+
+    if (buffer_runtime.online == 0u)
+    {
+        power_limit_state.target_power = fminf(CHASSIS_POWER_FALLBACK_W, limit);
+        power_limit_state.buffer_integral_w = limit - power_limit_state.target_power;
+        power_limit_state.buffer_error = 0.0f;
+        buffer_runtime.online = 1u;
+        first_frame = 1u;
+        new_frame = 1u;
+    }
+    else if (snapshot->buffer_seq != buffer_runtime.buffer_seq)
+    {
+        uint32_t elapsed = snapshot->buffer_tick - buffer_runtime.buffer_tick;
+        if (elapsed > CHASSIS_POWER_BUFFER_DT_MAX_MS)
+        {
+            elapsed = CHASSIS_POWER_BUFFER_DT_MAX_MS;
+        }
+        dt = (float)elapsed * 0.001f;
+        new_frame = 1u;
+    }
+    power_limit_state.buffer_integral_w =
+        constrain(power_limit_state.buffer_integral_w, 0.0f, integral_max);
+
+    guard_limit = limit;
+    power_limit_state.buffer_guard_active =
+        (buffer < CHASSIS_POWER_BUFFER_GUARD_J) ? 1u : 0u;
+    if (power_limit_state.buffer_guard_active != 0u)
+    {
+        guard_limit = CHASSIS_POWER_MIN_W + integral_max *
+                      buffer / CHASSIS_POWER_BUFFER_GUARD_J;
+    }
+
+    if (new_frame != 0u)
+    {
+        float error = 0.0f;
+        float low = CHASSIS_POWER_BUFFER_TARGET_J - CHASSIS_POWER_BUFFER_BAND_J;
+
+        /* 低缓冲帧不因松杆丢弃 */
+        buffer_runtime.buffer_seq = snapshot->buffer_seq;
+        buffer_runtime.buffer_tick = snapshot->buffer_tick;
+        if (buffer < low)
+        {
+            error = low - buffer;
+        }
+        power_limit_state.buffer_error = error;
+        if (first_frame == 0u)
+        {
+            float delta = CHASSIS_POWER_BUFFER_KI * error * dt;
+            /* 停车满缓冲不释放扣减 */
+            if ((buffer >= CHASSIS_POWER_BUFFER_FULL_J) && (active != 0u))
+            {
+                delta = -CHASSIS_POWER_BUFFER_RELEASE_W_S * dt;
+            }
+            float proposed = constrain(power_limit_state.buffer_integral_w +
+                delta, 0.0f, integral_max);
+            float proposed_budget = limit - CHASSIS_POWER_BUFFER_KP * error - proposed;
+            /* 禁止积分加深预算饱和 */
+            if (!((delta > 0.0f && proposed_budget < CHASSIS_POWER_MIN_W) ||
+                  (delta < 0.0f && proposed_budget > guard_limit)))
+            {
+                power_limit_state.buffer_integral_w = proposed;
+            }
+        }
+    }
+
+    power_limit_state.buffer_budget_w = limit -
+        CHASSIS_POWER_BUFFER_KP * power_limit_state.buffer_error -
+        power_limit_state.buffer_integral_w;
+    desired = constrain(power_limit_state.buffer_budget_w,
+                        CHASSIS_POWER_MIN_W, guard_limit);
+    /* 降额立即，恢复仅随新帧 */
+    if (desired < power_limit_state.target_power)
+    {
+        power_limit_state.target_power = desired;
+    }
+    else if ((active != 0u) && (new_frame != 0u))
+    {
+        power_limit_state.target_power = fminf(desired,
+            power_limit_state.target_power + CHASSIS_POWER_RECOVER_W_S * dt);
+    }
+    power_limit_state.target_power = constrain(power_limit_state.target_power,
+                                              CHASSIS_POWER_MIN_W, guard_limit);
     return power_limit_state.target_power;
 }
 
-void Power_Limit_SetCapFeedback(int16_t raw, uint8_t online)
+void Power_Limit_SetCapFeedback(int16_t power_raw, float voltage_v, float current_a,
+                                uint8_t ability, uint8_t online)
 {
     power_limit_state.cap_online = (online != 0u) ? 1u : 0u;
-    if (online != 0u)
+    if (online == 0u)
     {
-        power_limit_state.cap_power_raw = raw;
+        /* 掉线保留最后值，仅置在线标志，避免曲线出现归零假台阶 */
+        return;
     }
+
+    power_limit_state.cap_power_raw = power_raw;
+    power_limit_state.cap_voltage = voltage_v;
+    power_limit_state.cap_current = current_a;
+    power_limit_state.cap_ability = (ability != 0u) ? 1u : 0u;
+    /* 电容净功率，正=放电，用于判定 0x211[0:1] 字节序与量纲 */
+    power_limit_state.cap_net_power = voltage_v * current_a;
 }
 
 static void Power_Limit_InvalidOutput(float torque_out[WHEEL_CNT])
