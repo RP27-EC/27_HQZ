@@ -92,6 +92,20 @@ static void Launch_Data_Update(Launch_t *launch)
     uint8_t s1; /* S1 档位 */
     uint8_t s2; /* S2 档位 */
 
+#if BOARD_LIFT_ENABLE
+    /* 键鼠与遥控共用升降互锁 */
+    if ((board.tx_pkt->gimbal_target_pkt.is_hole != 0u) ||
+        (board.rx_meg->state_meg.is_down != 2u))
+    {
+        Launch_Reset_Shoot_Arm();
+        Launch_Reset_S2_Filter();
+        launch->state = L_LOCK;
+        launch->mode = SINGLE_SHOT;
+        launch->shoot_level = 0u;
+        return;
+    }
+#endif
+
     if (Chassis_Input_IsKeyboardMode() != 0u)
     {
         Launch_Reset_Shoot_Arm();
@@ -124,19 +138,6 @@ static void Launch_Data_Update(Launch_t *launch)
     launch->shoot_level = 0u;
     return;
     }
-
-#if BOARD_LIFT_ENABLE
-    if ((board.tx_pkt->gimbal_target_pkt.is_hole != 0u) ||
-        (board.rx_meg->state_meg.is_down != 2u))
-    {
-        Launch_Reset_Shoot_Arm();
-        Launch_Reset_S2_Filter();
-        launch->state = L_LOCK;
-        launch->mode = SINGLE_SHOT;
-        launch->shoot_level = 0u;
-        return;
-    }
-#endif
 
     s1 = (uint8_t)rc_dev.info->s1.value; /* 读取 S1 */
     s2 = Launch_Filter_S2((uint8_t)rc_dev.info->s2.value); /* 消抖后的 S2 */

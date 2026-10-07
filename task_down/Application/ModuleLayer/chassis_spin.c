@@ -6,6 +6,7 @@
 #include <stddef.h>
 
 #include "board_protocol.h"
+#include "board_comm_config.h"
 #include "chassis_input.h"
 #include "main.h"
 #include "rc_sensor.h"
@@ -15,6 +16,44 @@ chassis_spin_state_t chassis_spin; /* 小陀螺状态 */
 
 static float spin_ramp_wz; /* 旋转斜坡输出，rad/s */
 static uint8_t spin_last_selected; /* 上拍小陀螺选中状态 */
+
+static uint8_t Chassis_Spin_LiftBlocked(void)
+{
+#if BOARD_LIFT_ENABLE
+    static uint8_t down_seen;
+    static uint8_t release_pending;
+    static uint32_t up_request_tick;
+    uint32_t now = HAL_GetTick();
+
+    if (board.tx_pkt->gimbal_target_pkt.is_hole != 0u)
+    {
+        down_seen = 1u;
+        release_pending = 0u;
+        return 1u;
+    }
+
+    if (down_seen != 0u)
+    {
+        down_seen = 0u;
+        release_pending = 1u;
+        up_request_tick = now;
+    }
+
+    /* 请求转上升后定时解锁 */
+    if (release_pending != 0u)
+    {
+        if ((uint32_t)(now - up_request_tick) < CHASSIS_SPIN_LIFT_RELEASE_DELAY_MS)
+        {
+            return 1u;
+        }
+        release_pending = 0u;
+    }
+
+    return 0u;
+#else
+    return 0u;
+#endif
+}
 
 /* 将遥控通道映射到 [-1, 1]，含死区 */
 
@@ -148,6 +187,11 @@ void Chassis_Spin_UpdateMode(void)
     }
 #endif
 
+    if (Chassis_Spin_LiftBlocked() != 0u)
+    {
+        selected = 0u;
+    }
+
     chassis_spin.selected = selected; /* 本拍选择 */
     chassis_spin.active = selected;   /* 小陀螺生效 */
 }
@@ -160,6 +204,17 @@ void Chassis_Spin_Update(chassis_cmd_t *cmd)
 
     if (cmd == NULL)
     {
+        return;
+    }
+
+    /* 升降互锁清除旋转残留 */
+    if (Chassis_Spin_LiftBlocked() != 0u)
+    {
+        if ((spin_last_selected != 0u) || (cmd->source == CHASSIS_SRC_SPIN))
+        {
+            cmd->wz = 0.0f;
+        }
+        Chassis_Spin_Init();
         return;
     }
 

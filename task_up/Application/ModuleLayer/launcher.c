@@ -5,6 +5,7 @@
 
 #include "communicate.h"
 #include "launcher_config.h"
+#include "lift.h"
 #include "main.h"
 #include "motor.h"
 #include "pid.h"
@@ -954,6 +955,8 @@ void Launcher_Work(void)
 
     fric_on = ((Board_HeartBeat.status == DEV_ONLINE) &&
                (Board_Rx_Info.shoot_pkt.launch_state != 0u) &&
+               (Board_Rx_Info.shoot_pkt.is_hole == 0u) &&
+               (Lift_Get_Report_State() == 2u) &&
                (Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
                (Launcher_FricOnline(SHOOT_FRIC_R) != 0u)) ? 1u : 0u;
     dial_on = ((fric_on != 0u) && (dial_ready != 0u)) ? 1u : 0u;

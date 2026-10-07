@@ -37,6 +37,7 @@
 #define CHASSIS_SPIN_TRANSLATION_YAW_SIGN 1.0f
 #define CHASSIS_SPIN_TRANSLATION_SIGN     1.0f
 #define CHASSIS_SPIN_GIMBAL_TIMEOUT_MS    50u
+#define CHASSIS_SPIN_LIFT_RELEASE_DELAY_MS 500u // 上升请求后禁转时长，ms
 #define CHASSIS_SPIN_TORQUE_LIMIT_NM     4.0f
 
 /* 键鼠机械档：鼠标 X 直接转底盘，等价遥控 S1 下位时 ch0 的转向作用。
