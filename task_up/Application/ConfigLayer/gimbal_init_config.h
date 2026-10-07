@@ -11,7 +11,7 @@
 #define GIMBAL_INIT_YAW_DECEL_RAD_S2          4.0f   // Yaw制动减速度，rad/s^2
 #define GIMBAL_INIT_PITCH_DECEL_RAD_S2        3.0f   // Pitch制动减速度，rad/s^2
 #define GIMBAL_INIT_YAW_RAMP_DEG_PER_MS       0.25f  // Yaw目标斜坡，deg/ms
-#define GIMBAL_INIT_PITCH_RAMP_DEG_PER_MS     0.25f  // Pitch目标斜坡，deg/ms
+#define GIMBAL_INIT_PITCH_RAMP_DEG_PER_MS     0.3f  // Pitch目标斜坡，deg/ms
 #define GIMBAL_INIT_TIMEOUT_MS                6000u  // 归中超时，ms
 #define GIMBAL_INIT_STABLE_MS                 30u    // 到位稳定时长，ms
 #define GIMBAL_INIT_YAW_TOL_DEG               2.0f   // Yaw到位误差，deg

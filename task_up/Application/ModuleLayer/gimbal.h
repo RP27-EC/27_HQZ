@@ -49,7 +49,7 @@
 #define GIMBAL_MEC_YAW_FF_FALL_STEP      0.10f
 #define GIMBAL_MEC_YAW_FF_FILTER_ALPHA   0.05f
 #define GIMBAL_MEC_YAW_FF_MAX_GAIN       0.90f
-#define GIMBAL_MEC_YAW_NEAR_RATE_KP      6.0f
+#define GIMBAL_MEC_YAW_NEAR_RATE_KP      10.0f
 /* 静摩擦补偿只在误差死区外生效。 */
 #define GIMBAL_MEC_YAW_FRICTION_FF_NM    0.3f
 /* 速度反馈低通滤波系数，0~1。 */
@@ -150,10 +150,10 @@
 #define GIMBAL_RATE_HOLD_EXIT_DEG_S        8.0f
 
 /* Yaw 保持环：输入角度误差(deg)，输出目标角速度(deg/s) */
-#define GIMBAL_YAW_HOLD_KP                 10.0f
-#define GIMBAL_YAW_HOLD_KI                 0.003f
+#define GIMBAL_YAW_HOLD_KP                 15.0f
+#define GIMBAL_YAW_HOLD_KI                 0.01f
 #define GIMBAL_YAW_HOLD_INTEGRAL_MAX       5000.0f
-#define GIMBAL_YAW_HOLD_OUT_MAX            150.0f
+#define GIMBAL_YAW_HOLD_OUT_MAX            200.0f
 
 /* Pitch 保持环：输入角度误差(deg)，输出目标角速度(deg/s) */
 #define GIMBAL_PITCH_HOLD_KP               50.0f
