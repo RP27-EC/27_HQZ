@@ -147,6 +147,9 @@ static void Board_Tx_Update(void)
 static HAL_StatusTypeDef Board_Tx_Meg_01(uint8_t *txbuf)
 {
     uint16_t zero = board_float_to_uint(0.0f, -360.0f, 360.0f);
+    uint32_t irq_state;
+    uint32_t sequence;
+    HAL_StatusTypeDef result;
 
     memset(txbuf, 0, 8);
     txbuf[0] = (Board_Tx_Info.state_meg.yaw_motor_state & 0x01) |
@@ -156,14 +159,24 @@ static HAL_StatusTypeDef Board_Tx_Meg_01(uint8_t *txbuf)
                ((Board_Tx_Info.state_meg.l_fric_state & 0x01) << 4) |
                ((Board_Tx_Info.state_meg.dial_motor_state & 0x01) << 5) |
                ((Board_Tx_Info.state_meg.vision_state & 0x01) << 6);
-    txbuf[1] = Board_Tx_Info.state_meg.lift_state;
+    // NOTE: 命令序号与状态同拍取样
+    irq_state = __get_PRIMASK();
+    __disable_irq();
+    sequence = Lift_GetCommandSequence();
+    txbuf[1] = Lift_Get_Report_State();
+    __set_PRIMASK(irq_state);
     txbuf[2] = (uint8_t)(zero >> 8);
     txbuf[3] = (uint8_t)zero;
     txbuf[4] = (uint8_t)(zero >> 8);
     txbuf[5] = (uint8_t)zero;
     txbuf[6] = 0;
 
-    return CAN_SendData(&hcan2, ID_BOARD_TX1, txbuf);
+    result = CAN_SendData(&hcan2, ID_BOARD_TX1, txbuf);
+    if (result == HAL_OK)
+    {
+        Lift_NotifyReportSent(txbuf[1], sequence);
+    }
+    return result;
 }
 
 /* 打包 C2：云台机械角与 IMU 角 */
@@ -190,6 +203,7 @@ static HAL_StatusTypeDef Board_Tx_Meg_02(uint8_t *txbuf)
 void Board_Rx_01(uint8_t *rxbuf)
 {
     Board_Rx_Pkt_01(rxbuf);
+    Lift_NotifyCommand(Board_Rx_Info.shoot_pkt.is_hole);
     Board_HeartBeat.offline_cnt_1 = 0;
 }
 

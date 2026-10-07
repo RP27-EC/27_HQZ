@@ -108,14 +108,14 @@ typedef struct{
 
 /* 上板设备在线状态 */
 typedef struct{
-  uint8_t yaw_motor_state;    /* Yaw 电机在线 */
-	uint8_t pitch_motor_state;  /* Pitch 电机在线 */
-	uint8_t height_motor_state; /* 高度电机在线 */
-	uint8_t r_fric_state;       /* 右摩擦轮在线 */
-	uint8_t l_fric_state;       /* 左摩擦轮在线 */
-	uint8_t dial_motor_state;   /* 拨盘在线 */
-	uint8_t vision_state;       /* 视觉在线 */
-  uint8_t is_down;            /* 下板状态标志 */
+    uint8_t yaw_motor_state;    // Yaw电机在线，0/1
+    uint8_t pitch_motor_state;  // Pitch电机在线，0/1
+    uint8_t height_motor_state; // 升降电机在线，0/1
+    uint8_t r_fric_state;       // 右摩擦轮在线，0/1
+    uint8_t l_fric_state;       // 左摩擦轮在线，0/1
+    uint8_t dial_motor_state;   // 拨盘电机在线，0/1
+    uint8_t vision_state;       // 视觉链路在线，0/1
+    uint8_t is_down;            // 升降状态码，0~3
 }Board_State_Meg_t;
 
 
@@ -132,6 +132,9 @@ typedef struct{
     uint16_t offline_cnt_max; /* 离线阈值，任务周期数 */
     dev_work_state_t status; /* 链路状态，见枚举 */
     uint16_t offline_cnt; /* 离线计数，任务周期数 */
+    volatile uint32_t state_rx_time_ms; // C1接收时刻，ms
+    volatile uint8_t state_data_valid; // C1已接收，0/1
+    volatile uint32_t lift_nonready_count; // 非顶部C1次数，循环计数
     volatile uint32_t gimbal_rx_time_ms; /* C2接收时刻，ms */
     volatile uint8_t gimbal_d1_tx_ok; /* 本组D1入队成功，0/1 */
     volatile uint8_t gimbal_d2_tx_ok; /* 本组D2入队成功，0/1 */

@@ -18,11 +18,13 @@
 /* S2 档位软件消抖，单位：1 ms 控制周期。 */
 #define BOARD_LAUNCH_S2_DEBOUNCE_TICKS  15u
 
-/* Temporarily bypassed vehicle modules during bring-up. */
-#define BOARD_LIFT_ENABLE               1u
-#define BOARD_HOLE_WHEEL_REVERSE        1u
-#define BOARD_HOLE_EXIT_TIMEOUT_MS      5000u
-#define BOARD_HOLE_PITCH_TARGET_RAD     0.0f
+/* 升降与拨轮联动参数。 */
+#define BOARD_LIFT_ENABLE               1u // 升降联动使能，0/1
+#define BOARD_HOLE_WHEEL_REVERSE        1u // 过洞轮向翻转，0/1
+#define BOARD_LIFT_STATE_TIMEOUT_MS       50u // C1许可有效期，ms
+#define BOARD_WHEEL_TRIGGER_RAW          600 // 拨轮触发幅值，1~660
+#define BOARD_WHEEL_CENTER_RAW            10 // 回中幅值，0~599
+#define BOARD_HOLE_PITCH_TARGET_RAD     0.0f // 下降俯仰目标，rad
 
 #define BOARD_CAP_ENABLE                0u
 #define BOARD_JUDGE_ENABLE              0u

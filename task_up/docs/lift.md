@@ -11,7 +11,7 @@ stateDiagram-v2
   [*] --> LIFT_WAIT
   LIFT_WAIT --> LIFT_HOMING_UP: 无有效零点且请求到达/自动找顶延时结束
   LIFT_WAIT --> LIFT_MOVING_UP: 零点有效且无下行请求
-  LIFT_WAIT --> LIFT_MOVING_DOWN: 零点有效且下行请求
+  LIFT_WAIT --> LIFT_ALIGN_DOWN: 零点有效且下行请求
   LIFT_HOMING_UP --> LIFT_RETRACT_DOWN: 找顶条件连续满足
   LIFT_RETRACT_DOWN --> LIFT_READY_UP: 回退到顶端安全点
   LIFT_READY_UP --> LIFT_ALIGN_DOWN: is_hole=1
@@ -36,9 +36,14 @@ stateDiagram-v2
 | --- | ---: | --- |
 | `LIFT_READY_DOWN` | 0 | 下端就绪 |
 | `LIFT_STALL_STOP` | 0 | 堵转停止；不能与下端就绪区分 |
-| `LIFT_WAIT` / `LIFT_READY_UP` | 2 | 等待/上端就绪；需另查零点标志 |
+| `LIFT_READY_UP` | 2 | 电机在线、零点有效、无下降请求且正常控制时顶部就绪 |
+| `LIFT_WAIT` / 顶部许可未满足 | 1 | 初始化等待或未获顶部许可 |
 | HOMING、RETRACT、ALIGN、MOVING | 1 | 找顶、回退、对齐或运动中 |
 | `LIFT_FAULT` | 3 | 故障停机 |
+
+下板拨轮下拨与有效 B 操作切换 `is_hole`。朝后请求下降时，下板取消普通掉头、强制前方机械目标并屏蔽 Yaw 输入；上板保持 `LIFT_ALIGN_DOWN`，实际回正后才允许下行。再次下拨撤销下降、请求上升。首次有效控制帧直接采纳升降目标；`LIFT_WAIT` 恢复到下行前也必须经过对位。
+
+`Lift_IsReadyUp()` 统一提供本地顶部许可：电机在线、零点有效、`LIFT_READY_UP`、非调试模式、无本地或收到的下降请求、板间在线且车辆使能。发射执行端和 C1 状态码2共用此许可。下板在收到新鲜顶部状态且退出等待结束后，按原输入自动恢复发射/小陀螺。每次D1升降目标变化由本地命令序号记录；上板先成功入队一帧非顶部C1才重新开放顶部许可，快速下降/撤销即使发生在同一控制周期也保留这个确认过程。序号与回报状态在短临界区一起取样，旧回报不能确认后来的新命令。
 
 C1 是状态压缩而非完整诊断码。用 `lift.state`、`lift.fault_code`、`lift.home_valid` 和位置反馈分辨状态；`home_valid` 和报告状态不可互相替代。
 

@@ -14,6 +14,7 @@
 #include "chassis_input.h"
 #include "chassis_follow.h"
 #include "chassis_spin.h"
+#include "control_task.h"
 
 
 
@@ -42,6 +43,9 @@ void Board_Init(Board_t* board)
 {
 	board->status->offline_cnt = board->status->offline_cnt_max;
 	board->status->status = DEV_OFFLINE;
+	board->status->state_rx_time_ms = 0u;
+	board->status->state_data_valid = 0u;
+	board->status->lift_nonready_count = 0u;
 	board->status->gimbal_rx_time_ms = 0u;
 	board->status->gimbal_data_valid = 0u;
 	board->status->gimbal_d1_tx_ok = 0u;
@@ -122,8 +126,16 @@ void Board_Tx_Pkt_01(Board_t* board)
 	pkt_01[5] |= (board->tx_pkt->gimbal_target_pkt.is_hole & 0x01) << 3; /* 过洞标志 */
 	
 
-	board->status->gimbal_d1_tx_ok =
-		(CAN_SendData(&hfdcan2, ID_PKT_01, pkt_01) == HAL_OK) ? 1u : 0u;
+    uint32_t irq_state = __get_PRIMASK();
+    // NOTE: 入队与升降记录不可拆分
+    __disable_irq();
+    board->status->gimbal_d1_tx_ok =
+        (CAN_SendData(&hfdcan2, ID_PKT_01, pkt_01) == HAL_OK) ? 1u : 0u;
+    if (board->status->gimbal_d1_tx_ok != 0u)
+    {
+        Board_Control_NotifyLiftTx((pkt_01[5] >> 3) & 0x01u);
+    }
+    __set_PRIMASK(irq_state);
 	
 	
 }
@@ -322,6 +334,11 @@ void Board_Tx_Pkt_05(Board_t* board)
         }
     }
 
+    if ((Chassis_Input_IsUturnActive() != 0u) || (Board_Lift_IsRestricted() != 0u))
+    {
+        yaw_rate = 0.0f;
+    }
+
     yaw_raw = (int16_t)(yaw_rate / BOARD_D5_RATE_LSB_DEG_S);
     board_manual_yaw_rate_deg_s = (valid != 0u) ? yaw_rate : 0.0f;
     pitch_raw = (int16_t)(pitch_rate / BOARD_D5_RATE_LSB_DEG_S);
@@ -342,7 +359,7 @@ void Board_Tx_Pkt_05(Board_t* board)
     if ((CAN_SendData(&hfdcan2, ID_PKT_05, pkt_05) == HAL_OK) &&
         (board->status->gimbal_d1_tx_ok != 0u) &&
         (board->status->gimbal_d2_tx_ok != 0u) && (valid != 0u) &&
-        (ctrl_source == BOARD_D5_CTRL_KEYBOARD) && (yaw_raw == 0) &&
+        (yaw_raw == 0) &&
         ((pkt_01[0] & 0x03u) != 0u))
     {
         Chassis_Input_NotifyUturnTxCycle((pkt_01[0] >> 2) & 0x01u,
@@ -361,6 +378,12 @@ void Board_Rx_Meg_01(Board_t* board,uint8_t* rxbuf)
 	board->rx_meg->state_meg.dial_motor_state= (rxbuf[0] >> 5) & 0x01;
 	board->rx_meg->state_meg.vision_state= (rxbuf[0] >> 6) & 0x01;
 	board->rx_meg->state_meg.is_down= rxbuf[1];
+    if (rxbuf[1] != 2u)
+    {
+        board->status->lift_nonready_count++;
+    }
+	board->status->state_rx_time_ms = HAL_GetTick();
+	board->status->state_data_valid = 1u;
 	
 	uint16_t t1 = ((uint16_t)rxbuf[2] << 8) | rxbuf[3]; /* Yaw 目标原始值 */
   uint16_t t2 = ((uint16_t)rxbuf[4] << 8) | rxbuf[5]; /* Pitch 目标原始值 */

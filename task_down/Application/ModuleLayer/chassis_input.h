@@ -16,19 +16,19 @@ typedef enum
 
 typedef enum
 {
-    CHASSIS_UTURN_IDLE = 0,
-    CHASSIS_UTURN_PREPARE,
-    CHASSIS_UTURN_POSITION,
-    CHASSIS_UTURN_RESTORE,
+    CHASSIS_UTURN_IDLE = 0, // 空闲，状态0
+    CHASSIS_UTURN_PREPARE, // 预发送，状态1
+    CHASSIS_UTURN_POSITION, // 机械定位，状态2
+    CHASSIS_UTURN_RESTORE, // 恢复跟随，状态3
 } chassis_uturn_state_e;
 
 typedef enum
 {
-    CHASSIS_UTURN_NONE = 0,
-    CHASSIS_UTURN_RUNNING,
-    CHASSIS_UTURN_DONE,
-    CHASSIS_UTURN_TIMEOUT,
-    CHASSIS_UTURN_CANCELLED,
+    CHASSIS_UTURN_NONE = 0, // 无动作，结果0
+    CHASSIS_UTURN_RUNNING, // 执行中，结果1
+    CHASSIS_UTURN_DONE, // 定位完成，结果2
+    CHASSIS_UTURN_TIMEOUT, // 定位超时，结果3
+    CHASSIS_UTURN_CANCELLED, // 动作取消，结果4
 } chassis_uturn_result_e;
 
 void Chassis_Input_Init(void);
@@ -39,7 +39,7 @@ chassis_key_mode_e Chassis_Input_GetKeyboardChassisMode(void);
 
 /* 键鼠机械档（X 档）是否生效 */
 uint8_t Chassis_Input_IsKeyboardMechMode(void);
-/* 固定前后方向不采纳超时停偏角 */
+/* 遥控与键鼠共用前后基准 */
 uint8_t Chassis_Input_IsKeyboardYawRear(void);
 float Chassis_Input_GetKeyboardYawTargetRad(void);
 /* 超时仅对齐跟随中心，不改变固定终点 */

@@ -128,6 +128,8 @@ Get-Content "$env:TEMP\Train_code_plus_up.log"
 
 `D1 b5 bit3` 的过洞请求进入上板；电机反馈、`home_valid`、请求边沿和云台对齐共同约束动作。
 
+升降顶部许可由 `Lift_IsReadyUp()` 提供：零点有效、电机在线、正常顶部状态、无下降请求且车辆使能。初始化等待不再回报C1状态码2；上板发射端独立使用此许可，下降/底部/上升期间禁发。遥控和键鼠拨轮操作及自动回正见[下板遥控输入](../task_down/docs/remote.md)。
+
 ```text
 LIFT_WAIT → LIFT_HOMING_UP → LIFT_READY_UP
 LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
@@ -138,7 +140,7 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 | --- | --- |
 | `LIFT_TRAVEL_TURNS=280` | 电机圈数；换算 8192 count/圈，不是机构毫米 |
 | `LIFT_HOME_TIMEOUT_MS=90000`、`LIFT_MOVE_TIMEOUT_MS=90000` | 找顶和单次运动超时 |
-| C1 byte1=0/1/2/3 | 就绪/停止、运动中、上位等待/就绪、故障；值 2 不能代替 `home_valid` |
+| C1 byte1=0/1/2/3 | 下端/堵转停止、等待/运动/未获许可、顶部就绪、故障；2由本地顶部许可生成 |
 | `lift_debug.mode` | 手动调试路径；会绕开正常状态机的一部分动作判定 |
 
 找顶用电流阈值并结合低速或位置停滞确认；确认后建立零点并回退。对齐条件不满足会等待，不等于运动故障。异常边界与调试变量见[升降模块说明](docs/lift.md)。

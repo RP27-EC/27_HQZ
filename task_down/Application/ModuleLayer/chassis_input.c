@@ -26,7 +26,6 @@ static uint8_t last_c_pressed; /* C 键上次状态 */
 /* 超时仅移动跟随中心，固定前后方向独立保存。 */
 static float yaw_reference_rad;
 static volatile uint8_t yaw_rear;
-static uint8_t last_r_pressed;
 static volatile chassis_uturn_state_e uturn_state;
 static chassis_uturn_result_e uturn_result;
 static uint32_t uturn_start_tick;
@@ -206,22 +205,51 @@ static void Chassis_Input_UturnUpdate(const rc_data_t *rc)
     uint32_t now = HAL_GetTick();
     uint32_t feedback_tick = 0u;
     uint32_t handoff_ms = CHASSIS_KEY_UTURN_HANDOFF_PERIODS * BOARD_COMM_D1D2_PERIOD_MS;
-    uint8_t r_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_R) != 0u) ? 1u : 0u;
-    uint8_t r_edge = ((r_pressed != 0u) && (last_r_pressed == 0u)) ? 1u : 0u;
+    uint8_t r_edge = Board_Control_GetTurnEvent();
     uint8_t was_active = Chassis_Input_IsUturnActive();
+    uint8_t keyboard = Chassis_Input_IsKeyboardMode();
+    chassis_key_mode_e mode = CHASSIS_KEY_MODE_SPIN;
+    static uint8_t context_seen = 0u;
+    static uint8_t last_keyboard = 0u;
+    static uint8_t last_s1 = 0u;
+    static uint8_t last_s2 = 0u;
+    static chassis_key_mode_e last_mode = CHASSIS_KEY_MODE_FOLLOW;
     uint8_t data_valid = 0u;
     float yaw_mec = 0.0f;
     float error_rad;
 
-    last_r_pressed = r_pressed;
-    if (Chassis_Input_IsKeyboardMode() == 0u)
+    if (keyboard != 0u)
+    {
+        mode = keyboard_chassis_mode;
+    }
+    else if (rc->s1.value == RC_SW_DOWN)
+    {
+        mode = CHASSIS_KEY_MODE_MECH;
+    }
+    else if ((rc->s1.value == RC_SW_UP) &&
+             ((rc->s2.value == RC_SW_UP) || (rc->s2.value == RC_SW_MID)))
+    {
+        mode = CHASSIS_KEY_MODE_FOLLOW;
+    }
+
+    if ((context_seen != 0u) &&
+        ((keyboard != last_keyboard) || (mode != last_mode) ||
+         (rc->s1.value != last_s1) || (rc->s2.value != last_s2)))
+    {
+        Chassis_Input_CancelUturn();
+    }
+    context_seen = 1u;
+    last_keyboard = keyboard;
+    last_mode = mode;
+    last_s1 = rc->s1.value;
+    last_s2 = rc->s2.value;
+
+    if (Board_Lift_IsRestricted() != 0u)
     {
         Chassis_Input_ResetYawReference();
         return;
     }
-
-    if ((board_hole_request != 0u) || (board_hole_exit_pending != 0u) ||
-        ((rc->s2.value == RC_SW_MID) && (rc->B.value != 0u)))
+    if (Board_Lift_IsReady() == 0u)
     {
         Chassis_Input_CancelUturn();
         return;
@@ -239,15 +267,15 @@ static void Chassis_Input_UturnUpdate(const rc_data_t *rc)
         }
     }
 
-    if (keyboard_chassis_mode != CHASSIS_KEY_MODE_FOLLOW)
+    if (mode != CHASSIS_KEY_MODE_FOLLOW)
     {
         Chassis_Input_CancelUturn();
-        if ((keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH) &&
+        if ((mode == CHASSIS_KEY_MODE_MECH) &&
             (r_edge != 0u) && (was_active == 0u))
         {
             yaw_rear ^= 1u;
         }
-        if (keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH)
+        if (mode == CHASSIS_KEY_MODE_MECH)
         {
             yaw_reference_rad = Chassis_Input_GetKeyboardYawTargetRad();
         }
@@ -427,7 +455,6 @@ void Chassis_Input_Init(void)
     last_c_pressed = 0u;
     yaw_reference_rad = BOARD_MEC_YAW_FRONT_RAD;
     yaw_rear = 0u;
-    last_r_pressed = 0u;
     uturn_state = CHASSIS_UTURN_IDLE;
     uturn_result = CHASSIS_UTURN_NONE;
     uturn_start_tick = 0u;
@@ -469,7 +496,6 @@ void Chassis_Input_Update(void)
         last_x_pressed = 0u;
         last_c_pressed = 0u;
         Chassis_Input_ResetYawReference();
-        last_r_pressed = (rc != NULL && (rc->key_v & KEY_PRESSED_OFFSET_R) != 0u) ? 1u : 0u;
         chassis_input_cmd = cmd;
         return;
     }
@@ -483,8 +509,7 @@ void Chassis_Input_Update(void)
     last_f_pressed = f_pressed;
 
     Chassis_Input_KeyboardModeUpdate(rc);
-    /* R 掉头（机械档翻基准 / 跟随档起掉头动作）必须在驱动之前更新，
-     * 同拍的 WASD 反向才跟得上 */
+    // NOTE: 掉头基准先于平移更新
     Chassis_Input_UturnUpdate(rc);
 
     /* 键鼠模式优先于遥控摇杆 */

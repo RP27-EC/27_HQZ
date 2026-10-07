@@ -7,6 +7,7 @@
 
 #include "board_protocol.h"
 #include "chassis_input.h"
+#include "control_task.h"
 #include "main.h"
 #include "rc_sensor.h"
 #include "rp_math.h"
@@ -84,8 +85,7 @@ static uint8_t Chassis_Follow_DataValid(void)
     return 1u;
 }
 
-/* 当前跟随中心：键鼠掉头后取掉头基准（0 或 180deg），否则用配置中心。
- * 基准由 chassis_input.c 维护，退出键鼠时它会复位回 0。 */
+/* 跟随中心使用掉头基准 */
 static float Chassis_Follow_CenterRad(void)
 {
 #if CHASSIS_FOLLOW_YAW_REFERENCE_ENABLE
@@ -196,6 +196,23 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
 
     if (cmd == NULL)
     {
+        return;
+    }
+
+    if (Board_Lift_IsRestricted() != 0u)
+    {
+        // NOTE: 回正时禁止底盘跟转
+        chassis_follow.active = 0u;
+        chassis_follow.blend = 0.0f;
+        chassis_follow.wz_target = 0.0f;
+        chassis_follow.wz_output = 0.0f;
+        chassis_follow.manual_yaw_rate = 0.0f;
+        chassis_follow.command_ff = 0.0f;
+        chassis_follow.turn_direction = 0;
+        follow_have_last_yaw = 0u;
+        follow_last_selected = 0u;
+        follow_last_wz = 0.0f;
+        cmd->wz = 0.0f;
         return;
     }
 

@@ -106,6 +106,10 @@ void Lift_Init(void);
 void Lift_Work(void);
 uint8_t Lift_IsPitchZeroHoldActive(void);
 uint8_t Lift_MotorOnline(void);
+uint8_t Lift_IsReadyUp(void);
+void Lift_NotifyCommand(uint8_t is_hole);
+uint32_t Lift_GetCommandSequence(void);
+void Lift_NotifyReportSent(uint8_t state, uint32_t sequence);
 uint8_t Lift_Get_Report_State(void);
 
 #endif

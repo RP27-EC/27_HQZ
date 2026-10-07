@@ -12,6 +12,11 @@ void StartControlTask(void const * argument);
 extern volatile uint8_t board_hole_request;
 extern volatile uint8_t board_hole_exit_pending;
 
+uint8_t Board_Control_GetTurnEvent(void);
+void Board_Control_NotifyLiftTx(uint8_t is_hole);
+uint8_t Board_Lift_IsRestricted(void);
+uint8_t Board_Lift_IsReady(void);
+
 
 #endif
 

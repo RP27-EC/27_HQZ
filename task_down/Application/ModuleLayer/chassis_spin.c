@@ -7,6 +7,7 @@
 
 #include "board_protocol.h"
 #include "chassis_input.h"
+#include "control_task.h"
 #include "main.h"
 #include "rc_sensor.h"
 #include "rp_math.h"
@@ -149,7 +150,7 @@ void Chassis_Spin_UpdateMode(void)
 #endif
 
     chassis_spin.selected = selected; /* 本拍选择 */
-    chassis_spin.active = selected;   /* 小陀螺生效 */
+    chassis_spin.active = ((selected != 0u) && (Board_Lift_IsReady() != 0u)) ? 1u : 0u;
 }
 
 /* 根据 ch0 调节旋转速度并接管底盘指令 */
@@ -160,6 +161,21 @@ void Chassis_Spin_Update(chassis_cmd_t *cmd)
 
     if (cmd == NULL)
     {
+        return;
+    }
+
+    if (Board_Lift_IsReady() == 0u)
+    {
+        // NOTE: 互锁清除残留旋转
+        spin_ramp_wz = 0.0f;
+        spin_last_selected = 0u;
+        chassis_spin.target_wz = 0.0f;
+        chassis_spin.output_wz = 0.0f;
+        chassis_spin.active = 0u;
+        if ((chassis_spin.selected != 0u) || (Board_Lift_IsRestricted() != 0u))
+        {
+            cmd->wz = 0.0f;
+        }
         return;
     }
 

@@ -10,6 +10,10 @@ lift_t lift;
 lift_tune_t lift_tune;
 volatile lift_debug_t lift_debug;
 
+static volatile uint32_t lift_command_sequence;
+static volatile uint32_t lift_reported_sequence;
+static uint8_t lift_received_hole;
+
 #define LIFT_FAULT_HOME_TIMEOUT   1u
 #define LIFT_FAULT_MOVE_TIMEOUT   2u
 #define LIFT_FAULT_OVERTRAVEL     3u
@@ -156,11 +160,7 @@ static uint8_t lift_alignment_ok(void)
         return 0u;
     }
 
-    /*
-     * 狗洞升降只允许云台正对前方。下板已经在反向时拒绝过洞请求，这里是
-     * 独立于命令状态的一道兜底：判据直接看实际机械角，前方为 0°。
-     * LIFT_ALIGN_DOWN 没有超时，不满足时只是停在上面等，不会报故障。
-     */
+    // NOTE: 实际回正后才允许下行
     if (lift_abs(lift_wrap_deg(Gimbal.base_info.yaw_mec_angle)) >
         LIFT_FRONT_TOL_DEG)
     {
@@ -617,7 +617,7 @@ void Lift_Work(void)
         lift.cmd_seen = 1u;
         lift.last_is_hole = raw_is_hole;
         lift.pending_valid = 0u;
-        lift.control_is_hole = 0u;
+        lift.control_is_hole = raw_is_hole;
     }
     else if (raw_is_hole != lift.last_is_hole)
     {
@@ -642,7 +642,7 @@ void Lift_Work(void)
     {
         if (lift.home_valid != 0u)
         {
-            lift_enter_state(is_hole ? LIFT_MOVING_DOWN : LIFT_MOVING_UP, now);
+            lift_enter_state(is_hole ? LIFT_ALIGN_DOWN : LIFT_MOVING_UP, now);
         }
         else if ((is_hole != 0u) ||
                  ((now - lift.init_tick) >= LIFT_AUTO_HOME_DELAY_MS))
@@ -789,6 +789,40 @@ uint8_t Lift_MotorOnline(void)
     return (lift.motor->state->status == DEV_ONLINE) ? 1u : 0u;
 }
 
+void Lift_NotifyCommand(uint8_t is_hole)
+{
+    is_hole = (is_hole != 0u) ? 1u : 0u;
+    if (is_hole != lift_received_hole)
+    {
+        lift_received_hole = is_hole;
+        lift_command_sequence++;
+    }
+}
+
+uint32_t Lift_GetCommandSequence(void)
+{
+    return lift_command_sequence;
+}
+
+void Lift_NotifyReportSent(uint8_t state, uint32_t sequence)
+{
+    if (state != 2u)
+    {
+        // NOTE: 旧回报不能确认新命令
+        lift_reported_sequence = sequence;
+    }
+}
+
+uint8_t Lift_IsReadyUp(void)
+{
+    return ((lift_command_sequence == lift_reported_sequence) &&
+            (Lift_MotorOnline() != 0u) && (lift.home_valid != 0u) &&
+            (lift.state == LIFT_READY_UP) && (lift_debug.mode == 0u) &&
+            (lift.control_is_hole == 0u) && (Board_Rx_Info.shoot_pkt.is_hole == 0u) &&
+            (Board_HeartBeat.status == DEV_ONLINE) &&
+            (Board_Rx_Info.state_pkt.car_state != 0u)) ? 1u : 0u;
+}
+
 uint8_t Lift_Get_Report_State(void)
 {
     switch (lift.state)
@@ -797,7 +831,7 @@ uint8_t Lift_Get_Report_State(void)
         return 0u;
 
     case LIFT_READY_UP:
-        return 2u;
+        return (Lift_IsReadyUp() != 0u) ? 2u : 1u;
 
     case LIFT_FAULT:
         return 3u;
@@ -806,7 +840,7 @@ uint8_t Lift_Get_Report_State(void)
         return 0u;
 
     case LIFT_WAIT:
-        return 2u;
+        return 1u;
 
     case LIFT_HOMING_UP:
     case LIFT_RETRACT_DOWN:

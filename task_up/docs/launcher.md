@@ -4,7 +4,7 @@
 
 ## 上下板职责和执行器链路
 
-下板 `task_down/Application/ModuleLayer/launch.c` 读取遥控/键鼠输入，将使能、模式和触发整理进 D1；上板 `task_up/Application/ModuleLayer/launcher.c` 决定摩擦轮、拨盘状态和是否允许供弹。热量快照从裁判系统解析后，经 D3 传给上板。D1 请求不等于实际供弹许可：上板总使能要求板间在线、launch_state 有效且左右摩擦轮电机在线；拨盘动作还要求拨盘在线和热量预算有效。
+下板 `task_down/Application/ModuleLayer/launch.c` 读取遥控/键鼠输入，将使能、模式和触发整理进 D1；上板 `task_up/Application/ModuleLayer/launcher.c` 决定摩擦轮、拨盘状态和是否允许供弹。热量快照从裁判系统解析后，经 D3 传给上板。D1 请求不等于实际供弹许可：上板总使能要求升降顶部就绪、板间在线、launch_state 有效且左右摩擦轮电机在线；拨盘动作还要求拨盘在线和热量预算有效。
 
 执行器：左右 RM3508 摩擦轮、KT4005 拨盘。设备实例、反馈字段和 CAN 映射见[上板电机](motors.md)。
 
@@ -39,6 +39,12 @@ flowchart LR
 当前 `LAUNCHER_DIAL_ENABLE=1`、`LAUNCHER_REPEAT_ENABLE=1`；自动归零 `LAUNCHER_DIAL_AUTO_RESET_ENABLE=0`，堵转检测/退让 `LAUNCHER_DIAL_JAM_ENABLE=0`。因此枚举中存在 SPINUP/INIT/REVERSE/RELOAD 不代表这些分支当前会按预想顺序运行；堵转恢复也未开启。
 
 摩擦轮达速由 `fric_ready` 根据两轮反馈误差和连续时间计算（容差 500 rpm、100 ms），但当前 `Launcher_Work()` 的正常使能路径没有把 `fric_ready` 作为单发供弹的硬门槛。它是观测状态，不能据此推断“达速前拨盘被代码互锁”。这一区别应在实际发射联调前人工确认是否符合预期。
+
+## 升降互锁
+
+- 下板在发射命令写入 D1 前统一检查顶部许可，覆盖键鼠和遥控两条输入分支；未获许可时发送 `L_LOCK`、单发模式和零触发，不清除遥控已有的拨档解锁状态。
+- 上板以 `Lift_IsReadyUp()` 独立检查本地升降状态；下降请求、对位、运动、底部、初始化、故障及调试控制期间关闭总使能，拨盘走安全停机，摩擦轮沿原停止流程降速。
+- 顶部重新就绪后按仍有效的原输入恢复；下板不要求额外松开/重按。现有遥控拨档解锁、热量许可和设备在线条件保持生效。
 
 ## 热量数据如何限制供弹
 

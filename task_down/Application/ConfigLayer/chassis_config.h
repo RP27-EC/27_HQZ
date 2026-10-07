@@ -56,8 +56,8 @@
 /* 底盘跟随云台参数。遥控 S2 上/中拨选择，键鼠按 Z 选择。 */
 #define CHASSIS_FOLLOW_TRANSLATION_ENABLE 1u
 #define CHASSIS_FOLLOW_CENTER_RAD         0.0f
-/* 1 = 跟随中心跟随键鼠掉头基准（0 或 180deg），0 = 永远对齐前方（改动前行为）。 */
-#define CHASSIS_FOLLOW_YAW_REFERENCE_ENABLE 1u
+/* 遥控与键鼠共用掉头基准。 */
+#define CHASSIS_FOLLOW_YAW_REFERENCE_ENABLE 1u // 跟随前后基准使能，0/1
 #define CHASSIS_FOLLOW_YAW_ANGLE_SIGN     1.0f
 #define CHASSIS_FOLLOW_TRANSLATION_SIGN   1.0f
 #define CHASSIS_FOLLOW_WZ_SIGN            -1.0f

@@ -5,6 +5,7 @@
 #include "rc_sensor.h"
 #include "chassis_input.h"
 #include "board_comm_config.h"
+#include "control_task.h"
 
 static void Launch_Init(Launch_t *launch);
 static void Launch_Work(Launch_t *launch);
@@ -117,18 +118,6 @@ static void Launch_Data_Update(Launch_t *launch)
     /* 遥控掉线立即锁定 */
     if (rc_dev.work_state != DEV_ONLINE)
     {
-    Launch_Reset_Shoot_Arm(); /* 掉线清除解锁 */
-    Launch_Reset_S2_Filter();
-    launch->state = L_LOCK;
-    launch->mode = SINGLE_SHOT;
-    launch->shoot_level = 0u;
-    return;
-    }
-
-#if BOARD_LIFT_ENABLE
-    if ((board.tx_pkt->gimbal_target_pkt.is_hole != 0u) ||
-        (board.rx_meg->state_meg.is_down != 2u))
-    {
         Launch_Reset_Shoot_Arm();
         Launch_Reset_S2_Filter();
         launch->state = L_LOCK;
@@ -136,7 +125,6 @@ static void Launch_Data_Update(Launch_t *launch)
         launch->shoot_level = 0u;
         return;
     }
-#endif
 
     s1 = (uint8_t)rc_dev.info->s1.value; /* 读取 S1 */
     s2 = Launch_Filter_S2((uint8_t)rc_dev.info->s2.value); /* 消抖后的 S2 */
@@ -209,5 +197,12 @@ static void Launch_Cmd_Transmit(Launch_t *launch)
 static void Launch_Work(Launch_t *launch)
 {
     Launch_Data_Update(launch);
+    if (Board_Lift_IsReady() == 0u)
+    {
+        // NOTE: 保留输入供顶部恢复
+        launch->state = L_LOCK;
+        launch->mode = SINGLE_SHOT;
+        launch->shoot_level = 0u;
+    }
     Launch_Cmd_Transmit(launch);
 }
