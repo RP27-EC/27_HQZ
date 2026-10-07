@@ -7,6 +7,7 @@
 
 #include "board_protocol.h"
 #include "chassis_input.h"
+#include "chassis_spin.h"
 #include "main.h"
 #include "rc_sensor.h"
 #include "rp_math.h"
@@ -21,6 +22,180 @@ static float follow_last_yaw_rot; /* 上拍云台实际相对角（含符号）�
 static float follow_last_wz; /* 上拍输出角速度 */
 static uint8_t follow_have_last_yaw; /* 1 = 已有上拍 Yaw */
 static uint8_t follow_last_selected; /* 上拍是否选中跟随 */
+static uint8_t follow_last_spin_selected;
+static uint8_t follow_stable_timing;
+static uint32_t follow_stable_since_ms;
+static uint32_t follow_recovery_since_ms;
+
+static void Chassis_Follow_ResetRecovery(void)
+{
+    chassis_follow.correction_stopped = 0u;
+    chassis_follow.disturbance_armed = 0u;
+    chassis_follow.recovery_pending = 0u;
+    chassis_follow.recovery_active = 0u;
+    chassis_follow.recovery_ff = 0.0f;
+    follow_stable_timing = 0u;
+    follow_stable_since_ms = 0u;
+    follow_recovery_since_ms = 0u;
+}
+
+/* 原始输入覆盖缓存延迟。 */
+static uint8_t Chassis_Follow_ManualTurn(const chassis_cmd_t *cmd)
+{
+    if ((fabsf(cmd->wz) > CHASSIS_FOLLOW_RECOVERY_INPUT_EPS) ||
+        (fabsf(board_manual_yaw_rate_deg_s) > CHASSIS_FOLLOW_RECOVERY_RATE_EPS))
+    {
+        return 1u;
+    }
+    if ((rc_dev.work_state != DEV_ONLINE) || (rc_dev.info == NULL))
+    {
+        return 1u;
+    }
+#if CHASSIS_KEYBOARD_INPUT_ENABLE
+    if (Chassis_Input_IsKeyboardMode() != 0u)
+    {
+        return (rc_dev.info->mouse_x != 0) ? 1u : 0u;
+    }
+#endif
+    return (fabsf((float)rc_dev.info->ch0) > BOARD_RC_AXIS_DEADBAND) ? 1u : 0u;
+}
+
+static uint8_t Chassis_Follow_WheelsStopped(void)
+{
+    uint8_t i;
+
+    if ((chassis_ctrl.state.enabled == 0u) || (chassis_ctrl.state.all_online == 0u) ||
+        (chassis_ctrl.state.fault != 0u))
+    {
+        return 0u;
+    }
+    for (i = 0u; i < WHEEL_CNT; ++i)
+    {
+        if (!(fabsf(chassis_ctrl.state.wheel_speed[i]) < CHASSIS_STOP_SPEED_BAND))
+        {
+            return 0u;
+        }
+    }
+    return 1u;
+}
+
+/* 停稳后才允许受扰辅助。 */
+static void Chassis_Follow_UpdateRecovery(const chassis_cmd_t *cmd,
+                                         float abs_error_deg,
+                                         uint8_t manual_turn,
+                                         uint8_t spin_tail,
+                                         uint8_t center_changed)
+{
+    uint32_t now = HAL_GetTick();
+    uint8_t translating = ((fabsf(cmd->vx) > CHASSIS_FOLLOW_RECOVERY_INPUT_EPS) ||
+                           (fabsf(cmd->vy) > CHASSIS_FOLLOW_RECOVERY_INPUT_EPS)) ? 1u : 0u;
+
+    if ((manual_turn != 0u) || (Chassis_Input_IsUturnActive() != 0u) ||
+        (center_changed != 0u) || (cmd->valid == 0u) ||
+        (chassis_ctrl.state.enabled == 0u) || (chassis_ctrl.state.all_online == 0u) ||
+        (chassis_ctrl.state.fault != 0u))
+    {
+        Chassis_Follow_ResetRecovery();
+        return;
+    }
+
+    if (abs_error_deg <= CHASSIS_FOLLOW_DEADBAND_DEG)
+    {
+        chassis_follow.correction_stopped = 1u;
+        chassis_follow.recovery_active = 0u;
+    }
+    else if (abs_error_deg >= CHASSIS_FOLLOW_RESUME_DEG)
+    {
+        chassis_follow.correction_stopped = 0u;
+    }
+
+    if (chassis_follow.recovery_pending != 0u)
+    {
+        if ((now - follow_recovery_since_ms) >= CHASSIS_FOLLOW_RECOVERY_TIMEOUT_MS)
+        {
+            chassis_follow.recovery_pending = 0u;
+        }
+        else if (spin_tail == 0u)
+        {
+            chassis_follow.recovery_pending = 0u;
+            if (chassis_follow.correction_stopped == 0u)
+            {
+                chassis_follow.recovery_active = 1u;
+                follow_recovery_since_ms = now;
+            }
+        }
+    }
+
+    if (spin_tail != 0u)
+    {
+        chassis_follow.disturbance_armed = 0u;
+        follow_stable_timing = 0u;
+        return;
+    }
+
+    if (translating != 0u)
+    {
+        chassis_follow.disturbance_armed = 0u;
+        follow_stable_timing = 0u;
+    }
+    else if ((chassis_follow.disturbance_armed != 0u) &&
+             (abs_error_deg >= CHASSIS_FOLLOW_RECOVERY_TRIGGER_DEG))
+    {
+        chassis_follow.disturbance_armed = 0u;
+        chassis_follow.recovery_active = 1u;
+        follow_recovery_since_ms = now;
+        follow_stable_timing = 0u;
+    }
+    else if ((abs_error_deg <= CHASSIS_FOLLOW_DEADBAND_DEG) &&
+             (chassis_follow.correction_stopped != 0u) &&
+             (fabsf(chassis_follow.wz_output) <= CHASSIS_FOLLOW_RECOVERY_INPUT_EPS) &&
+             (Chassis_Follow_WheelsStopped() != 0u))
+    {
+        if (follow_stable_timing == 0u)
+        {
+            follow_stable_timing = 1u;
+            follow_stable_since_ms = now;
+        }
+        else if ((now - follow_stable_since_ms) >= CHASSIS_FOLLOW_RECOVERY_STABLE_MS)
+        {
+            chassis_follow.disturbance_armed = 1u;
+        }
+    }
+    else
+    {
+        follow_stable_timing = 0u;
+    }
+
+    if ((chassis_follow.recovery_active != 0u) &&
+        ((now - follow_recovery_since_ms) >= CHASSIS_FOLLOW_RECOVERY_TIMEOUT_MS))
+    {
+        chassis_follow.recovery_active = 0u;
+    }
+}
+
+/* 前馈在停止门限处收零。 */
+static float Chassis_Follow_RecoveryFeedforward(float yaw_error)
+{
+    float abs_error_deg = fabsf(yaw_error) / CHASSIS_FOLLOW_DEG_TO_RAD;
+    float fade;
+    float direction;
+
+    if ((chassis_follow.recovery_active == 0u) ||
+        (chassis_follow.correction_stopped != 0u) ||
+        (abs_error_deg <= CHASSIS_FOLLOW_DEADBAND_DEG))
+    {
+        return 0.0f;
+    }
+
+    fade = constrain(
+        (abs_error_deg - CHASSIS_FOLLOW_DEADBAND_DEG) /
+        (CHASSIS_FOLLOW_RECOVERY_FULL_DEG - CHASSIS_FOLLOW_DEADBAND_DEG),
+        0.0f, 1.0f);
+    direction = (chassis_follow.turn_direction != 0) ?
+                (float)chassis_follow.turn_direction : ((yaw_error >= 0.0f) ? 1.0f : -1.0f);
+
+    return direction * CHASSIS_FOLLOW_RECOVERY_FF_WZ * fade;
+}
 
 /* 将角度归一化到 [-pi, pi] */
 static float Chassis_Follow_WrapPi(float angle)
@@ -116,6 +291,8 @@ void Chassis_Follow_Init(void)
     follow_last_wz = 0.0f;
     follow_have_last_yaw = 0u;
     follow_last_selected = 0u;
+    follow_last_spin_selected = 0u;
+    Chassis_Follow_ResetRecovery();
 }
 
 /* S1 上拨且 S2 上/中拨选择跟随，云台失联则锁存故障 */
@@ -183,25 +360,37 @@ void Chassis_Follow_UpdateMode(void)
 void Chassis_Follow_Update(chassis_cmd_t *cmd)
 {
     float yaw_mec;   /* 云台机械角，rad */
-    float yaw_rot;   /* 平移旋转角，rad（实际相对角，含掉头基准） */
+    float yaw_rot;   /* 实际相对角，rad */
     float yaw_error; /* 相对跟随中心误差，rad */
     float center_rad;/* 本拍跟随中心，rad */
-    float auto_wz;   /* 自动跟随输出，rad/s */
-    float target_wz; /* 融合目标，rad/s */
-    float manual_wz; /* 退出时保留的手动旋转 */
+    float auto_wz;   /* 自动跟随转速控制量 */
+    float target_wz; /* 融合后转速控制量 */
+    float manual_wz; /* 手动转速控制量 */
     float vx_gimbal; /* 旋转前纵向速度 */
     float vy_gimbal; /* 旋转前横向速度 */
     float feedback_wz; /* 角度反馈项 */
     float command_ff; /* 指令前馈项 */
+    uint8_t manual_turn;
+    uint8_t spin_tail;
+    uint8_t center_changed;
 
     if (cmd == NULL)
     {
         return;
     }
 
+    if ((follow_last_spin_selected != 0u) && (chassis_spin.selected == 0u) &&
+        (chassis_follow.selected != 0u))
+    {
+        chassis_follow.recovery_pending = 1u;
+        follow_recovery_since_ms = HAL_GetTick();
+    }
+    follow_last_spin_selected = chassis_spin.selected;
+
     /* 退出跟随：融合回手动旋转，避免角速度跳变 */
     if (chassis_follow.selected == 0u)
     {
+        Chassis_Follow_ResetRecovery();
         if (follow_last_selected != 0u)
         {
             manual_wz = cmd->wz; /* 保留手动旋转 */
@@ -234,6 +423,7 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     /* 云台失联或故障时直接封锁底盘输出 */
     if ((chassis_follow.active == 0u) || (chassis_follow.fault_latched != 0u))
     {
+        Chassis_Follow_ResetRecovery();
         cmd->vx = 0.0f;
         cmd->vy = 0.0f;
         cmd->wz = 0.0f;
@@ -250,6 +440,9 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
 
     yaw_mec = board.rx_meg->gimbal_meg.yaw_mec; /* 云台相对角 */
     center_rad = Chassis_Follow_CenterRad(); /* 跟随中心 = 掉头基准 */
+    center_changed = ((follow_have_last_yaw != 0u) &&
+                      (fabsf(Chassis_Follow_WrapPi(center_rad - chassis_follow.center_rad)) >
+                       CHASSIS_FOLLOW_BLEND_EPS)) ? 1u : 0u;
     yaw_rot = Chassis_Follow_WrapPi( /* 平移旋转角：始终按实际相对角 */
         CHASSIS_FOLLOW_YAW_ANGLE_SIGN * yaw_mec);
     yaw_error = Chassis_Follow_WrapPi( /* 跟随误差 = 旋转角 - 中心 */
@@ -262,15 +455,14 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
 
     if (follow_have_last_yaw != 0u)
     {
-        /* 判据用【实际相对角】而不是误差：误差里含软件基准，基准在掉头/退出键鼠
-         * 时本来就会瞬间改变，拿它判跳变会把正常操作误判成反馈故障，
-         * 一旦锁存 fault_latched 底盘会被 Chassis_Control_Stop() 停到 S1 离开上位。 */
+        /* 跳变判据排除软件基准。 */
         float yaw_delta = Chassis_Follow_WrapPi(yaw_rot - follow_last_yaw_rot);
 
         /* 跳变过大说明反馈异常，锁存故障 */
         if (fabsf(yaw_delta) >
               (CHASSIS_FOLLOW_YAW_JUMP_LIMIT_DEG * CHASSIS_FOLLOW_DEG_TO_RAD))
         {
+            Chassis_Follow_ResetRecovery();
             chassis_follow.fault_latched = 1u;
             chassis_follow.active = 0u;
             chassis_follow.data_valid = 0u;
@@ -293,8 +485,7 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     chassis_follow.yaw_error_rad = yaw_error;
     chassis_follow.center_rad = center_rad;
 
-    /* 跟随误差存在时，平移按云台方向旋转。
-     * 用实际相对角（不是误差角）：掉头后中心是 180deg 时，W 依旧朝视线方向开。 */
+    /* 平移始终使用实际相对角。 */
 #if CHASSIS_FOLLOW_TRANSLATION_ENABLE
     vx_gimbal = cmd->vx;
     vy_gimbal = cmd->vy;
@@ -309,7 +500,19 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     (void)yaw_rot;
 #endif
 
-      if (fabsf(yaw_error) < (CHASSIS_FOLLOW_DEADBAND_DEG * CHASSIS_FOLLOW_DEG_TO_RAD))
+    manual_turn = Chassis_Follow_ManualTurn(cmd);
+    spin_tail = (fabsf(chassis_spin.output_wz) > CHASSIS_FOLLOW_RECOVERY_SPIN_EPS) ? 1u : 0u;
+    Chassis_Follow_UpdateRecovery(cmd, fabsf(yaw_error) / CHASSIS_FOLLOW_DEG_TO_RAD,
+                                 manual_turn, spin_tail, center_changed);
+
+    /* 旋转减速期间不积累跟随斜坡。 */
+    if (spin_tail != 0u)
+    {
+        follow_last_wz = chassis_spin.output_wz;
+    }
+
+    if ((chassis_follow.correction_stopped != 0u) ||
+        (fabsf(yaw_error) <= (CHASSIS_FOLLOW_DEADBAND_DEG * CHASSIS_FOLLOW_DEG_TO_RAD)))
     {
         chassis_follow.turn_direction = 0;
         feedback_wz = 0.0f;
@@ -347,7 +550,9 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
 
     }
 
-    auto_wz = CHASSIS_FOLLOW_WZ_SIGN * (feedback_wz + command_ff);
+    chassis_follow.recovery_ff = Chassis_Follow_RecoveryFeedforward(yaw_error);
+    auto_wz = CHASSIS_FOLLOW_WZ_SIGN *
+              (feedback_wz + command_ff + chassis_follow.recovery_ff);
     auto_wz = constrain(auto_wz,
                         -CHASSIS_FOLLOW_MAX_WZ,
                         CHASSIS_FOLLOW_MAX_WZ);

@@ -38,7 +38,16 @@ flowchart LR
 
 ## 跟随闭环与故障锁存
 
-跟随控制将 C2 机械 Yaw 映射到 [-π,π]，与 `CHASSIS_FOLLOW_CENTER_RAD` 比较形成角误差。误差进入 0.5 deg 死区后自动旋转项置零；超过 150 deg 锁定转向方向，回到 20 deg 内解锁，避免跨角度边界时方向翻转。输出按 Kp、角速度指令前馈合成，限到 ±40，再用 10 ms 混合时间和每拍 0.4 变化量接入。
+跟随控制将 C2 机械 Yaw 映射到 [-π,π]，与当前前/后跟随中心比较形成角误差。无主动转向时，误差进入 5°内停止角度纠偏，停住后达到 6°才重新纠偏；5～6°保持原状态。主动转向时保留指令前馈，角度纠偏也使用 5°死区。超过 150°锁定转向方向，回到 20°内解锁。正常增益 20，输出限到 ±40 控制量，再用 10 ms 融合时间和每拍 0.4 控制量斜坡接入。
+
+辅助回正前馈仅由以下条件触发：
+
+- 无转向和平移输入、误差在 5°内、旋转输出归零、四轮反馈均低于既有 `CHASSIS_STOP_SPEED_BAND=1.0 rad/s`，持续 200 ms 后设置 `chassis_follow.disturbance_armed=1`；随后误差达到 6°，触发一次辅助前馈。该判据识别停稳后的偏离，不能区分外力来源。
+- 小陀螺直接切跟随，设置 `recovery_pending=1`；等待小陀螺输出斜坡归零后，未处于停止纠偏状态时启用辅助前馈。等待交接最多 4000 ms。
+- 比例增益固定为原值 20。辅助前馈沿纠偏方向叠加，幅值为 `CHASSIS_FOLLOW_RECOVERY_FF_WZ=10.0` 转速控制量；7°及以上全幅，5～7°线性收小，5°以内为零。进入 5°内或辅助持续 4000 ms 后结束，超时后恢复普通跟随；总输出仍限于原 ±40 控制量。
+- 主动摇杆/鼠标/QE 转向、R 掉头、跟随中心变化、退出跟随、无效指令或底盘故障会清除辅助前馈与停稳确认。普通转向松手后的追赶不直接触发辅助前馈。力矩、限功和反馈保护沿用原路径。
+
+Keil Watch 可观察 `chassis_follow.correction_stopped`、`disturbance_armed`、`recovery_pending`、`recovery_active`（均为 0/1）以及 `yaw_error_rad`、`recovery_ff`（符号在最终旋转方向映射前，单位为转速控制量）。这些状态只描述软件控制阶段，效果需人工编译、烧录与台架验证。
 
 C2 超过 50 ms、角度非法或相邻反馈跳变超过 30 deg 会使跟随故障锁存，并将命令标无效/清零。必须退出对应档位后才清除锁存条件；不要通过增大跳变门限或绕开 `cmd.valid` 来维持运动。
 
@@ -85,7 +94,11 @@ C2 超过 50 ms、角度非法或相邻反馈跳变超过 30 deg 会使跟随故
 | `task_down/Application/ConfigLayer/chassis_config.h` | `CHASSIS_MAX_VX/VY/WZ` | 25 / 25 / 20，控制域量，不可直接标作 m/s 或 rad/s |
 | 同上 | `CHASSIS_SPEED_KP/KI/KD` | 0.8 / 0 / 0，速度环纯 P；输出为 N·m |
 | 同上 | 测试/跟随/小陀螺扭矩上限 | 2 / 4 / 4 N·m |
-| 同上 | `CHASSIS_FOLLOW_KP`, `MAX_WZ`, `DEADBAND_DEG` | 20、40、0.5 deg |
+| 同上 | `CHASSIS_FOLLOW_KP`, `MAX_WZ` | 20 控制量/rad、40 控制量 |
+| 同上 | `CHASSIS_FOLLOW_DEADBAND_DEG`, `RESUME_DEG` | 停止 5°、恢复 6° |
+| 同上 | `CHASSIS_FOLLOW_RECOVERY_FF_WZ` | 回正前馈幅值 10.0 转速控制量 |
+| 同上 | `CHASSIS_FOLLOW_RECOVERY_TRIGGER_DEG`, `RECOVERY_FULL_DEG` | 受扰触发 6°、前馈全幅 7° |
+| 同上 | `CHASSIS_FOLLOW_RECOVERY_STABLE_MS`, `RECOVERY_TIMEOUT_MS` | 停稳 200 ms、等待交接/辅助各 4000 ms |
 | 同上 | `CHASSIS_FOLLOW_TIMEOUT_MS`, `YAW_JUMP_LIMIT_DEG` | 50 ms、30 deg |
 | 同上 | `CHASSIS_SPIN_BASE_WZ`, `SPIN_STEP` | 25、0.1 控制域单位/周期 |
 | `power_limit_config.h` | fallback/margin/guard/target | 45 W / 5 W / 45 J / 59 J |

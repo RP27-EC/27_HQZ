@@ -166,7 +166,7 @@ UV4 -b 01_LED\MDK-ARM\My_C.uvprojx -t My_C -o "$env:TEMP\Train_code_plus_led.log
 | 云台归中/输出 | `task_up/Application/ConfigLayer/gimbal_init_config.h`、`task_up/Application/ModuleLayer/gimbal.h` | 归中目标 0 deg；超时 6000 ms；稳定 30 ms；Yaw/Pitch 力矩上限 6 N·m；Pitch 重力补偿开关 |
 | 升降 | `task_up/Application/ConfigLayer/lift_config.h` | 行程 280 电机圈；找顶速度 2865 rpm；找顶/运动超时 90000 ms；位置量以 count 计，不等于机械 mm |
 | 发射/热量 | `task_up/Application/ConfigLayer/launcher_config.h` | 摩擦轮目标 1500 rpm；热量余量 20；恢复余量 30；最大 15 发/s；D3 超时 100 ms |
-| 底盘 | `task_down/Application/ConfigLayer/chassis_config.h` | `CHASSIS_MAX_VX/VY/WZ=25/25/20`（工程控制域，不直接等同 SI 单位）；跟随死区 0.5 deg；反馈超时 50 ms；轮力矩受模式限幅 |
+| 底盘 | `task_down/Application/ConfigLayer/chassis_config.h` | `CHASSIS_MAX_VX/VY/WZ=25/25/20`（工程控制域，不直接等同 SI 单位）；跟随停止5°/恢复6°；停稳受扰和小陀螺退出可叠加辅助回正前馈，见[控制说明](task_down/docs/chassis.md#跟随闭环与故障锁存)；反馈超时50 ms；轮力矩受模式限幅 |
 | 底盘功率 | `task_down/Application/ConfigLayer/power_limit_config.h` | 开关 1；裁判快照无效时回退预算 45 W；在线余量 5 W；超电反馈当前只记录，不参与该闭环 |
 | 板间帧 | `task_down/Application/ConfigLayer/board_comm_config.h`、`task_up/Application/ConfigLayer/board_remote_config.h` | D1/D2 1 ms、D3 10 ms、D4 关闭、D5 开启；上板每类反馈最短 5 ms |
 
