@@ -439,10 +439,6 @@ void imu_update(imu_dev_t *imu_sen)
 
 #if IMU_USE_EKF == 1
 
-	// TODO: ins 替换为 imu
-
-	// 采样时间
-
 	imu_tick_now = micros();
 
 	if(imu_tick_last == 0) // 第一次特殊处理

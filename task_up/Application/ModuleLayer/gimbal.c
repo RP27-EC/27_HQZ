@@ -12,27 +12,11 @@ gimbal_t Gimbal;
 
 gimbal_tune_t gimbal_tune;
 
-//重力补偿现在为一个比较小的数值，还未调试数值
-//重力补偿较小目前pitch可能会下垂，pitch使用速控
-//feedback后续会在遥控器声明，作为速度前馈加入内环目标值，目前还未加入
-//阻力补偿先留着，后续需要再加,下方有伪代码
-//机械中值也需确定，把车拨到中间，看编码器反馈作为中值
-//自瞄暂时不需要，先删去
-//有一些地方加了斜坡，如果响应过慢可以适当调整数值
-//小陀螺模式的角速度前馈还没写，后续与底盘部分一起写
-//键鼠和遥控器部分复制的源码，还未调试，这部分并非正确
-//陀螺仪部分需去拓展下协议，目前协议还是照搬的源码，目前我完成的部分是云台，其它的后续再说
-//键鼠的映射记得改，目前也是简单配置而已，数值也未标定
-//死区和滤波的值也未标定，需测试再标定
-
-
-//绝对值函数，工具函数
 static float gimbal_abs(float value)
 {
     return (value >= 0.0f) ? value : -value;
 }
 
-//限幅函数，工具函数
 static float gimbal_clamp(float value, float min_value, float max_value)
 {
     if (value > max_value) return max_value;
@@ -40,7 +24,6 @@ static float gimbal_clamp(float value, float min_value, float max_value)
     return value;
 }
 
-//  步进斜坡平滑函数
 static float gimbal_ramp(float current, float target, float step)
 {
     if (step <= 0.0f) return target;
@@ -51,7 +34,6 @@ static float gimbal_ramp(float current, float target, float step)
 
 static float gimbal_wrap_deg(float angle);
 
-//就近转位的实现
 static float gimbal_ramp_wrapped(float current, float target, float step)
 {
     float error;
@@ -71,7 +53,7 @@ static float gimbal_ramp_wrapped(float current, float target, float step)
     return gimbal_wrap_deg(current + error);
 }
 
-/*归一化到 [-180, 180) */
+/* 角度归一化到 [-180, 180) */
 static float gimbal_wrap_deg(float angle)
 {
     while (angle >= 180.0f) angle -= 360.0f;
@@ -99,7 +81,7 @@ static float gimbal_axis_to_rate(int16_t axis, float max_rate)
 }
 #endif
 
-/* 更新遥控器和键鼠角速度前馈 不太清楚要用遥控还是键鼠，索性两个一起写了 */
+/* 合并遥控器和键鼠输入，生成统一角速度指令 */
 static void gimbal_manual_input_update(gimbal_t *gimbal)
 {
     float yaw_rate = 0.0f;
@@ -773,43 +755,8 @@ static float gimbal_init_gravity_compensation(gimbal_t *gimbal)
             gimbal->init_info.pitch_gravity_b_nm);
 }
 
-//伪代码，yaw的阻力补偿
-/*
- * Yaw axis drag compensation placeholder.
- *
- * tau = Coulomb * sign(omega) + Viscous * omega
- *
- * static float gimbal_yaw_drag_compensation(gimbal_t *gimbal)
- * {
- *     const float coulomb_nm = 0.05f;
- *     const float viscous = 0.001f;
- *     const float deadband_deg_s = 20.0f;
- *     const float output_limit_nm = 0.2f;
- *     float omega = gimbal->base_info.yaw_imu_speed;
- *     float torque;
- *
- *     if (gimbal_abs(omega) < deadband_deg_s)
- *     {
- *         return 0.0f;
- *     }
- *
- *     torque = (omega > 0.0f ? coulomb_nm : -coulomb_nm) + viscous * omega;
- *
- *     return gimbal_clamp(torque, -output_limit_nm, output_limit_nm);
- * }
- */
-
-/*  PID 计算  力矩合成输出 */
-/*
- * 机械位置环输出限速：按剩余角计算制动速度上限（这就是"接近目标提前减速"）。
- *
- * 单位必须和两个调用方对齐：max_rate_deg_s 和返回值都是 deg/s。
- * 原来把 error_deg 乘了 DEG_TO_RAD 得到 s_rad，却忘了返回时乘回 RAD_TO_DEG，
- * 于是这个上限被压低 57.3 倍：10 deg 误差时只允许 2.09 "deg/s"，而调用方
- * 外环输出的量纲是真正的 deg/s（kp × 角度误差）。两边差 57 倍之后，
- * 位置环输出被钳成一个几乎不变的极小值，"提前减速"这条曲线实际上没生效，
- * 后面共享的速度内环又是饱和开关，整套制动整形等于没有。
- */
+/* 机械 Yaw 制动限速。 */
+/* 按剩余角计算制动速度，统一转换回 deg/s。 */
 static float gimbal_mec_speed_limit(float error_deg,
                                      float max_rate_deg_s,
                                      float decel_rad_s2)
@@ -1178,18 +1125,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
                         gimbal_tune.mec_hold_rate_out_max_nm);
 }
 
-/*
- * 机械模式 Yaw 掉头段：误差大时用归中那套位置->速度串级。
- *
- * 数值取自 gimbal_turn_config.h，是归中参数的一份独立拷贝；串级函数也是
- * 归中用的 gimbal_init_pid_calc。归中串级的外环输出不被制动曲线钳成 rad/s，
- * 量纲是 deg 级，所以同样的 PID 数值能在满误差时打满力矩；机械 yaw 自己的
- * 串级外环被钳到 <=2.09 rad/s，把归中的数值直接搬过去只会让掉头更软，
- * 所以必须连串级一起复用。
- *
- * 调用方对这个返回值直通写入，不再叠加输出力矩斜率限幅 —— 归中的 G_INIT
- * 分支就是直通的，那道限幅只属于保持段。
- */
+/* 旧掉头路径仅供对照，参数默认沿用归中配置。 */
 static float gimbal_mec_yaw_turn_calc(gimbal_t *gimbal)
 {
     return gimbal_clamp(
@@ -1266,19 +1202,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          GIMBAL_RAD_TO_DEG,
                          0) + gravity;
 
-        /*
-         * Yaw 不再按误差大小切换"掉头段 / 保持段"，只用统一定位律。
-         *
-         * WARNING: 这里关掉切换不是为了省事，是因为切换本身制造了不可调的超调：
-         *   被扰动后的回正误差是 1~10 deg，全部 > 原来的阈值 1.0 deg，
-         *   所以一直走 gimbal_mec_yaw_turn_calc；而那条路的内环
-         *   err = 目标(deg/s) - yaw_mec_speed(rad/s) 量纲差 57.3 倍，
-         *   输出恒饱和在 ±6 N·m，位置环没有任何调节手段，减速距离固定，
-         *   超调量固定且与参数无关。
-         *   实测 mec_yaw_hold_kd_nm_per_rad_s 从 0.5 加到 1000 毫无变化，
-         *   正是因为保持段那条路一次都没被执行过。
-         * 置 1 可恢复旧的两段切换用于对照。
-         */
+        /* 旧两段切换默认关闭，机械 Yaw 统一使用定位律。 */
 #if GIMBAL_MEC_YAW_USE_TURN_PATH
         if (gimbal_abs(gimbal_wrap_deg(gimbal->pid_info.yaw_target -
                                        gimbal->base_info.yaw_mec_angle)) >

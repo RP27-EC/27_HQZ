@@ -9,9 +9,7 @@
 #include "power_limit.h"
 #include "supercap.h"
 
-//目前纯P的控制器，目前响应速度还可以，跟随得也还行
-//但可以牺牲了一些操作手感，后续再看看
-//后续可以根据情况去加速度规划器和前馈力控方案等
+/* 四轮速度环当前使用纯 P 控制。 */
 
 chassis_control_t chassis_ctrl; /* 底盘控制对象 */
 

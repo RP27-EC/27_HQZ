@@ -1,407 +1,213 @@
-# 03_yuntai_up 上板云台控制工程
+# 上板固件（STM32F407IGHx）
 
-底层通信部分和接口部分的代码暂时移植的源码，可能还有些乱码，这些我将在后续修改
+[返回项目总览](../README.md) · [下板工程](../task_down/Readme.md) · [上板模块目录](docs/README.md)
 
-接下来一些是我在编写代码时候的一些idea吧，后面的是对工程的整体描述
+上板采集 BMI088 姿态数据，执行云台/升降/发射控制并通过 CAN2 接收下板命令、回传状态。Keil Target 为 `My_C`。
 
-pid.c中，我一开始想用的是是否可以使用前馈+弱kp的pid模式，类似于底盘部分的思想，在和ai的探讨后还是否定了这一想法
+## 架构与启动
 
-但是前馈这个思想还是可以耦合到其它的一些部分
+```mermaid
+flowchart LR
+  BOOT[main: HAL/时钟/外设] --> DEVICE[DEVICE_Init]
+  DEVICE --> DRIVER[DRIVER_Init/CAN滤波]
+  DRIVER --> RTOS[FreeRTOS 调度器]
+  SPI[BMI088 SPI1] --> IMU[采样/姿态解算]
+  IMU --> CTL[1 ms ControlTask]
+  CAN2[CAN2 接收 D1/D2/D3/D5] --> CTL
+  CTL --> MODULE[Module_Work: Gimbal/Lift]
+  CTL --> LAUNCH[Launcher_Work]
+  MODULE --> DM[DM Yaw/Pitch]
+  MODULE --> LIFT[RM2006 升降]
+  LAUNCH --> FRIC[RM3508 摩擦轮 + KT4005 拨盘]
+  CTL --> FEEDBACK[C1/C2 反馈]
+  FEEDBACK --> CAN2
+```
 
-pitch轴需要重力前馈
+`main()` 的顺序是 HAL/系统时钟 → GPIO/DMA/SPI/TIM/CAN/UART/ADC → `DEVICE_Init()` → `DRIVER_Init()` → CAN 滤波 → 创建 RTOS 任务。HAL 初始化错误进入 `Error_Handler()`：关闭中断后停在循环，不提供统一错误码灯态。
 
-学过刚体的都知道，旋转的时候会有转矩，那云台在高速转动的时候是否也可以给一个前馈去补偿呢    好吧，这个加速度前馈好像有一些复杂，后续我再去研究研究，不过似乎这部分一般这里也不会去用
-
-这些我应该会写在gimbal.c
-
-feedforward我会放在gimbal里
-
-那么pid.c这里就只是简单的单环和串级双环吗，其实还会有一些小算法
-
-像微分先行，kd加个低通滤波，抗积分饱和等等，这些就比较简单了，代码中也会有体现
-gimbal.c中，我是有参考了步兵的源码进行代码的编写
-
-云台的解算
-
-我们知道，机械即编码器的话，它的角速度反馈是很差的
-
-于是乎我们选择陀螺仪去进行角速度的反馈
-
-init初始化的时候需要对齐二者
-
-初始使用机械，后面使用陀螺仪
-
-所以这部分还是沿用了源码的部分
-在操作的时候，如果我们仅通过给目标值，然后通过误差pid计算的话，就会导致有延迟，手感会很差，那我们是否可以将遥控器的期望值直接赋给内环的输出呢，这部分暂时我先写在云台部分，后续再遥控器部分代码再补齐
-
-但是不太对，遥控器输出的和内环输出的量纲不统一，应该是加到内环的目标值才对
-速控还是位控呢，速控的话手感更好，位控的话可能不够丝滑
-
-但是速控没办法控制对应位置
-
-当然，自瞄用位控，操作手操作用速控呢，
-
-或者两者结合起来，角速度输入加较小角度修正
-
-最终我应该先采用速控操作手，位控是自瞄
-
-不过后面想了一下我觉得我会把pitch轴换成位控，yaw轴速控，速控也不会是纯速控，会加点放飘移
-
-pitch轴本身能转的角度就很小，直接位控可能会更稳
-还有一个云台自稳对吧
-
-小陀螺模式的时候，云台需要输出一个和底盘反向的角速度
-
-通常这个角速度需要加前馈，纯PID响应太慢了
-
-似乎还需要有些预测，因为这是有小延迟的，需再加个小数值
-
-这样才能小陀螺走直线的时候也不会偏对吧
-
-那这部分就等底盘之后再去进行一个编写，暂时先留着
-重力补偿的话参数等再测试，用的比较简单的重力补偿
-阻力补偿的话一般就给yaw轴，但也有可能不需要，我再看看实际效果再考虑加不加吧
-然后在写代码的过程像一些容易跳变的地方，比如像归中等可能会突然有很大误差的时候，我会使用斜坡函数，逐渐步进，防止突然跳变，从而造成受伤等的情况
-
-还有一些地方可以加斜坡
-然后其实已经差不多了吧，大概就先这样了
-
-
-
-
-
-
-
-## 1. 工程简介
-
-本工程是 RoboMaster 步兵上板云台控制程序，基于 STM32F407 和 FreeRTOS，实现两轴云台的控制与上下板通信。
-
-当前主要功能：
-
-- BMI088 IMU 姿态解算与角速度反馈
-- Pitch、Yaw 两个 DM4310 MIT 模式电机控制
-- 机械模式、陀螺位置模式、纯速控模式
-- 遥控器和鼠标角速度输入
-- 上下板 CAN 通信
-- 8 路串级 PID
-- 模式切换目标斜坡
-- 初始化检测与超时保护
-- Pitch 重力补偿接口
-- Yaw 阻力补偿伪代码预留
-- DM、板间通信、IMU 在线检测与安全归零
-
-当前工程已完成 Keil 编译验证，但机械中值、PID、重力补偿和手动控制手感仍需实车标定。
-
-## 2. 硬件与接口
-
-### 主控
-
-- MCU：STM32F407
-- RTOS：FreeRTOS
-- IMU：BMI088
-- IMU 解算：当前配置使用 EKF
-- 遥控器接口：USART3，DBUS，100000 baud，偶校验
-
-### 电机分配
-
-| 轴 | CAN | 控制 ID | 反馈 ID |
-|---|---:|---:|---:|
-| Pitch | CAN1 | `0x01` | `0x11` |
-| Yaw | CAN2 | `0x02` | `0x12` |
-
-Yaw 与下板通信共用 CAN2。
-
-## 3. 目录结构
+## 工程结构与源码入口
 
 ```text
-03_yuntai_me/
-├─ Application/
-│  ├─ AlgorithmLayer/     PID、数学、滤波、功率限制等算法
-│  ├─ ConfigLayer/       运行配置、驱动配置、设备配置
-│  ├─ DeviceLayer/       IMU、遥控器、电机对象等设备层
-│  ├─ DriverLayer/       CAN、UART、SPI、TIM 等底层驱动
-│  ├─ HardwareLayer/     DM、RM、HT、KT 等电机硬件驱动
-│  ├─ ModuleLayer/       云台模块
-│  │  ├─ gimbal.c
-│  │  ├─ gimbal.h
-│  │  ├─ module.c
-│  │  └─ module.h
-│  ├─ ProtocolLayer/     CAN 协议与上下板通信
-│  │  ├─ can_protocol.c
-│  │  ├─ can_protocol.h
-│  │  ├─ communicate.c
-│  │  └─ communicate.h
-│  ├─ TaskLayer/         控制、监控、LED、社区任务
-│  └─ UserLayer/         用户初始化代码
-├─ Core/                 STM32CubeMX 生成代码
-├─ Drivers/              HAL、CMSIS、DSP
-├─ Middlewares/          FreeRTOS、USB Device
-├─ MDK-ARM/              Keil 工程
-├─ USB_DEVICE/           USB CDC 配置
-├─ My_C.ioc              CubeMX 配置文件
-└─ Readme.md
+task_up/Application/
+├─ ConfigLayer/      云台归中、升降、发射、板间开关
+├─ DeviceLayer/      IMU、电机实例和传感器状态
+├─ DriverLayer/      CAN/SPI/定时器等外设接口
+├─ HardwareLayer/    DM、RM、KT 电机与 BMI088 驱动
+├─ ModuleLayer/      Gimbal、Lift、Launcher 控制逻辑
+├─ ProtocolLayer/    D/C 板间 CAN 解包、打包和分发
+└─ TaskLayer/        ControlTask、MonitorTask、LedTask
 ```
 
-## 4. 云台控制结构
+| 源码入口 | 向下调用 | 主要副作用 |
+| --- | --- | --- |
+| `Core/Src/main.c` | HAL、时钟、GPIO/SPI/CAN/UART、设备与驱动初始化 | 外设初始化失败停在 `Error_Handler()` |
+| `TaskLayer/control_task.c` | IMU 更新、`Module_Work()`、电机发送、`Launcher_Work()`、C1/C2 | 1 ms 主闭环 |
+| `ModuleLayer/gimbal.c` | 目标选择、模式 FSM、两轴控制 | DM Yaw/Pitch 力矩 |
+| `ModuleLayer/lift.c` | 找顶、行程控制、对齐互锁 | RM2006 力矩和 C1 状态 |
+| `ModuleLayer/launcher.c` | 热量预算、发射状态、拨盘/摩擦轮 | RM3508/KT4005 输出 |
+| `ProtocolLayer/communicate.c` | D1–D5 解包、C1/C2 打包、心跳 | CAN2 上下板数据交换 |
 
-### 4.1 数据流
+### 数据结构与跨模块接口
+
+| 接口对象 | 生产方 → 消费方 | 检查重点 |
+| --- | --- | --- |
+| `Board_Rx_Info` | CAN2 解码 → 云台/升降/发射 | 分别检查 D1 状态、D2 目标、D3 热量和 D5 手动指令；D4 当前不提供有效血量消费 |
+| `imu_dev` / `imu_data` | BMI088、坐标变换与 EKF → 云台 | 区分 `work_state` 在线/错误标志与 `base_info` 最近计算值 |
+| `Gimbal` | 目标仲裁 + IMU/DM 反馈 → DM 电机命令、C2 | 检查运行模式、位置/速率目标、反馈和最终 torque 限幅 |
+| `lift` | D1 `is_hole` + 云台姿态 + RM2006 → C1 byte 1 | `home_valid`、Pitch hold 和 fault code 不能由压缩后的 C1 单字段替代 |
+| `launcher` / `launcher_heat` | D1/D5许可 + D3 + 电机反馈 → RM/KT | 区分总体 enable、热量 ready、摩擦轮 ready 和拨盘动作条件 |
+
+不要把协议里的“请求位”、模块的“允许位”、最终电机“非零输出”合并看成同一状态。沿每个接口同时查看源数据、valid/status 和更新时间，才能确定停在哪一层。
+
+上板模块页： [云台](docs/gimbal.md) · [升降](docs/lift.md) · [发射](docs/launcher.md) · [IMU](docs/imu.md) · [电机](docs/motors.md) · [通信](docs/board-link.md)。
+
+| 任务 | 优先级 / 栈 | 调度与工作 |
+| --- | --- | --- |
+| ControlTask | `osPriorityRealtime` / 1024 | `osDelayUntil(..., 1)`；IMU → `Module_Work()` → DM 力矩发送 → 发射 → `Send_To_Down_Board()` |
+| MonitorTask | `osPriorityRealtime` / 512 | 每轮 `osDelay(1)`；IMU、DM/RM/KT 电机、遥控及板间心跳 |
+| LedTask | `osPriorityAboveNormal` / 256 | 启动绿灯常亮 500 ms，再持续绿灯闪烁 |
+| CommunityTask | `#if 0` | 不创建 |
+
+FreeRTOS tick 为 1 kHz；ControlTask 的控制步长目标 1 ms。MonitorTask 的 `osDelay(1)` 周期还包含任务运行时间。TIM2 为 HAL 1 ms timebase；TIM4 回调当前为空，不应当作控制调度器。
+
+## 硬件与构建
+
+| 项目 | 实际配置 |
+| --- | --- |
+| MCU / Keil Target | STM32F407IGHx / `My_C` |
+| 编译器 | ARM Compiler 5.06 update 7（build 960）；工程定义 `__CC_ARM` |
+| Device Pack | `Keil.STM32F4xx_DFP.2.17.1` |
+| HAL / RTOS | 仓库内 STM32F4 HAL v1.8.3、FreeRTOS V10.3.1 |
+| IMU | BMI088；SPI1 采集，经中间层和 EKF 姿态解算 |
+| 电机实例 | DM Yaw/Pitch、RM2006 升降、RM3508 左右摩擦轮、KT4005 拨盘 |
+| CAN | CAN1：PD0/PD1；CAN2：PB5/PB6；板间走 CAN2 |
+| 上板本地遥控 | `GIMBAL_LOCAL_RC_ENABLE=0`；当前手动输入由下板转发 |
+| GCC/Clang / 子模块 | 工程未配置 GCC/Clang；根目录无 `.gitmodules` |
+
+在仓库根目录构建：
+
+```powershell
+UV4 -b task_up\MDK-ARM\My_C.uvprojx -t My_C -o "$env:TEMP\Train_code_plus_up.log"
+Get-Content "$env:TEMP\Train_code_plus_up.log"
+```
+
+构建产物目录为 `task_up/MDK-ARM/My_C/`。项目未设置可复制使用的命令行 Flash Driver 参数；人工下载前需在 µVision 中选择实际 SWD 探针并配置匹配的 Flash Algorithm。下载或硬件行为未由构建结果验证。
+
+## 核心控制实现
+
+### 上板控制命令的来源
+
+| 输入帧 | 字段进入点 | 对控制的影响 |
+| --- | --- | --- |
+| D1 | `Board_Rx_Info.state_pkt` / `shoot_pkt` | `car_state` 决定使能；`gimbal_mode` 选择 `G_MEC`/`G_RATE`；`is_hole` 请求升降；launch/mode/trigger 请求发射 |
+| D2 | `Board_Rx_Info.gimbal_target_pkt` | 保存 IMU/机械角目标，具体字段是否消费取决于当前云台模式 |
+| D3 | `Board_Rx_Info.heat_pkt` | 热量上限、当前热量、冷却率、数据来源序号和有效 flags |
+| D5 | `Board_Rx_Info.remote_cmd_pkt` | 下板遥控角速度或鼠标增量；按来源/命令类型区分解释 |
+
+`GIMBAL_LOCAL_RC_ENABLE=0`，上板本地遥控代码关闭。调云台输入时应从下板 UART5/DBUS、D5 组帧、FDCAN2/CAN2 接收、上板 `remote_cmd_pkt` 逐跳确认。
+
+### IMU 到电机的闭环
+
+`BMI088driver` 读取陀螺仪/加速度计 → `BMI088Middleware` 组织采样 → `bmi_EKF` 解算姿态 → `imu_sensor` 更新设备状态和角度/角速度 → `gimbal.c` 计算两轴控制量 → DM 电机输出力矩。姿态有效性需同时检查 `imu_dev.work_state`，不能只读角度字段。
+
+`G_MEC` 中 Yaw 以机械位置误差生成速率目标，再经速度反馈/力矩控制；Pitch 与 `G_RATE` 共用角速度通路，包含操作输入与松杆保持。`G_INIT` 使用位置外环和速度内环，并受 6 N·m 力矩限幅。Pitch 重力补偿按 `K*cos(angle-middle)+bias` 计算；当前归中配置 `K=1.1 N·m`、偏置 `0 N·m`、开关为 1。
+
+### 云台状态转移
+
+| 状态 | 进入条件/行为 |
+| --- | --- |
+| `G_SLEEP` | 板间心跳非在线或 `car_state==0`；输出力矩清零并清除归中标志 |
+| `G_INIT` | 安全条件恢复但尚未初始化；按机械角目标归中 |
+| `G_MEC` | 初始化后 D1 `gimbal_mode==0`；机械模式 |
+| `G_RATE` | 初始化后 D1 `gimbal_mode!=0`；手动角速度/自稳速控路径 |
+| `G_GYRO` / `G_AUTO` | 枚举与控制分支存在，但当前 `gimbal_select_mode()` 不会选择 |
+
+归中需位置误差、速度和目标稳定 30 ms；6000 ms 超时也会置 `init_flag=1`，所以该标志不证明实体已归中。模式切换时清 PID、目标对齐当前角并首帧置零力矩，避免切换瞬间沿用旧目标。
+
+### 升降 FSM
+
+`D1 b5 bit3` 的过洞请求进入上板；电机反馈、`home_valid`、请求边沿和云台对齐共同约束动作。
 
 ```text
-下板 CAN 目标
-    -> Board_Rx_Info
-    -> 云台模式仲裁
-    -> 角度环或角速度环
-    -> 重力、阻力、力矩前馈
-    -> DM4310 力矩输出
+LIFT_WAIT → LIFT_HOMING_UP → LIFT_READY_UP
+LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
+请求撤销时向上移动；超时/过流/越程可进入 LIFT_FAULT，堵转停止可进入 LIFT_STALL_STOP
 ```
 
-### 4.2 PID 前馈分层
-
-PID 只负责反馈计算：
-
-```text
-PID输出 = P + I + D
-```
-
-角速度前馈加在内环目标：
-
-```text
-内环目标角速度 =
-    角度外环输出
-    + 操作手角速度前馈
-```
-
-力矩前馈加在最终输出：
-
-```text
-最终力矩 =
-    内环PID输出
-    + 重力补偿
-    + 阻力补偿
-    + 其他力矩前馈
-```
-
-## 5. 云台模式
-
-```c
-typedef enum
-{
-    G_SLEEP = 0,
-    G_INIT,
-    G_MEC,
-    G_GYRO,
-    G_RATE,
-} gimbal_mode_e;
-```
-
-| 模式 | 说明 |
-|---|---|
-| `G_SLEEP` | 休眠，输出零力矩 |
-| `G_INIT` | 上电归中，使用机械目标和目标斜坡 |
-| `G_MEC` | 机械模式，电机角度外环 + 电机速度内环 |
-| `G_GYRO` | 陀螺位置模式，IMU 角度外环 + IMU 角速度内环 |
-| `G_RATE` | 纯速控模式，操作手目标角速度 + IMU 角速度内环 |
-
-当前下板只发送 1 位云台模式：
-
-```text
-gimbal_mode == 0  -> G_MEC
-gimbal_mode != 0  -> G_RATE
-```
-
-`G_GYRO` 当前保留，但暂时不通过现有板间模式字选择。
-
-## 6. 初始化流程
-
-1. 等待下板、IMU 和两个 DM4310 在线。
-2. 进入 `G_INIT`。
-3. Yaw 使用最短路径斜坡归中。
-4. Pitch 使用斜坡归中并受机械限位保护。
-5. 判断实际角度、机械速度和斜坡目标是否到位。
-6. 连续稳定时间达到 30 ms 后初始化完成。
-7. 超过 6 s 仍未完成时执行超时退出。
-
-初始化相关参数位于 `gimbal.c` 的 `Gimbal_Init()` 和 `gimbal.h`。
-
-## 7. 手动控制
-
-### 遥控器模式
-
-`car_state == 1` 时：
-
-- 遥控器右侧左右通道控制 Yaw 目标角速度
-- 遥控器右侧上下通道控制 Pitch 目标角速度
-- 下板 `S1` 下位时进入真正的 `G_MEC`：编码器机械角位置环，Yaw 固定前方零位，Pitch 由右摇杆上下调节
-- `S1` 下位允许底盘平移和 `ch0` 转向；`S1` 上/中保留 `G_RATE` 速控保持手感
-
-### 键鼠模式
-
-`car_state == 2` 时：
-
-- 鼠标 X 控制 Yaw 目标角速度
-- 鼠标 Y 控制 Pitch 目标角速度
-
-当前没有把普通键盘按键映射为云台角速度。
-
-## 8. 上下板通信
-
-### 上板接收
-
-| CAN ID | 内容 |
-|---|---|
-| `0xD1` | 整车状态、云台模式、发射状态 |
-| `0xD2` | Yaw/Pitch 机械目标与 IMU 目标 |
-| `0xD3` | 裁判系统数据，当前只接收不处理 |
-| `0xD4` | 血量数据，当前只接收不处理 |
-
-### 上板发送
-
-| CAN ID | 内容 |
-|---|---|
-| `0xC1` | 电机状态、升降状态、视觉占位 |
-| `0xC2` | Yaw/Pitch 机械角与 IMU 角反馈 |
-
-板间心跳由 `monitor_task.c` 每 1 ms 更新。连续收不到 `0xD1` 或 `0xD2` 后，板间状态变为离线。
-
-## 9. 任务分配
-
-| 任务 | 周期 | 主要工作 |
-|---|---:|---|
-| `ControlTask` | 1 ms | IMU 更新、遥控输入处理、云台计算、DM 输出、板间发送 |
-| `MonitorTask` | 1 ms | IMU 心跳、DM 心跳、遥控器心跳、板间心跳 |
-| `CommunityTask` | 1 ms | 预留 |
-| `LedTask` | 1 ms | LED 状态 |
-
-## 10. 关键参数
-
-关键参数位于 `Application/ModuleLayer/gimbal.h`。
-
-### 机械参数
-
-```c
-#define GIMBAL_YAW_MIDDLE_DEG      0.0f
-#define GIMBAL_PITCH_MIDDLE_DEG    0.0f
-#define GIMBAL_PITCH_MIN_DEG       (-7.5f)
-#define GIMBAL_PITCH_MAX_DEG       30.0f
-#define GIMBAL_TORQUE_LIMIT        3.0f
-```
-
-需实车重新确认。
-
-### 手动控制
-
-```c
-#define GIMBAL_RC_AXIS_MAX                 660.0f
-#define GIMBAL_RC_AXIS_DEADBAND            20.0f
-#define GIMBAL_MANUAL_YAW_RATE_DEG_S       300.0f
-#define GIMBAL_MANUAL_PITCH_RATE_DEG_S     150.0f
-#define GIMBAL_MOUSE_YAW_RATE_GAIN         1.0f
-#define GIMBAL_MOUSE_PITCH_RATE_GAIN       1.0f
-#define GIMBAL_RATE_CMD_RAMP_DEG_S_PER_MS  6.0f
-```
-
-### 速控保持
-
-```c
-#define GIMBAL_RATE_HOLD_KP                0.5f
-#define GIMBAL_RATE_HOLD_DEADBAND_DEG_S    5.0f
-```
-
-设置过大会导致速控手感变慢，设置过小则 Yaw 漂移和 Pitch 下垂会更明显。
-
-### 重力补偿
-
-```c
-#define GIMBAL_GRAVITY_ENABLE      1
-#define GIMBAL_GRAVITY_K_NM        0.3f
-#define GIMBAL_GRAVITY_B_NM        0.0f
-#define GIMBAL_GRAVITY_MIDDLE_DEG  0.0f
-```
-
-需实车确认方向和机械中值。
-
-## 11. PID 初始参数
-
-| 控制环 | Kp | Ki | Kd | 输出限幅 |
-|---|---:|---:|---:|---:|
-| Yaw 陀螺外环 | 20.0 | 0.05 | 0.0 | 500 |
-| Yaw 陀螺内环 | 0.04 | 0.0 | 0.0 | 10 |
-| Pitch 陀螺外环 | 56.0 | 0.0 | 0.0 | 100 |
-| Pitch 陀螺内环 | 0.03 | 0.0 | 0.0 | 10 |
-| Yaw 机械外环 | 20.0 | 0.0 | 0.0 | 500 |
-| Yaw 机械内环 | 0.1 | 0.0 | 0.0 | 10 |
-| Pitch 机械外环 | 1.6 | 0.0 | 0.0 | 10 |
-| Pitch 机械内环 | 1.2 | 0.0 | 0.0 | 10 |
-
-这些值为初始值，直接搬过来的，需重测。
-
-## 12. 安全保护
-
-以下任一条件不满足时，云台双轴力矩归零：
-
-- 板间通信离线
-- 整车进入休眠
-- Yaw 或 Pitch 电机离线
-- IMU 未在线或未完成校准
-- 机械角、IMU 角或目标值非法
-- 模式切换第一帧
-
-DM 脱落或离线后，必须重新满足接管条件才会恢复输出。
-
-## 13. 编译方法
-
-使用 Keil MDK 打开：
-
-```text
-03_yuntai_me/MDK-ARM/My_C.uvprojx
-```
-
-Target：
-
-```text
-My_C
-```
-
-当前编译结果：
-
-- 增量编译：`0 errors / 0 warnings`
-- 全量 rebuild：`0 errors`
-- 全量警告主要来自原有 RM、HT 和 CMSIS DSP 文件
-
-构建产物：
-
-```text
-03_yuntai_me/MDK-ARM/My_C/My_C.axf
-03_yuntai_me/MDK-ARM/My_C/My_C.hex
-```
-
-## 14. 上板调试顺序
-
-1. 不接电机，确认程序启动、IMU、CAN 和板间心跳正常。
-2. 确认 Pitch/Yaw 电机方向、反馈 ID 和角速度符号。
-3. 确认机械中值、Pitch 上下限和电机零位。
-4. 小力矩测试正方向，建议先将总力矩限制降到 `0.3~0.5 N·m`。
-5. 调 Yaw/Pitch 速度内环。
-6. 调机械角度外环。
-7. 调陀螺位置外环。
-8. 标定重力补偿方向、幅值和机械中值。
-9. 最后开启阻力补偿或较大力矩限制。
-
-## 15. 当前待办
-
-- 标定 `GIMBAL_YAW_MIDDLE_DEG`
-- 标定 `GIMBAL_PITCH_MIDDLE_DEG`
-- 确认 Pitch 机械限位
-- 确认重力补偿方向和幅值
-- 调整遥控器与鼠标输入增益
-- 调整速控模式角度保持系数
-- 根据实车效果决定是否启用 Yaw 阻力补偿
-- 如需显式选择 `G_GYRO`，扩展下板模式协议
-
-## 16. 注意事项
-
-- 第一次上电不要让云台带弹丸或带负载运行。
-- 未确认电机方向前必须关闭两轴输出。
-- 重力补偿启用后，首次测试应使用低力矩上限。
-- 修改机械中值后，需要重新检查初始化、限位和重力补偿。
-- 模式切换和离线恢复必须保证不会突发大力矩。
+| 参数/状态 | 实际含义 |
+| --- | --- |
+| `LIFT_TRAVEL_TURNS=280` | 电机圈数；换算 8192 count/圈，不是机构毫米 |
+| `LIFT_HOME_TIMEOUT_MS=90000`、`LIFT_MOVE_TIMEOUT_MS=90000` | 找顶和单次运动超时 |
+| C1 byte1=0/1/2/3 | 就绪/停止、运动中、上位等待/就绪、故障；值 2 不能代替 `home_valid` |
+| `lift_debug.mode` | 手动调试路径；会绕开正常状态机的一部分动作判定 |
+
+找顶用电流阈值并结合低速或位置停滞确认；确认后建立零点并回退。对齐条件不满足会等待，不等于运动故障。异常边界与调试变量见[升降模块说明](docs/lift.md)。
+
+### 发射与热量 FSM
+
+发射请求由下板 D1 发来；上板总使能要求板间在线、许可有效且左右摩擦轮在线，拨盘动作另受拨盘在线和热量预算约束。当前正常使能路径从休眠直接进入 `LAUNCHER_READY`；`SPINUP/INIT` 代码分支未由常规路径选择。`fric_ready` 会计算达速状态，但当前不是拨盘供弹硬互锁。`LAUNCHER_DIAL_ENABLE=1`、`LAUNCHER_REPEAT_ENABLE=1`，但拨盘自动归零与堵转退让默认关闭（`LAUNCHER_DIAL_AUTO_RESET_ENABLE=0`、`LAUNCHER_DIAL_JAM_ENABLE=0`）。
+
+热量训练模式关闭；有效 D3 到来前不建立发射预算。当前参数：每发估算热量 10、余量 20、连发恢复余量 30、最大射频 15 发/s、D3 超时 100 ms。失去许可进入减速/制动过程，不保证瞬时停转。完整状态与门槛见[发射模块说明](docs/launcher.md)。
+
+## Protocol & Tuning
+
+板间公共布局由[根 README](../README.md#protocol--tuning)维护；物理接口为下板 FDCAN2 ↔ 上板 CAN2，8 字节经典 CAN。此板接收 D1–D5，发送 C1/C2。
+
+| 报文 | 本板处理 |
+| --- | --- |
+| D1 | 整车使能、云台模式、发射许可/触发、过洞请求 |
+| D2 | 4 个线性映射角目标；实际使用取决于云台模式 |
+| D3 | 热量上限/枪管热量/冷却率/源序号/有效 flags |
+| D4 | 当前只更新心跳，不处理血量字段 |
+| D5 | 角速度、输入来源和鼠标键；角速度量化步长 0.1 deg/s/LSB |
+| C1 | 电机在线位和升降状态；剩余字段当前发 0 |
+| C2 | Yaw/Pitch 机械角 rad 与 IMU 角 deg |
+
+每类 C1/C2 最短发送间隔 `BOARD_FEEDBACK_PERIOD_MS=5`，以交替方式竞争 CAN 邮箱。入队成功不表示下板已收到；观察 `board_feedback_debug.c1/c2_ok_count`、失败/延后计数及下板心跳。
+
+| 参数文件 | 常用参数（当前默认值） |
+| --- | --- |
+| `Application/ConfigLayer/gimbal_init_config.h` | 归中目标 0 deg；Yaw/Pitch 归中力矩上限 6 N·m；速度规划开关 0；超时 6000 ms |
+| `Application/ModuleLayer/gimbal.h` | 控制步长 0.001 s；Yaw 静摩擦前馈 0.3 N·m；Pitch/Yaw 最终默认力矩限幅 6 N·m；重力补偿开关 1 |
+| `Application/ConfigLayer/lift_config.h` | 行程 280 圈；找顶 2865 rpm；回退 5 圈；行程超时 90000 ms |
+| `Application/ConfigLayer/launcher_config.h` | 摩擦轮目标 1500 rpm；射频上限 15 发/s；热量余量 20；D3 超时 100 ms |
+| `Application/ConfigLayer/board_remote_config.h` | 下板遥控输入开；本地遥控关闭；C1/C2 各自最短间隔 5 ms |
+
+### 控制状态判读
+
+| 现象 | 需要同时成立的条件 | 不能单独作为依据 |
+| --- | --- | --- |
+| 云台正在运行 | D1 心跳/`car_state` 有效、DM 与 IMU 在线、模式分支有有效目标 | `init_flag=1`（初始化超时分支也会置位） |
+| D5 手动输入生效 | valid=1，source/type 与格式匹配，数据年龄可接受 | D5 心跳计数增长 |
+| 升降下行开始 | 零点已建立、D1 请求有效、Yaw/速度对齐满足配置窗口、升降电机在线 | `is_hole=1` |
+| 发射许可成立 | 板间/发射状态有效、左右摩擦轮在线、D3 热量源有效、拨盘条件满足 | 摩擦轮反馈接近目标（当前 `fric_ready` 不作为单发硬门槛） |
+
+详细条件、状态枚举和变量路径分别见[云台](docs/gimbal.md)、[升降](docs/lift.md)和[发射](docs/launcher.md)。建议先按模块页定位软件状态，再核实驱动器反馈和机械状态。
+
+## Troubleshooting & Safety
+
+### Keil Watch 观察入口
+
+| 变量/结构 | 用途 |
+| --- | --- |
+| `Gimbal.gimbal_mode` / `Gimbal.init_info.init_flag` | 当前模式及归中状态；init flag 不是实体归中证明 |
+| `Gimbal.base_info.yaw_mec_angle/pitch_mec_angle` | 机械角度（deg），与协议传出的 rad 区分 |
+| `imu_dev.work_state`、`imu_dbg` | IMU 在线、错误/校准、姿态更新 |
+| `lift.state/home_valid/fault_code` | 升降当前状态、零点有效性、故障原因 |
+| `launcher.state/launcher_heat` | 发射阶段、热量数据源、预算是否有效/阻塞 |
+| `Board_HeartBeat`、`board_feedback_debug` | D1/D2 接收心跳及 C1/C2 本地发送结果 |
+
+调试时先确定数据是否新鲜，再看控制器输入/输出；角度变量保留着旧值不代表传感器仍在线。
+
+| 检查项 | 代码判据/动作 |
+| --- | --- |
+| 板间离线 | `Board_HeartBeat.status` 由 D1/D2 计数更新；云台在离线时休眠、输出置零 |
+| IMU 状态异常 | `ControlTask` 仅在错误码为 none/cali 时调用 `imu_dev.update()`；观察 `imu_dbg`、错误码、校准状态 |
+| 电机离线 | MonitorTask 更新 DM/RM/KT 在线状态；C1 汇报主要电机位；电机类型的温度/错误字段须按驱动单独检查 |
+| 升降故障 | `LIFT_FAULT`/`LIFT_STALL_STOP` 输出为零；观察 `fault_code`、`home_valid`、编码器、C1 byte1 |
+| 热量/拨盘异常 | D3 flags 与新鲜度决定热量数据是否可用；堵转自动退让开关默认关闭；观察 `launcher_heat.source/ready/blocked` |
+| HAL 初始化失败 | `Error_Handler()` 关中断停机，没有可读启动错误灯码 |
+
+首次上电卸弹并清空拨盘，抬离底盘轮、确认云台和升降无机械障碍；先核对 BMI088 方向、电机反馈/方向、上下板心跳，再以低输出逐轴验证。归中超时可能自动退出到后续模式；必须核对实际机械位置，不得仅凭 `init_flag` 开始高速测试。
+
+模块细节：[云台](docs/gimbal.md) · [升降](docs/lift.md) · [发射](docs/launcher.md) · [电机](docs/motors.md) · [IMU](docs/imu.md) · [板间通信](docs/board-link.md)

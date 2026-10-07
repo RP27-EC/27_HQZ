@@ -1,0 +1,96 @@
+# 下板底盘输入、模式与四轮控制
+
+[返回下板模块索引](README.md) · [返回下板工程说明](../Readme.md) · [遥控输入](remote.md) · [电机接口](motors.md) · [裁判功率数据](referee.md)
+
+## 一拍控制顺序
+
+```mermaid
+flowchart LR
+  RC[rc_dev: DBUS + 键鼠] --> INPUT[Chassis_Input_Update]
+  INPUT --> MODE{输入模式}
+  MODE -->|Follow| FOLLOW[Yaw误差 + 指令前馈 / 平移旋转]
+  MODE -->|Spin| SPIN[小陀螺目标与斜坡]
+  MODE -->|Mech / RC| CMD[直控指令]
+  FOLLOW --> KIN[四轮运动学逆解]
+  SPIN --> KIN
+  CMD --> KIN
+  C2[C2 Yaw反馈] --> FOLLOW
+  KIN --> PID[四轮速度P环 + 源限矩]
+  JUDGE[裁判功率快照] --> BUDGET[功率目标预算]
+  PID --> SCALE[统一力矩比例搜索]
+  BUDGET --> SCALE
+  SCALE --> OUT[FDCAN1 0x200组帧]
+  ONLINE[四轮心跳] --> SCALE
+```
+
+调度入口为 `task_down/Application/TaskLayer/Ctrl_Task.c`；输入/模式在 `chassis_input.c`、`chassis_follow.c`、`chassis_spin.c`，执行在 `chassis_control.c`。当前 `BOARD_COMM_DEBUG=1` 且 `CHASSIS_BRINGUP_ENABLE=1`，实际运行调试底盘链路。
+
+## 输入选择与模式
+
+- `CommandTask` 调用 `rc_interrupt_update()` 和 `keyboard_update()`；遥控器失联时 `Chassis_Input_Update()` 清空当前命令，键鼠也不继续使用旧帧。
+- 遥控在线且 S1 上位时，按 F 上升沿切换键鼠输入源；Z/X/C 选择跟随/机械/小陀螺。非键鼠源时 S1/S2 档位控制跟随和小陀螺。
+- 键盘 WASD 平移、Q/E 转向；Shift 乘 1.5，Ctrl 乘 0.5。机械键鼠档的鼠标 X 额外生成转向量，最大 ±15（控制域单位）。
+- 跟随模式需要有效 C2 Yaw。平移向量按云台实际相对角旋转；旋转控制使用 Yaw 误差、死区、方向锁定、指令前馈和斜坡融合。
+- 小陀螺目标旋转默认 25（控制域单位），每周期最多变化 0.1；退出时斜坡归零。平移允许按云台坐标系旋转，避免车头和云台方向脱钩。
+- R 键在跟随机械档执行不同动作：机械档翻转软件前/后基准；跟随档运行 `IDLE → PREPARE → POSITION → RESTORE` 云台掉头。掉头等稳定反馈并等待通信交接；超时 2500 ms 会取消。
+
+模式名称并不直接等同控制源。看 `chassis_cmd_t.source`、`valid`、`keyboard_source_active` 和各子模块 `selected/active/fault_latched` 判断当拍真正走的路径。
+
+## 跟随闭环与故障锁存
+
+跟随控制将 C2 机械 Yaw 映射到 [-π,π]，与 `CHASSIS_FOLLOW_CENTER_RAD` 比较形成角误差。误差进入 0.5 deg 死区后自动旋转项置零；超过 150 deg 锁定转向方向，回到 20 deg 内解锁，避免跨角度边界时方向翻转。输出按 Kp、角速度指令前馈合成，限到 ±40，再用 10 ms 混合时间和每拍 0.4 变化量接入。
+
+C2 超过 50 ms、角度非法或相邻反馈跳变超过 30 deg 会使跟随故障锁存，并将命令标无效/清零。必须退出对应档位后才清除锁存条件；不要通过增大跳变门限或绕开 `cmd.valid` 来维持运动。
+
+## 四轮控制与底盘保护
+
+逆解分配为：
+
+| 轮位 | 目标 |
+| --- | --- |
+| LF | `-vx + vy + wz` |
+| LB | `-vx - vy + wz` |
+| RF | ` vx + vy + wz` |
+| RB | ` vx - vy + wz` |
+
+当 `abs(vx)+abs(vy)+abs(wz)` 超过 `CHASSIS_CTRL_MAX_SPEED=80`，先限制旋转至总量的 60% 上限，再把剩余预算按比例分给平移。速度环当前纯 P，初始化从 `CHASSIS_SPEED_KP=0.8` 载入；输出上限按命令来源分别使用测试 2 N·m、跟随/小陀螺 4 N·m。目标/反馈进入零速带时清除 PID 状态，避免积分或微分残留。
+
+运行前必须同时满足命令有效、底盘使能、vx/vy/wz 有限且四轮全在线。任一轮对象缺失、反馈离线、输入非法或输出接口异常都会停止并把四轮力矩清零；不能单轮失联继续闭环。
+
+## 模式输入与目标生成
+
+| 模式路径 | 旋转目标来源 | 平移坐标处理 | 主要退出/保护 |
+| --- | --- | --- | --- |
+| 遥控直控/机械 | 摇杆生成 vx/vy/wz；键鼠机械模式可叠加鼠标 X | 使用当前底盘控制坐标 | RC offline、命令无效或总使能关闭时清零 |
+| 云台跟随 | C2 Yaw 误差 + 角速度前馈，含死区、方向锁和斜坡 | 按云台 Yaw 旋转平移向量 | 50 ms 超时、非法角度、30 deg 跳变触发锁存故障 |
+| 小陀螺 | `CHASSIS_SPIN_BASE_WZ`，按每拍 step 平滑变化 | 配置为使用云台坐标系时旋转平移向量 | 退出后旋转目标斜坡回零；缺少新鲜 Gimbal 数据按配置处理 |
+| 键鼠掉头 | R 键事件启动协同状态机 | 位置阶段根据目标角等待上板状态更新 | C2 无效、阶段超时或通信交接失败时取消/恢复 |
+
+模式输入最后汇总为 `chassis_cmd_t`。观察每个子模块是否 `selected/active`，并确认命令 `source` 与 `valid`，比只看拨杆或按键更能说明当前控制分支。
+
+## 功率限制路径
+
+`CHASSIS_POWER_LIMIT_ENABLE=1`。CtrlTask 每轮先读裁判功率快照，再更新预算，速度环产生四轮候选力矩后由 `Power_Limit_Apply()` 做公共比例缩放。它保持四轮力矩比例，不独立削某一轮。
+
+预算使用裁判底盘功率上限和 buffer energy：有效上限先减 5 W margin，buffer 低于 45 J 时增加强降额；buffer 目标 59 J，PI 参数用于预算调节，裁判帧缺失/过期/超出范围时回退 45 W。功率恢复只在新快照/活动条件下限速上升，降额立即生效。若零力矩估算仍超过预算或输出预测异常，则标记不可达并停输出。
+
+超电反馈传给 `Power_Limit_SetCapFeedback()` 仅作状态观测；`SUPERCAP_CAP_SWITCH=0` 且该反馈不是限功闭环输入。功率估算依赖当前电机模型/反馈，并不等于裁判端实测或实车功率保证。
+
+功率缩放发生在速度环和来源力矩限幅之后，因此“PID 输出很大而 CAN 命令较小”可能是公共 `scale` 的正常结果。若 `target_unreachable` 或预测值异常，需同时检查轮速反馈、电机模型输入、裁判快照和回退标志；不能只增加 PID 增益抵消限功。
+
+## 调参入口
+
+| 配置文件 | 参数 | 当前值/单位 |
+| --- | --- | --- |
+| `task_down/Application/ConfigLayer/chassis_config.h` | `CHASSIS_MAX_VX/VY/WZ` | 25 / 25 / 20，控制域量，不可直接标作 m/s 或 rad/s |
+| 同上 | `CHASSIS_SPEED_KP/KI/KD` | 0.8 / 0 / 0，速度环纯 P；输出为 N·m |
+| 同上 | 测试/跟随/小陀螺扭矩上限 | 2 / 4 / 4 N·m |
+| 同上 | `CHASSIS_FOLLOW_KP`, `MAX_WZ`, `DEADBAND_DEG` | 20、40、0.5 deg |
+| 同上 | `CHASSIS_FOLLOW_TIMEOUT_MS`, `YAW_JUMP_LIMIT_DEG` | 50 ms、30 deg |
+| 同上 | `CHASSIS_SPIN_BASE_WZ`, `SPIN_STEP` | 25、0.1 控制域单位/周期 |
+| `power_limit_config.h` | fallback/margin/guard/target | 45 W / 5 W / 45 J / 59 J |
+| 同上 | `CHASSIS_POWER_BUFFER_KP/KI` | 2 W/J、0.5 W/(J·s) |
+
+## 调试顺序
+
+先观察 `rc_dev.work_state` 与 `chassis_input_cmd`，再看跟随/小陀螺状态、C2 时间戳和角度符号；最后查看 `chassis_ctrl.state.wheel_target[]`、轮速、各轮力矩以及 `power_limit_state.target_power/scale/fallback_used/target_unreachable`。从架空底盘的单方向低输出开始，确认物理方向和软件 LF/LB/RF/RB 对应关系后再联调功率模型。

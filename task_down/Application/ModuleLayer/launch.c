@@ -160,8 +160,7 @@ static void Launch_Data_Update(Launch_t *launch)
         return;
     }
 
-    /* 上电后必须先变化 S2，避免开机停在上位直接发射。 */
-    /* 安全解锁：上电后 S2 必须再动作一次 */
+    /* 上电后需检测到 S2 档位变化才解锁。 */
     if ((launch_shoot_switch_seen != 0u) &&
         (s2 != launch_shoot_previous_switch))
     {
