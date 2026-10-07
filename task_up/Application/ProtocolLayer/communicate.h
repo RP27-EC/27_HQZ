@@ -20,11 +20,12 @@
 /* 整车状态报文 */
 typedef struct
 {
-    uint8_t car_state;   /* 底盘状态 */
-    uint8_t gimbal_mode; /* 云台控制模式 */
-    uint8_t vision_mode; /* 视觉模式 */
-    uint8_t game_start;  /* 比赛开始标志 */
-    uint8_t my_color;    /* 己方颜色 */
+    uint8_t car_state;   /* 车辆状态，0~3 */
+    uint8_t gimbal_mode; /* 机械/速控，0/1 */
+    uint8_t vision_mode; /* 视觉模式，0~7 */
+    uint8_t game_start;  /* 比赛开始，0/1 */
+    uint8_t my_color;    /* 己方颜色，0/1 */
+    uint8_t r_turn_active; /* R掉头进行中，0/1 */
 } Board_State_Pkt_t;
 
 /* 云台目标报文，机械角单位 rad，IMU 角单位 deg */

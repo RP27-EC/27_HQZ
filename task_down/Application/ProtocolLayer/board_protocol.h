@@ -38,13 +38,14 @@
 
 /* 整车状态与速度指令 */
 typedef struct{
-  uint8_t car_state;    /* 车辆状态 */
-  uint8_t gimbal_mode;  /* 云台模式 */
-  uint8_t vision_mode;  /* 视觉模式 */
-  uint8_t game_start;   /* 比赛开始标志 */
-  uint8_t my_color;     /* 己方颜色 */
-  float v_x;            /* 底盘纵向速度 */
-  float v_y;            /* 底盘横向速度 */
+  uint8_t car_state;    /* 车辆状态，0~3 */
+  uint8_t gimbal_mode;  /* 机械/速控，0/1 */
+  uint8_t vision_mode;  /* 视觉模式，0~7 */
+  uint8_t game_start;   /* 比赛开始，0/1 */
+  uint8_t my_color;     /* 己方颜色，0/1 */
+  float v_x;            /* 纵向指令，-8000~8000 */
+  float v_y;            /* 横向指令，-8000~8000 */
+  uint8_t r_turn_active; /* R掉头进行中，0/1 */
 }Board_Car_Pkt_t;
 
 

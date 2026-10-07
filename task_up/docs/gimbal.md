@@ -75,6 +75,15 @@ flowchart LR
 
 当前值不等于已完成实车标定。尤其机械中点、Pitch 行程端点、重力方向和力矩限幅需按实际机构确认。
 
+## R掉头专用参数
+
+- 配置文件：`Application/ConfigLayer/gimbal_turn_config.h`。
+- `GIMBAL_R_TURN_YAW_MAX_RATE_DEG_S = 350.0f`：R掉头最大目标角速度，deg/s。
+- `GIMBAL_R_TURN_YAW_RAMP_DEG_PER_MS = 0.5f`：R掉头目标斜坡，deg/ms。
+- 下板D1 b5 bit4传递R掉头状态，仅上板机械Yaw分支消费；普通机械定位保留当前斜坡和原最大速度，归中参数不变。
+- 跟随R沿用原状态机；机械R在误差≤0.5°持续100 ms后退出专用参数。超时2500 ms、反馈失效、退出机械模式或过洞请求均退出专用参数，继续服从原控制逻辑。
+- 两板需同步更新；最大速度仍受制动曲线、近点限速、PID和力矩限幅约束。
+
 ## 排查顺序
 
 1. 看 `Board_HeartBeat.status` 和 D1 `car_state`，确认不是 `G_SLEEP` 保护。

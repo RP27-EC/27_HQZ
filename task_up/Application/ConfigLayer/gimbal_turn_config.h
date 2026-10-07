@@ -7,7 +7,9 @@
 
 #define GIMBAL_TURN_ENTER_ERR_DEG             90.0f  // 旧路径切换阈值，deg
 #define GIMBAL_MEC_YAW_USE_TURN_PATH          0      // 旧掉头路径开关，0/1
-#define GIMBAL_TURN_YAW_RAMP_DEG_PER_MS       GIMBAL_INIT_YAW_RAMP_DEG_PER_MS // 目标斜坡，deg/ms
+#define GIMBAL_TURN_YAW_RAMP_DEG_PER_MS        0.5f // 目标斜坡，deg/ms
+#define GIMBAL_R_TURN_YAW_RAMP_DEG_PER_MS      1.5f // R目标斜坡，deg/ms
+#define GIMBAL_R_TURN_YAW_MAX_RATE_DEG_S       1000.0f // R角速度上限，deg/s
 #define GIMBAL_TURN_SPEED_LIMIT_ENABLE        GIMBAL_INIT_SPEED_LIMIT_ENABLE // 速度规划开关，0/1
 #define GIMBAL_TURN_YAW_MAX_RATE_DEG_S        GIMBAL_INIT_YAW_MAX_RATE_DEG_S // 最大角速度，deg/s
 #define GIMBAL_TURN_YAW_DECEL_RAD_S2          GIMBAL_INIT_YAW_DECEL_RAD_S2 // 制动减速度，rad/s^2

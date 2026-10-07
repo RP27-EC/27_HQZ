@@ -150,10 +150,10 @@
 #define GIMBAL_RATE_HOLD_EXIT_DEG_S        8.0f
 
 /* Yaw 保持环：输入角度误差(deg)，输出目标角速度(deg/s) */
-#define GIMBAL_YAW_HOLD_KP                 15.0f
-#define GIMBAL_YAW_HOLD_KI                 0.01f
+#define GIMBAL_YAW_HOLD_KP                 10.0f
+#define GIMBAL_YAW_HOLD_KI                 0.001f
 #define GIMBAL_YAW_HOLD_INTEGRAL_MAX       5000.0f
-#define GIMBAL_YAW_HOLD_OUT_MAX            200.0f
+#define GIMBAL_YAW_HOLD_OUT_MAX            300.0f
 
 /* Pitch 保持环：输入角度误差(deg)，输出目标角速度(deg/s) */
 #define GIMBAL_PITCH_HOLD_KP               50.0f

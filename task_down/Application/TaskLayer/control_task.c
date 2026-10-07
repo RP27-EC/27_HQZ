@@ -16,6 +16,7 @@
 #include "launch.h"
 #include "rp_math.h"
 #include "supercap.h"
+#include <math.h>
 
 typedef struct
 {
@@ -141,6 +142,85 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     return 0u;
 }
 
+static void Board_R_Turn_Update(uint8_t start, uint8_t cancel)
+{
+    static uint8_t active;
+    static uint8_t source;
+    static uint8_t stable;
+    static uint32_t start_tick;
+    static uint32_t stable_tick;
+    uint32_t now = HAL_GetTick();
+    uint32_t feedback_tick = board.status->gimbal_rx_time_ms;
+    uint8_t keyboard = Chassis_Input_IsKeyboardMode();
+    float error;
+    float yaw = board.rx_meg->gimbal_meg.yaw_mec;
+
+    board.tx_pkt->car_pkt.r_turn_active = 0u;
+    if ((cancel != 0u) || (board.tx_pkt->car_pkt.gimbal_mode != 0u))
+    {
+        active = 0u;
+        stable = 0u;
+        return;
+    }
+
+    /* 跟随掉头沿用原到位判据。 */
+    if (Chassis_Input_IsUturnActive() != 0u)
+    {
+        active = 0u;
+        stable = 0u;
+        board.tx_pkt->car_pkt.r_turn_active =
+            (Chassis_Input_GetUturnState() == CHASSIS_UTURN_POSITION) ? 1u : 0u;
+        return;
+    }
+
+    if (source != keyboard)
+    {
+        active = 0u;
+        stable = 0u;
+    }
+    source = keyboard;
+    if (start != 0u)
+    {
+        active = 1u;
+        stable = 0u;
+        start_tick = now;
+    }
+
+    if ((board.status->gimbal_data_valid == 0u) ||
+        ((now - feedback_tick) > CHASSIS_KEY_UTURN_FEEDBACK_TIMEOUT_MS) ||
+        (yaw != yaw) || (fabsf(yaw) > 3.1515927f) ||
+        ((now - start_tick) >= CHASSIS_KEY_UTURN_TIMEOUT_MS))
+    {
+        active = 0u;
+        stable = 0u;
+    }
+    if (active == 0u)
+    {
+        return;
+    }
+
+    error = board.tx_pkt->gimbal_target_pkt.yaw_mec_tar - yaw;
+    if (error > 3.1415927f) { error -= 6.2831853f; }
+    else if (error < -3.1415927f) { error += 6.2831853f; }
+    if (fabsf(error) <= CHASSIS_KEY_UTURN_TOL_DEG * 0.0174532925f)
+    {
+        if (stable == 0u)
+        {
+            stable = 1u;
+            stable_tick = feedback_tick;
+        }
+        if ((feedback_tick - stable_tick) >= CHASSIS_KEY_UTURN_STABLE_MS)
+        {
+            active = 0u;
+        }
+    }
+    else
+    {
+        stable = 0u;
+    }
+    board.tx_pkt->car_pkt.r_turn_active = active;
+}
+
 /* 调试模式下用遥控右摇杆生成云台机械角目标 */
 static void Board_Debug_Gimbal_Command(void)
 {
@@ -152,6 +232,8 @@ static void Board_Debug_Gimbal_Command(void)
     uint8_t keyboard_active; /* 键鼠模式生效 */
     uint8_t keyboard_mech;   /* 键鼠 X 机械档生效 */
     uint8_t uturn_mech;
+    uint8_t r_edge;
+    float previous_yaw_target = board.tx_pkt->gimbal_target_pkt.yaw_mec_tar;
 
     if (rc_dev.work_state != DEV_ONLINE)
     {
@@ -165,6 +247,7 @@ static void Board_Debug_Gimbal_Command(void)
         board.tx_pkt->gimbal_target_pkt.yaw_imu_tar = 0.0f;
         board.tx_pkt->gimbal_target_pkt.pitch_imu_tar = 0.0f;
         board.tx_pkt->gimbal_target_pkt.is_hole = 0u;
+        Board_R_Turn_Update(0u, 1u);
         return;
     }
 
@@ -173,12 +256,14 @@ static void Board_Debug_Gimbal_Command(void)
     keyboard_mech = Chassis_Input_IsKeyboardMechMode();
     uturn_mech = (Chassis_Input_GetUturnState() == CHASSIS_UTURN_POSITION) ? 1u : 0u;
     r_pressed = ((rc_info->key_v & KEY_PRESSED_OFFSET_R) != 0u) ? 1u : 0u;
+    r_edge = ((r_pressed != 0u) && (last_r_pressed == 0u)) ? 1u : 0u;
 #if BOARD_LIFT_ENABLE
     if (Board_Debug_Hole_Command(rc_info) != 0u)
     {
         /* 过洞期间云台被强制正前方，不响应 R；方向状态留到退出后再改 */
         mec_mode_active = 0u;
         last_r_pressed = r_pressed;
+        Board_R_Turn_Update(0u, 1u);
         return;
     }
 #endif
@@ -245,6 +330,10 @@ static void Board_Debug_Gimbal_Command(void)
         board.tx_pkt->car_pkt.gimbal_mode = 1u;
         mec_mode_active = 0u;
     }
+    Board_R_Turn_Update(
+        ((r_edge != 0u) &&
+         (board.tx_pkt->gimbal_target_pkt.yaw_mec_tar != previous_yaw_target)) ? 1u : 0u,
+        ((keyboard_active != 0u) && (keyboard_mech == 0u) && (uturn_mech == 0u)) ? 1u : 0u);
 }
 #endif
 

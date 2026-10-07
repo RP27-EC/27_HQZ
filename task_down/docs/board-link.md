@@ -28,7 +28,7 @@ ConnectTask 每轮先判断 D3 是否到期，再检查 FDCAN2 FIFO 至少有 `c
 
 | 报文 | 数据来源 | 主要打包步骤 | 本板侧观测 |
 | --- | --- | --- | --- |
-| D1 | `board.tx_pkt->car_pkt` 与 `shoot_pkt` | b0 拼接车状态/云台模式/视觉/比赛/颜色；b1–4 将 vx/vy 映射到 [-8000,8000]；b5 放许可/模式/触发/过洞 | `gimbal_d1_tx_ok` 与上板 D1 心跳 |
+| D1 | `board.tx_pkt->car_pkt` 与 `shoot_pkt` | b0 拼接车状态/云台模式/视觉/比赛/颜色；b1–4 将 vx/vy 映射到 [-8000,8000]；b5 bit0~3 放许可/模式/触发/过洞，bit4 放R掉头状态 | `gimbal_d1_tx_ok` 与上板 D1 心跳 |
 | D2 | `gimbal_target_pkt` | Pitch/Yaw IMU 映射 [-360,360] deg；Pitch/Yaw 机械映射 [-4,4] rad；均为 uint16 大端 | `gimbal_d2_tx_ok`、上板 `gimbal_target_pkt` |
 | D5 | UART5 遥控及键鼠映射 | 遥控摇杆经死区和最大角速度映射；键鼠路径编码来源、鼠标键及轴命令 | 下板 TX 状态、上板 `remote_cmd_pkt.valid/source/cmd_type` |
 

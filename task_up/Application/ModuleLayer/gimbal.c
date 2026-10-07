@@ -513,19 +513,12 @@ static void gimbal_update_targets(gimbal_t *gimbal)
     }
     else if (gimbal->gimbal_mode == G_MEC)
     {
-        /*
-         * 掉头：Yaw 目标按归中同款斜坡给出。
-         *
-         * WARNING: 这一支必须排在 mode_transition_active 之前。机械模式里
-         * pitch_final 来自下板持续积分的 pitch_mec_tar，只要右摇杆不在绝对
-         * 中位它就每周期都在变，模式切换斜坡的"双轴都到位"判据永远不成立，
-         * mode_transition_active 就会一直停在 1，把这里的掉头斜坡整个挡掉，
-         * 结果掉头实际用的是硬编码的 mode_yaw_ramp_step(0.1)，改这个宏毫无效果。
-         * 所以机械模式直接清掉该标志，只用掉头斜坡。
-         */
+        /* 机械目标不等待双轴切换到位。 */
         gimbal->init_info.mode_transition_active = 0;
         gimbal->pid_info.yaw_target = gimbal_ramp_wrapped(
-            gimbal->pid_info.yaw_target, yaw_final, GIMBAL_TURN_YAW_RAMP_DEG_PER_MS);
+            gimbal->pid_info.yaw_target, yaw_final,
+            (Board_Rx_Info.state_pkt.r_turn_active != 0u) ?
+                GIMBAL_R_TURN_YAW_RAMP_DEG_PER_MS : GIMBAL_TURN_YAW_RAMP_DEG_PER_MS);
         gimbal->pid_info.pitch_target = pitch_final;
     }
     else if (gimbal->init_info.mode_transition_active)
@@ -945,6 +938,8 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     float speed_limit;
     float brake_limit;
     float near_rate_limit;
+    float max_rate = (Board_Rx_Info.state_pkt.r_turn_active != 0u) ?
+        GIMBAL_R_TURN_YAW_MAX_RATE_DEG_S : gimbal_tune.mec_yaw_max_rate_deg_s;
     float speed_command;
     float speed_target;
     float rate_command;
@@ -992,10 +987,10 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
      * 参考：speed_limit = min(position_output_limit, brake_gain*sqrt(remaining_deg))
      * remaining_deg 由【死区裁剪后】的目标算出，所以死区内给 0，
      * 速度内环此时只做制动。 */
-    speed_limit = gimbal_tune.mec_yaw_max_rate_deg_s;
+    speed_limit = max_rate;
     brake_limit = gimbal_mec_speed_limit(
         gimbal_abs(control_target_count) * GIMBAL_COUNT_TO_DEG,
-        gimbal_tune.mec_yaw_max_rate_deg_s,
+        max_rate,
         gimbal_tune.mec_yaw_decel_rad_s2);
     if (speed_limit > brake_limit)
     {
