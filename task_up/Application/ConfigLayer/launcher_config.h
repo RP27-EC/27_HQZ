@@ -26,7 +26,7 @@
 #define LAUNCHER_DIAL_ANGLE_KD            0.0f // 微分增益，速度/误差差值
 #define LAUNCHER_DIAL_ANGLE_INTEGRAL_MAX  0.0f // 位置积分上限，count
 #define LAUNCHER_DIAL_ANGLE_DEADBAND      0.0f // 单发位置死区，count
-#define LAUNCHER_DIAL_SPEED_KP            0.15f // 速度增益，原始量/(deg/s)
+#define LAUNCHER_DIAL_SPEED_KP            0.1f // 速度增益，原始量/(deg/s)
 #define LAUNCHER_DIAL_SPEED_KI            0.05f // 积分增益，原始量/累积误差
 #define LAUNCHER_DIAL_SPEED_KD            0.0f // 微分增益，原始量/误差差值
 #define LAUNCHER_DIAL_SPEED_INTEGRAL_MAX  500.0f // 速度积分上限，deg/s
