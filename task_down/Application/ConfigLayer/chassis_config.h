@@ -59,13 +59,13 @@
 #define CHASSIS_FOLLOW_YAW_REFERENCE_ENABLE 1u // 使用前后基准，0/1
 #define CHASSIS_FOLLOW_YAW_ANGLE_SIGN     1.0f // 角度方向，±1
 #define CHASSIS_FOLLOW_TRANSLATION_SIGN   1.0f // 平移方向，±1
-#define CHASSIS_FOLLOW_WZ_SIGN            -1.0f // 旋转输出方向，±1
+#define CHASSIS_FOLLOW_WZ_SIGN            -1.5f // 旋转输出方向，±1
 #define CHASSIS_FOLLOW_KP                 20.0f // 转速控制量/rad
 #define CHASSIS_FOLLOW_MAX_WZ             40.0f // 转速控制量上限，>0
 #define CHASSIS_FOLLOW_WZ_STEP            0.4f  // 转速控制量/周期，>0
-#define CHASSIS_FOLLOW_RATE_FF            -2.5f // 指令前馈倍率
+#define CHASSIS_FOLLOW_RATE_FF            -1.0f // 指令前馈倍率
 #define CHASSIS_FOLLOW_RATE_PER_DEG_S     0.032f // 转速控制量/(°/s)
-#define CHASSIS_FOLLOW_FRICTION_FF        2.0f  // 摩擦补偿转速控制量
+#define CHASSIS_FOLLOW_FRICTION_FF        1.0f  // 摩擦补偿转速控制量
 #define CHASSIS_FOLLOW_DEADBAND_DEG       1.0f  // 停止纠偏角误差，°
 #define CHASSIS_FOLLOW_RESUME_DEG         2.0f  // 恢复门限，>停止角，°
 #define CHASSIS_FOLLOW_TURN_LOCK_DEG      150.0f // 锁定转向误差，°
