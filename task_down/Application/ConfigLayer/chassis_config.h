@@ -63,11 +63,11 @@
 #define CHASSIS_FOLLOW_KP                 20.0f // 转速控制量/rad
 #define CHASSIS_FOLLOW_MAX_WZ             40.0f // 转速控制量上限，>0
 #define CHASSIS_FOLLOW_WZ_STEP            0.4f  // 转速控制量/周期，>0
-#define CHASSIS_FOLLOW_RATE_FF            -3.3f // 指令前馈倍率
+#define CHASSIS_FOLLOW_RATE_FF            -2.5f // 指令前馈倍率
 #define CHASSIS_FOLLOW_RATE_PER_DEG_S     0.032f // 转速控制量/(°/s)
-#define CHASSIS_FOLLOW_FRICTION_FF        0.0f  // 摩擦补偿转速控制量
-#define CHASSIS_FOLLOW_DEADBAND_DEG       5.0f  // 停止纠偏角误差，°
-#define CHASSIS_FOLLOW_RESUME_DEG         6.0f  // 恢复门限，>停止角，°
+#define CHASSIS_FOLLOW_FRICTION_FF        2.0f  // 摩擦补偿转速控制量
+#define CHASSIS_FOLLOW_DEADBAND_DEG       1.0f  // 停止纠偏角误差，°
+#define CHASSIS_FOLLOW_RESUME_DEG         2.0f  // 恢复门限，>停止角，°
 #define CHASSIS_FOLLOW_TURN_LOCK_DEG      150.0f // 锁定转向误差，°
 #define CHASSIS_FOLLOW_TURN_UNLOCK_DEG    20.0f // 释放转向误差，°
 #define CHASSIS_FOLLOW_TORQUE_LIMIT_NM    4.0f  // 跟随力矩上限，N·m
@@ -77,6 +77,7 @@
 #define CHASSIS_FOLLOW_BLEND_STEP         ((float)CHASSIS_CONTROL_PERIOD_MS / (float)CHASSIS_FOLLOW_BLEND_TIME_MS) // 融合比例/周期，0~1
 
 /* 仅停稳受扰和小陀螺退出启用。 */
+#define CHASSIS_FOLLOW_RECOVERY_ARRIVE_DEG 0.5f // 特殊回正到位误差，°
 #define CHASSIS_FOLLOW_RECOVERY_FF_WZ     10.0f  // 辅助前馈转速控制量，≥0
 #define CHASSIS_FOLLOW_RECOVERY_TRIGGER_DEG 6.0f // 受扰触发误差，°
 #define CHASSIS_FOLLOW_RECOVERY_FULL_DEG  7.0f  // 前馈全幅误差，>停止角，°

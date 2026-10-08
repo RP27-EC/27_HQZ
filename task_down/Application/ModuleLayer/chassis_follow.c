@@ -99,16 +99,6 @@ static void Chassis_Follow_UpdateRecovery(const chassis_cmd_t *cmd,
         return;
     }
 
-    if (abs_error_deg <= CHASSIS_FOLLOW_DEADBAND_DEG)
-    {
-        chassis_follow.correction_stopped = 1u;
-        chassis_follow.recovery_active = 0u;
-    }
-    else if (abs_error_deg >= CHASSIS_FOLLOW_RESUME_DEG)
-    {
-        chassis_follow.correction_stopped = 0u;
-    }
-
     if (chassis_follow.recovery_pending != 0u)
     {
         if ((now - follow_recovery_since_ms) >= CHASSIS_FOLLOW_RECOVERY_TIMEOUT_MS)
@@ -118,9 +108,11 @@ static void Chassis_Follow_UpdateRecovery(const chassis_cmd_t *cmd,
         else if (spin_tail == 0u)
         {
             chassis_follow.recovery_pending = 0u;
-            if (chassis_follow.correction_stopped == 0u)
+            if (abs_error_deg > CHASSIS_FOLLOW_RECOVERY_ARRIVE_DEG)
             {
                 chassis_follow.recovery_active = 1u;
+                chassis_follow.disturbance_armed = 0u;
+                follow_stable_timing = 0u;
                 follow_recovery_since_ms = now;
             }
         }
@@ -146,7 +138,8 @@ static void Chassis_Follow_UpdateRecovery(const chassis_cmd_t *cmd,
         follow_recovery_since_ms = now;
         follow_stable_timing = 0u;
     }
-    else if ((abs_error_deg <= CHASSIS_FOLLOW_DEADBAND_DEG) &&
+    else if ((chassis_follow.recovery_active == 0u) &&
+             (abs_error_deg <= CHASSIS_FOLLOW_DEADBAND_DEG) &&
              (chassis_follow.correction_stopped != 0u) &&
              (fabsf(chassis_follow.wz_output) <= CHASSIS_FOLLOW_RECOVERY_INPUT_EPS) &&
              (Chassis_Follow_WheelsStopped() != 0u))
@@ -171,6 +164,35 @@ static void Chassis_Follow_UpdateRecovery(const chassis_cmd_t *cmd,
     {
         chassis_follow.recovery_active = 0u;
     }
+
+    /* 特殊回正越过普通死区。 */
+    if (chassis_follow.recovery_active != 0u)
+    {
+        if (abs_error_deg <= CHASSIS_FOLLOW_RECOVERY_ARRIVE_DEG)
+        {
+            chassis_follow.recovery_active = 0u;
+            chassis_follow.correction_stopped = 1u;
+            follow_stable_timing = 0u;
+        }
+        else
+        {
+            chassis_follow.correction_stopped = 0u;
+        }
+    }
+    else if (abs_error_deg <= CHASSIS_FOLLOW_DEADBAND_DEG)
+    {
+        chassis_follow.correction_stopped = 1u;
+    }
+    else if (abs_error_deg >= CHASSIS_FOLLOW_RESUME_DEG)
+    {
+        chassis_follow.correction_stopped = 0u;
+    }
+}
+
+static float Chassis_Follow_StopErrorDeg(void)
+{
+    return (chassis_follow.recovery_active != 0u) ?
+           CHASSIS_FOLLOW_RECOVERY_ARRIVE_DEG : CHASSIS_FOLLOW_DEADBAND_DEG;
 }
 
 /* 前馈在停止门限处收零。 */
@@ -179,17 +201,18 @@ static float Chassis_Follow_RecoveryFeedforward(float yaw_error)
     float abs_error_deg = fabsf(yaw_error) / CHASSIS_FOLLOW_DEG_TO_RAD;
     float fade;
     float direction;
+    float stop_error_deg = Chassis_Follow_StopErrorDeg();
 
     if ((chassis_follow.recovery_active == 0u) ||
         (chassis_follow.correction_stopped != 0u) ||
-        (abs_error_deg <= CHASSIS_FOLLOW_DEADBAND_DEG))
+        (abs_error_deg <= stop_error_deg))
     {
         return 0.0f;
     }
 
     fade = constrain(
-        (abs_error_deg - CHASSIS_FOLLOW_DEADBAND_DEG) /
-        (CHASSIS_FOLLOW_RECOVERY_FULL_DEG - CHASSIS_FOLLOW_DEADBAND_DEG),
+        (abs_error_deg - stop_error_deg) /
+        (CHASSIS_FOLLOW_RECOVERY_FULL_DEG - stop_error_deg),
         0.0f, 1.0f);
     direction = (chassis_follow.turn_direction != 0) ?
                 (float)chassis_follow.turn_direction : ((yaw_error >= 0.0f) ? 1.0f : -1.0f);
@@ -512,7 +535,7 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     }
 
     if ((chassis_follow.correction_stopped != 0u) ||
-        (fabsf(yaw_error) <= (CHASSIS_FOLLOW_DEADBAND_DEG * CHASSIS_FOLLOW_DEG_TO_RAD)))
+        (fabsf(yaw_error) <= (Chassis_Follow_StopErrorDeg() * CHASSIS_FOLLOW_DEG_TO_RAD)))
     {
         chassis_follow.turn_direction = 0;
         feedback_wz = 0.0f;
