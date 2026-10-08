@@ -116,11 +116,12 @@ void Board_Tx_Pkt_01(Board_t* board)
 	pkt_01[4] = t2;    /* v_y 低字节 */
 
 									 
-	pkt_01[5] |= (board->tx_pkt->shoot_pkt.launch_state & 0x01) << 0; /* 发射许可 */
+	pkt_01[5] |= (board->tx_pkt->shoot_pkt.launch_state & 0x01) << 0; /* 摩擦轮使能 */
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_mode & 0x01) << 1; /* 发射模式 */
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_level & 0x01) << 2; /* 触发电平 */
 	pkt_01[5] |= (board->tx_pkt->gimbal_target_pkt.is_hole & 0x01) << 3; /* 过洞标志 */
 	pkt_01[5] |= (board->tx_pkt->car_pkt.r_turn_active & 0x01) << 4; /* R掉头，0/1 */
+	pkt_01[5] |= (board->tx_pkt->shoot_pkt.feed_permit & 0x01) << 5; /* 供弹许可 */
 	
 
 	board->status->gimbal_d1_tx_ok =
@@ -395,7 +396,3 @@ void Board_Rx_Meg_02(Board_t* board,uint8_t* rxbuf)
 
 	board->status->offline_cnt = 0;
 }
-
-
-
-

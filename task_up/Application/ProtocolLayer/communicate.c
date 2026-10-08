@@ -67,12 +67,13 @@ static void Board_Rx_Pkt_01(uint8_t *rxbuf)
     Board_Rx_Info.state_pkt.game_start = (rxbuf[0] >> 6) & 0x01;  /* 比赛开始 */
     Board_Rx_Info.state_pkt.my_color = (rxbuf[0] >> 7) & 0x01;    /* 己方颜色 */
 
-    Board_Rx_Shoot_Flags = rxbuf[5] & 0x0Fu;
-    Board_Rx_Info.shoot_pkt.launch_state = rxbuf[5] & 0x01;       /* 发射许可 */
+    Board_Rx_Shoot_Flags = rxbuf[5] & 0x3Fu;
+    Board_Rx_Info.shoot_pkt.launch_state = rxbuf[5] & 0x01;       /* 摩擦轮使能 */
     Board_Rx_Info.shoot_pkt.shoot_mode = (rxbuf[5] >> 1) & 0x01;  /* 发射模式 */
     Board_Rx_Info.shoot_pkt.shoot_level = (rxbuf[5] >> 2) & 0x01; /* 触发电平 */
     Board_Rx_Info.shoot_pkt.is_hole = (rxbuf[5] >> 3) & 0x01;     /* 过洞标志 */
     Board_Rx_Info.state_pkt.r_turn_active = (rxbuf[5] >> 4) & 0x01; /* R掉头，0/1 */
+    Board_Rx_Info.shoot_pkt.feed_permit = (rxbuf[5] >> 5) & 0x01; /* 供弹许可 */
 }
 
 /* 解析 D2：云台目标角度 */
@@ -329,6 +330,3 @@ void C_Board_Communicate_HeartBeat(void)
         Board_HeartBeat.status = DEV_ONLINE;
     }
 }
-
-
-

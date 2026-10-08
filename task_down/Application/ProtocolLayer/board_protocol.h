@@ -68,9 +68,10 @@ typedef struct{
 
 /* 发射控制 */
 typedef struct{
-	uint8_t launch_state; /* 发射机构使能 */
-  uint8_t shoot_mode;   /* 0 = 单发，1 = 连发 */
-	uint8_t shoot_level;  /* 发射触发电平 */
+	uint8_t launch_state; /* 摩擦轮使能，0/1 */
+  uint8_t shoot_mode;   /* 单发/连发，0/1 */
+	uint8_t shoot_level;  /* 供弹触发，0/1 */
+  uint8_t feed_permit;  /* 供弹许可，0/1 */
 }Board_Shoot_Pkt_t;
 
 
@@ -192,6 +193,3 @@ void Board_Rx_Meg_02(Board_t* board,uint8_t* rxbuf);
 
 
 #endif
-
-
-

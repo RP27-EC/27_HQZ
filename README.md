@@ -151,7 +151,7 @@ UV4 -b 01_LED\MDK-ARM\My_C.uvprojx -t My_C -o "$env:TEMP\Train_code_plus_led.log
 
 | ID | 方向 | Byte 定义（下标从 0 开始） | 说明 |
 | --- | --- | --- | --- |
-| `0xD1` | 下→上 | b0：car_state[1:0]、gimbal_mode[2]、vision_mode[5:3]、game_start[6]、my_color[7]；b1–2 `v_x`；b3–4 `v_y`；b5 bit0 发射许可、bit1 模式、bit2 触发、bit3 过洞、bit4 R掉头进行中 | 速度字段线性映射 [-8000,8000]；R专用限速需同步更新上下板 |
+| `0xD1` | 下→上 | b0：car_state[1:0]、gimbal_mode[2]、vision_mode[5:3]、game_start[6]、my_color[7]；b1–2 `v_x`；b3–4 `v_y`；b5 bit0 摩擦轮使能、bit1 模式、bit2 触发、bit3 过洞、bit4 R掉头进行中、bit5 供弹许可 | 速度字段线性映射 [-8000,8000]；转轮与供弹许可分离，需同步更新上下板 |
 | `0xD2` | 下→上 | b0–1 Pitch IMU；b2–3 Yaw IMU；b4–5 Pitch 机械角；b6–7 Yaw 机械角 | IMU 映射 [-360,360] deg；机械映射 [-4,4] rad |
 | `0xD3` | 下→上 | b0–1 热量上限；b2–3 枪管热量；b4–5 冷却率；b6 源序号；b7 bit0 参数有效、bit1 热量有效 | 热量单位按裁判系统；当前周期 10 ms；无效位不会因收到 CAN 帧而自动变有效 |
 | `0xD4` | 下→上 | b0–7 血量字节 | 默认 `BOARD_COMM_D4_ENABLE=0`；上板目前仅更新该 ID 心跳 |

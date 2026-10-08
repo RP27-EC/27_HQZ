@@ -32,6 +32,7 @@ static uint16_t launcher_fric_ready_count; /* 摩擦轮达速确认计数 */
 uint8_t launcher_jam_count; /* 堵转次数，调试可观测 */
 static uint16_t launcher_fric_stop_count; /* 摩擦轮停转确认计数 */
 static uint8_t launcher_dial_last_online; /* 拨盘上次在线状态 */
+static uint8_t launcher_feed_armed; /* 新供弹已解锁，0/1 */
 static uint8_t launcher_dial_stopped; /* 1 = 拨盘已停机 */
 static uint32_t launcher_dial_stop_tick; /* 上次停机命令时刻 */
 static uint8_t launcher_dial_target_synced; /* 目标是否已对齐反馈 */
@@ -850,6 +851,7 @@ void Launcher_Init(void)
     launcher_jam_count = 0u;
     launcher_fric_stop_count = 0u;
     launcher_dial_last_online = 0u;
+    launcher_feed_armed = 0u;
     launcher_dial_stopped = 1u;
     launcher_dial_braking = 0u;
     launcher_dial_brake_tick = 0u;
@@ -920,10 +922,22 @@ void Launcher_Init(void)
     launcher_dial_brake_pid.out = 0.0f;
 }
 
+/* 顶部或上升期间放行 */
+static uint8_t Launcher_LiftAllowsShoot(void)
+{
+    return ((lift.control_is_hole == 0u) &&
+            ((lift.state == LIFT_WAIT) ||
+             (lift.state == LIFT_READY_UP) ||
+             (lift.state == LIFT_MOVING_UP) ||
+             (lift.state == LIFT_HOMING_UP))) ? 1u : 0u;
+}
+
 /* 发射机构周期任务 */
 void Launcher_Work(void)
 {
     uint32_t now = HAL_GetTick(); /* 本次调度时刻 */
+    uint8_t shoot_flags = Board_Rx_Shoot_Flags;
+    uint8_t feed_permit = (shoot_flags >> 5) & 0x01u;
     uint8_t fric_on;              /* 摩擦轮总使能 */
     uint8_t dial_on;              /* 拨盘参与控制 */
     uint8_t shoot_level;          /* 发射触发电平 */
@@ -954,9 +968,9 @@ void Launcher_Work(void)
 #endif
 
     fric_on = ((Board_HeartBeat.status == DEV_ONLINE) &&
-               (Board_Rx_Info.shoot_pkt.launch_state != 0u) &&
-               (Board_Rx_Info.shoot_pkt.is_hole == 0u) &&
-               (Lift_Get_Report_State() == 2u) &&
+               ((shoot_flags & 0x01u) != 0u) &&
+               ((shoot_flags & 0x08u) == 0u) &&
+               (Launcher_LiftAllowsShoot() != 0u) &&
                (Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
                (Launcher_FricOnline(SHOOT_FRIC_R) != 0u)) ? 1u : 0u;
     dial_on = ((fric_on != 0u) && (dial_ready != 0u)) ? 1u : 0u;
@@ -966,8 +980,9 @@ void Launcher_Work(void)
     /* 发射总开关关闭：降速后进入休眠 */
     if (fric_on == 0u)
     {
+        launcher_feed_armed = 0u;
         launcher.enabled = 0u;
-        launcher.last_shoot_level = Board_Rx_Info.shoot_pkt.shoot_level;
+        launcher.last_shoot_level = (shoot_flags >> 2) & 0x01u;
         Launcher_UpdateFrictionReady(0u);
 
         if (launcher.state == LAUNCHER_SLEEP)
@@ -1033,12 +1048,22 @@ void Launcher_Work(void)
     launcher.fric_target_rpm = LAUNCHER_FRIC_TARGET_RPM; /* 目标转速 */
     Launcher_UpdateFrictionReady(1u);
 
-    shoot_level = Board_Rx_Info.shoot_pkt.shoot_level;
-    shoot_mode = Board_Rx_Info.shoot_pkt.shoot_mode;
+    shoot_level = (shoot_flags >> 2) & 0x01u;
+    shoot_mode = (shoot_flags >> 1) & 0x01u;
 #if !LAUNCHER_DIAL_ENABLE
     shoot_level = 0u;
     shoot_mode = 0u;
 #endif
+
+    /* 恢复时不沿用旧触发 */
+    if ((feed_permit == 0u) || (dial_ready == 0u))
+    {
+        launcher_feed_armed = 0u;
+    }
+    else if (shoot_level == 0u)
+    {
+        launcher_feed_armed = 1u;
+    }
 
     single_rising = ((shoot_level != 0u) && /* 单发升沿 */
                      (launcher.last_shoot_level == 0u) &&
@@ -1051,6 +1076,27 @@ void Launcher_Work(void)
          (launcher_heat.heat > launcher_heat.heat_limit) :
          ((launcher_heat.blocked != 0u) ||
           ((shoot_mode != 0u) && (launcher_heat.target_rate <= 0.0f)))))
+    {
+        shoot_active = 0u;
+        single_rising = 0u;
+        if (shoot_level != 0u)
+        {
+            launcher_feed_armed = 0u;
+        }
+    }
+
+    /* 达速仅约束新供弹 */
+    if ((shoot_active != 0u) &&
+        (launcher.state != LAUNCHER_SINGLE) &&
+        (launcher.state != LAUNCHER_REPEAT) &&
+        (launcher.state != LAUNCHER_REVERSE) &&
+        (launcher.state != LAUNCHER_RELOAD) &&
+        (launcher.fric_ready == 0u))
+    {
+        launcher_feed_armed = 0u;
+    }
+
+    if (launcher_feed_armed == 0u)
     {
         shoot_active = 0u;
         single_rising = 0u;
@@ -1071,10 +1117,18 @@ void Launcher_Work(void)
         return;
     }
 
+    if (launcher_feed_armed == 0u)
+    {
+        Launcher_FricControl(1u);
+        Launcher_DialControl(0u);
+        return;
+    }
+
     if ((shoot_active != 0u) && (launcher_dial_stopped != 0u))
     {
         if (Launcher_DialRun() != HAL_OK)
         {
+            launcher_feed_armed = 0u;
             Launcher_FricControl(1u);
             return;
         }

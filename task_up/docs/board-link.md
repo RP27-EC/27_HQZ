@@ -23,7 +23,7 @@ D1 b1–4 的速度字段映射范围为 [-8000,8000]；D2/C2 的 IMU 角映射 
 | 帧/字节 | 位或编码 | 上板解析结果 | 消费边界 |
 | --- | --- | --- | --- |
 | D1 b0 | bit0–1 car_state；bit2 gimbal_mode；bit3–5 vision_mode；bit6 game_start；bit7 my_color | 上板解码车辆状态与模式 | 当前云台选择只按 `gimbal_mode` 的 0/非0 分支选择 MEC/RATE；vision 字段不会自动启用视觉控制 |
-| D1 b5 | bit0 launch_state；bit1 shoot_mode；bit2 shoot_level；bit3 is_hole；bit4 r_turn_active | 发射许可/模式/触发/升降请求及R掉头状态 | bit4只在机械Yaw控制中选择R专用斜坡及最大速度；需同步更新上下板 |
+| D1 b5 | bit0 launch_state；bit1 shoot_mode；bit2 shoot_level；bit3 is_hole；bit4 r_turn_active；bit5 feed_permit | 摩擦轮使能/模式/触发/升降请求/R掉头状态/供弹许可 | bit4只在机械Yaw控制中选择R专用斜坡及最大速度；新旧发射固件不可混用，需同步更新上下板 |
 | D2 b0–7 | 四个 uint16，大端 | Pitch IMU、Yaw IMU、Pitch mec、Yaw mec | IMU 区间 [-360,360] deg；机械角区间 [-4,4] rad；超范围编码会饱和 |
 | D3 b0–5 | heat_limit、barrel_heat、cooling_rate 各 uint16 大端 | 裁判量与冷却率快照 | b7 bit0 参数有效、bit1 热量有效；收帧只刷新 `rx_tick`，不会替发送端保证其数据有效 |
 | D5 b0 | bit0 valid；bit1 source；bit2 cmd_type | 角速度或鼠标增量类型选择 | 仅 `source=键鼠 && cmd_type=鼠标` 时按鼠标计数解释 b2–5；其他情况按 0.1 deg/s/LSB |
