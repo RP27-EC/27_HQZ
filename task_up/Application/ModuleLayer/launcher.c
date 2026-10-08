@@ -35,6 +35,11 @@ static uint8_t launcher_dial_stopped; /* 1 = 拨盘已停机 */
 static uint32_t launcher_dial_stop_tick; /* 上次停机命令时刻 */
 static uint8_t launcher_dial_target_synced; /* 目标是否已对齐反馈 */
 static uint8_t launcher_dial_recovery_repeat; /* 恢复后是否回连发 */
+static uint8_t launcher_dial_last_is_hole; // 上次过洞请求，0/1
+static uint8_t launcher_dial_hole_release_pending; // 退出延时有效，0/1
+static uint32_t launcher_dial_hole_release_tick; // 退出请求时刻，ms
+static uint32_t launcher_dial_hold_tx_tick; // 上次保持发送时刻，ms
+static uint32_t launcher_dial_hold_active_tick; // 上次保持纠偏时刻，ms
 #if LAUNCHER_DIAL_JAM_ENABLE
 static int8_t launcher_dial_motion_direction; /* 拨盘运动方向 */
 #endif
@@ -523,6 +528,8 @@ static void Launcher_DialEnterHold(uint32_t now, uint8_t capture)
     launcher_dial.settling = 0u;
     launcher.jam_tick = 0u;
     Launcher_DialClearPid();
+    launcher_dial_hold_tx_tick = now - LAUNCHER_DIAL_HOLD_TX_INTERVAL_MS;
+    launcher_dial_hold_active_tick = now;
 }
 
 static void Launcher_DialEnterBrake(uint32_t now)
@@ -539,6 +546,8 @@ static void Launcher_DialEnterBrake(uint32_t now)
 static void Launcher_DialHoldControl(void)
 {
     int16_t current_output;
+    uint32_t now = HAL_GetTick();
+    uint32_t tx_interval;
 
     launcher_dial_hold_angle_pid.target = (float)launcher_dial_target;
     launcher_dial_hold_angle_pid.measure = (float)Launcher_DialAngle();
@@ -556,7 +565,53 @@ static void Launcher_DialHoldControl(void)
     current_output = (int16_t)constrain(
         LAUNCHER_DIAL_OUTPUT_SIGN * launcher_dial_hold_speed_pid.out,
         -LAUNCHER_DIAL_CURRENT_LIMIT, LAUNCHER_DIAL_CURRENT_LIMIT);
-    Launcher_DialApplyTorque(current_output);
+    if ((fabsf(launcher_dial_hold_angle_pid.err) > 0.0f) ||
+        (fabsf(launcher_dial_hold_speed_pid.measure) >
+         (float)LAUNCHER_DIAL_SETTLE_SPEED_DPS))
+    {
+        launcher_dial_hold_active_tick = now;
+    }
+
+    // NOTE: 纠偏保留快速阻尼
+    tx_interval = ((now - launcher_dial_hold_active_tick) <
+                   LAUNCHER_DIAL_HOLD_IDLE_CONFIRM_MS) ?
+                  LAUNCHER_DIAL_HOLD_ACTIVE_TX_MS :
+                  LAUNCHER_DIAL_HOLD_TX_INTERVAL_MS;
+    if ((now - launcher_dial_hold_tx_tick) >= tx_interval)
+    {
+        Launcher_DialApplyTorque(current_output);
+        launcher_dial_hold_tx_tick = now;
+    }
+}
+
+static uint8_t Launcher_DialHoleHoldAllowed(uint32_t now)
+{
+    if (Board_Rx_Info.shoot_pkt.is_hole != 0u)
+    {
+        launcher_dial_last_is_hole = 1u;
+        launcher_dial_hole_release_pending = 0u;
+        return 0u;
+    }
+
+    if (launcher_dial_last_is_hole != 0u)
+    {
+        launcher_dial_last_is_hole = 0u;
+        launcher_dial_hole_release_pending = 1u;
+        launcher_dial_hole_release_tick = now;
+    }
+
+    // NOTE: 恢复不依赖升降到位
+    if (launcher_dial_hole_release_pending != 0u)
+    {
+        if ((now - launcher_dial_hole_release_tick) <
+            LAUNCHER_DIAL_HOLE_RELEASE_DELAY_MS)
+        {
+            return 0u;
+        }
+        launcher_dial_hole_release_pending = 0u;
+    }
+
+    return 1u;
 }
 
 /* 失能后禁止追赶旧目标 */
@@ -958,6 +1013,11 @@ void Launcher_Init(void)
     launcher_dial_stop_tick = 0u;
     launcher_dial_target_synced = 0u;
     launcher_dial_recovery_repeat = 0u;
+    launcher_dial_last_is_hole = 0u;
+    launcher_dial_hole_release_pending = 0u;
+    launcher_dial_hole_release_tick = 0u;
+    launcher_dial_hold_tx_tick = 0u;
+    launcher_dial_hold_active_tick = 0u;
 #if LAUNCHER_DIAL_JAM_ENABLE
     launcher_dial_motion_direction = (int8_t)LAUNCHER_DIAL_DIRECTION;
 #endif
@@ -1043,12 +1103,14 @@ void Launcher_Work(void)
     uint8_t single_rising;
     uint8_t continuous;
     uint8_t vehicle_on;
+    uint8_t hole_hold_allowed;
     uint8_t last_feed_allowed = launcher_dial.feed_allowed;
     int32_t current_angle = Launcher_DialAngle();
 
     launcher.dial_angle = current_angle;
     launcher.dial_online = Launcher_DialOnline();
     Launcher_HeatUpdate(now);
+    hole_hold_allowed = Launcher_DialHoleHoldAllowed(now);
 
     vehicle_on = ((Board_HeartBeat.status == DEV_ONLINE) &&
                   (Board_Rx_Info.state_pkt.car_state != 0u)) ? 1u : 0u;
@@ -1065,6 +1127,7 @@ void Launcher_Work(void)
     launcher_dial.hold_allowed = ((vehicle_on != 0u) &&
         (launcher.dial_online != 0u) &&
         (dail_motor.KT_motor_info.rx_info.encoder_sum_ready != 0u) &&
+        (hole_hold_allowed != 0u) &&
         (launcher.fault == 0u)) ? 1u : 0u;
 #else
     launcher_dial.hold_allowed = 0u;

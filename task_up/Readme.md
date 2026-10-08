@@ -146,9 +146,10 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 ### 发射与热量 FSM
 
 - 发射请求由下板 D1 发来，供弹要求有效许可、摩擦轮与拨盘在线、热量预算有效；`fric_ready` 仍为观测值。
-- 拨盘独立阶段见 `launcher_dial.state`：整车使能且板间/拨盘在线时保持，摩擦轮关闭、S2 中位或升降互锁不卸力；失能、断联或故障时卸力。
+- 拨盘独立阶段见 `launcher_dial.state`：摩擦轮关闭、S2 中位时保持；过洞请求期间停机，退出请求后等待 `LAUNCHER_DIAL_HOLE_RELEASE_DELAY_MS=2000 ms` 恢复保持，不依赖升降到位或故障码。整车失能、断联、拨盘离线或发射机构故障时卸力，供弹仍受下板发射许可约束。
 - 单发累加原目标，释放后完成本发；500 ms 未完成则制动后保持当前位置。启动发送失败最多等待 50 ms，拒绝/超时/许可中断后须释放再触发。
 - 待发位置 KP=0.04、死区 100 count，速度 KP=0.15、KI/KD=0；单发和连发力度不变。拨盘与连发使能为 1，堵转退让为 0；主路径不进入旧 `SPINUP/INIT` 枚举值。
+- 待发保持进入时立即发送力矩；运动或纠偏时按 `LAUNCHER_DIAL_HOLD_ACTIVE_TX_MS=1 ms` 发送，误差进入 100 count 死区且速度不超过 20°/s，连续 `LAUNCHER_DIAL_HOLD_IDLE_CONFIRM_MS=100 ms` 后按 `LAUNCHER_DIAL_HOLD_TX_INTERVAL_MS=10 ms` 发送。PID 计算与单发、连发、制动及摩擦轮/升降组帧周期不变。
 
 热量训练模式关闭；有效 D3 到来前不建立发射预算。当前参数：每发估算热量 10、余量 20、连发恢复余量 30、最大射频 15 发/s、D3 超时 100 ms。失去许可进入减速/制动过程，不保证瞬时停转。完整状态与门槛见[发射模块说明](docs/launcher.md)。
 

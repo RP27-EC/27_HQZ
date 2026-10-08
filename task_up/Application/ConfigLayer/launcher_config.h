@@ -33,6 +33,10 @@
 #define LAUNCHER_DIAL_SPEED_OUT_MAX       1500.0f // 单发电流限幅，原始量
 
 /* 待发独立阻尼 */
+#define LAUNCHER_DIAL_HOLE_RELEASE_DELAY_MS 2000u // 退出过洞恢复延时，ms
+#define LAUNCHER_DIAL_HOLD_TX_INTERVAL_MS  10u // 稳态发送间隔，ms，至少1
+#define LAUNCHER_DIAL_HOLD_ACTIVE_TX_MS    1u // 纠偏发送间隔，ms，至少1
+#define LAUNCHER_DIAL_HOLD_IDLE_CONFIRM_MS 100u // 保持稳态确认，ms
 #define LAUNCHER_DIAL_HOLD_ANGLE_KP        0.04f // 位置增益，(deg/s)/count
 #define LAUNCHER_DIAL_HOLD_DEADBAND        100.0f // 保持误差死区，count
 #define LAUNCHER_DIAL_HOLD_SPEED_KP        0.15f // 速度增益，原始量/(deg/s)
