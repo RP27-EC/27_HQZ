@@ -45,6 +45,45 @@ extern launcher_t launcher;
 
 typedef enum
 {
+    LAUNCHER_DIAL_REJECT_NONE = 0, // 无拒绝，值0
+    LAUNCHER_DIAL_REJECT_HEAT, // 热量不足，值1
+    LAUNCHER_DIAL_REJECT_BUSY, // 动作未结束，值2
+    LAUNCHER_DIAL_REJECT_OFFLINE, // 通信或电机离线，值3
+    LAUNCHER_DIAL_REJECT_INTERLOCK, // 失能或互锁，值4
+    LAUNCHER_DIAL_REJECT_START, // 启动发送超时，值5
+    LAUNCHER_DIAL_REJECT_TIMEOUT, // 单发未完成，值6
+} launcher_dial_reject_e;
+
+typedef struct
+{
+    launcher_state_e state; // 拨盘独立阶段，0~9
+    launcher_dial_reject_e reject_reason; // 最近拒绝原因，0~6
+    int64_t target_angle; // 累计目标，count
+    int64_t target_error; // 目标减反馈，count
+    float speed_target_dps; // 最近速度目标，deg/s
+    int16_t output_current_raw; // 最近电流指令，原始量
+    uint8_t hold_allowed; // 允许保持，0/1
+    uint8_t feed_allowed; // 允许供弹，0/1
+    uint8_t pending_single; // 等待启动单发，0/1
+    uint8_t trigger_ready; // 已释放触发可重发，0/1
+    uint8_t run_tx_status; // 启动HAL结果，0~3
+    uint8_t torque_tx_status; // 力矩HAL结果，0~3
+    uint8_t stop_tx_status; // 停机HAL结果，0~3
+    uint32_t accepted_count; // 已接纳单发数，次
+    uint32_t rejected_count; // 拒绝单发数，次
+    uint32_t completed_count; // 到位单发数，次
+    uint32_t timeout_count; // 未完成单发数，次
+    uint32_t start_timeout_count; // 启动超时数，次
+    uint32_t state_tick; // 拨盘阶段起点，ms
+    uint32_t pending_tick; // 等待启动起点，ms
+    uint32_t settle_tick; // 到位确认起点，ms
+    uint8_t settling; // 正在确认到位，0/1
+} launcher_dial_t;
+
+extern launcher_dial_t launcher_dial;
+
+typedef enum
+{
     LAUNCHER_HEAT_NONE = 0, // 无有效初始参数，禁发
     LAUNCHER_HEAT_REFEREE, // 裁判有效，值1
     LAUNCHER_HEAT_ESTIMATE, // 断链本地估算，值2

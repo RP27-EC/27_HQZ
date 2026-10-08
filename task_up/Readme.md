@@ -145,7 +145,10 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 
 ### 发射与热量 FSM
 
-发射请求由下板 D1 发来；上板总使能要求板间在线、许可有效且左右摩擦轮在线，拨盘动作另受拨盘在线和热量预算约束。当前正常使能路径从休眠直接进入 `LAUNCHER_READY`；`SPINUP/INIT` 代码分支未由常规路径选择。`fric_ready` 会计算达速状态，但当前不是拨盘供弹硬互锁。`LAUNCHER_DIAL_ENABLE=1`、`LAUNCHER_REPEAT_ENABLE=1`，但拨盘自动归零与堵转退让默认关闭（`LAUNCHER_DIAL_AUTO_RESET_ENABLE=0`、`LAUNCHER_DIAL_JAM_ENABLE=0`）。
+- 发射请求由下板 D1 发来，供弹要求有效许可、摩擦轮与拨盘在线、热量预算有效；`fric_ready` 仍为观测值。
+- 拨盘独立阶段见 `launcher_dial.state`：整车使能且板间/拨盘在线时保持，摩擦轮关闭、S2 中位或升降互锁不卸力；失能、断联或故障时卸力。
+- 单发累加原目标，释放后完成本发；500 ms 未完成则制动后保持当前位置。启动发送失败最多等待 50 ms，拒绝/超时/许可中断后须释放再触发。
+- 待发位置 KP=0.04、死区 100 count，速度 KP=0.15、KI/KD=0；单发和连发力度不变。拨盘与连发使能为 1，堵转退让为 0；主路径不进入旧 `SPINUP/INIT` 枚举值。
 
 热量训练模式关闭；有效 D3 到来前不建立发射预算。当前参数：每发估算热量 10、余量 20、连发恢复余量 30、最大射频 15 发/s、D3 超时 100 ms。失去许可进入减速/制动过程，不保证瞬时停转。完整状态与门槛见[发射模块说明](docs/launcher.md)。
 
