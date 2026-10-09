@@ -1216,7 +1216,8 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
             launcher_dial.state_tick = now;
             launcher.jam_tick = 0u;
             launcher_speed_runtime.repeat_tick = now;
-            launcher_speed_runtime.repeat_ready_seen = 0u;
+            launcher_speed_runtime.repeat_ready_tick = now;
+            launcher_speed_runtime.repeat_ready_seen = 1u;
             Launcher_SpeedClearSamples();
             Launcher_HeatStartRepeat();
             Launcher_DialClearPid();
@@ -1234,7 +1235,8 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
             launcher_dial.settling = 0u;
             launcher.jam_tick = 0u;
             launcher_speed_runtime.repeat_tick = now;
-            launcher_speed_runtime.repeat_ready_seen = 0u;
+            launcher_speed_runtime.repeat_ready_tick = now;
+            launcher_speed_runtime.repeat_ready_seen = 1u;
             Launcher_SpeedClearSamples();
             Launcher_HeatStartRepeat();
             Launcher_DialClearPid();
