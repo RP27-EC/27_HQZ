@@ -78,7 +78,7 @@ F 键仅在遥控在线且 S1 上位时以按下沿翻转键鼠输入源。遥�
 
 ### 长按和上升沿的区别
 
-`keyboard_status_update()` 在第一次按下更新为 `release_to_press`，持续按住时增加计数，到 `cnt_max` 后置 `long_press`，松开清计数。鼠标左右键 `cnt_max=500`，定义在 [rc_sensor.h](../Application/DeviceLayer/Sensor/rc_sensor.h)；它是更新次数门限，名义1 tick循环下约500 ms，不能当作独立计时器保证。
+`keyboard_status_update()` 在第一次按下更新为 `release_to_press`，持续按住时增加计数，到 `cnt_max` 后置 `long_press`，松开清计数。鼠标左键 `cnt_max=300`、右键 `cnt_max=500`，定义在 [rc_sensor.h](../Application/DeviceLayer/Sensor/rc_sensor.h)；它们是更新次数门限，名义1 ms循环下分别约300 ms和500 ms，不能当作独立计时器保证。左键门限早于上板500 ms单发超时，上板单发状态收到有效连发请求后直接切换连发。
 
 F、R、B等动作读取的边沿及来源条件分别在消费函数中判断；鼠标左键在键鼠发射分支中长按选择连发。按键状态识别成功与上板接受供弹是不同步骤。
 

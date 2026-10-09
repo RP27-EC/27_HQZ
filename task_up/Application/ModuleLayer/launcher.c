@@ -790,6 +790,19 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         break;
 
     case LAUNCHER_SINGLE:
+#if LAUNCHER_REPEAT_ENABLE
+        /* 长按优先于单发超时 */
+        if (continuous != 0u)
+        {
+            launcher_dial.state = LAUNCHER_REPEAT;
+            launcher_dial.state_tick = now;
+            launcher_dial.settling = 0u;
+            launcher.jam_tick = 0u;
+            Launcher_HeatStartRepeat();
+            Launcher_DialClearPid();
+            break;
+        }
+#endif
         if ((Launcher_DialAtTarget(launcher_dial_target) != 0u) &&
             (speed <= (float)LAUNCHER_DIAL_SETTLE_SPEED_DPS))
         {
