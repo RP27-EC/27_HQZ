@@ -4,6 +4,23 @@
 
 本目录对应 STM32F407 上板运行链路。任务入口在 `Application/TaskLayer/control_task.c`；模式/状态控制位于 ModuleLayer，器件采集和电机协议位于 DeviceLayer/HardwareLayer。
 
+## 按模块讲解的顺序
+
+| 模块 | 一句话说清职责 | 输入 → 处理 → 输出 | 优先打开的源码 |
+| --- | --- | --- | --- |
+| IMU | 将 BMI088 采样转成云台可用的姿态/速率 | SPI 原始量 → 坐标变换、零偏、EKF → `imu_data.base_info` | [imu_sensor.c](../Application/DeviceLayer/Sensor/imu_sensor.c)、[bmi_EKF.c](../Application/DeviceLayer/Imu/bmi_EKF.c) |
+| 云台 | 按模式将目标与反馈转成两轴力矩 | D1/D2/D5、IMU/DM → 目标仲裁、闭环、补偿 → DM Yaw/Pitch | [gimbal.c](../Application/ModuleLayer/gimbal.c)、[gimbal.h](../Application/ModuleLayer/gimbal.h) |
+| 升降 | 建立零点后按编码器目标执行上下运动 | D1 请求、RM 反馈、云台状态 → FSM、双环、保护 → 升降输出和 C1 状态 | [lift.c](../Application/ModuleLayer/lift.c)、[lift_config.h](../Application/ConfigLayer/lift_config.h) |
+| 发射 | 独立控制摩擦轮与拨盘，并管理热量 | D1 许可/触发、D3、电机反馈 → 速度/位置环、热量状态 → RM/KT 命令 | [launcher.c](../Application/ModuleLayer/launcher.c)、[launcher_config.h](../Application/ConfigLayer/launcher_config.h) |
+| 电机驱动 | 将控制量与设备专用协议互相转换 | 模块输出/总线反馈 → 打包、解码、单位换算、心跳 → 电机对象 | [motor.c](../Application/DeviceLayer/motor.c)、[can_protocol.c](../Application/ProtocolLayer/can_protocol.c) |
+| 板间协议 | 接收下板控制并回传执行状态 | D1–D5 → 解码对象；本板状态 → C1/C2 | [communicate.c](../Application/ProtocolLayer/communicate.c) |
+
+讲每个模块时依次回答五件事：**谁调用它、输入是什么、核心算法/状态是什么、输出到哪里、什么条件会限制输出**。具体参数和函数阅读顺序见下方模块页；全项目讲解口径见[根 README](../../README.md#项目讲解与源码速查)。
+
+### 一轮上板控制中的先后关系
+
+`StartControlTask()` 更新 IMU 后调用 `Module_Work()`，该函数先 `Gimbal.work()` 再 `Lift_Work()`；随后发送 DM 命令，执行 `Launcher_Work()`，最后尝试 C1/C2 回传。模块在同一任务中顺序执行，部分跨模块标志会由后一模块更新并在下一轮被前一模块消费。CAN 接收中断还可能在任务执行期间更新协议对象，不能把整轮理解为原子事务。
+
 ```mermaid
 flowchart LR
   CAN[下板 D1-D5 / CAN2] --> CONTROL[1 ms ControlTask]

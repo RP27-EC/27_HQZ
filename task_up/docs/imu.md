@@ -63,3 +63,29 @@ flowchart LR
 ### 坐标与单位检查
 
 BMI088 芯片量程为 ±3 g 和 ±2000 deg/s；中间层输出经过轴向映射/单位换算后才进入 EKF。检查符号时按“芯片原始轴 → `imu_frame_rotate` 后轴 → `imu_data.base_info` → Gimbal 使用字段”逐层对照。同一物理转动下 raw 轴符号与云台逻辑轴符号可能因安装方向不同，不宜只凭传感器数据表推断软件正方向。
+
+## 按函数讲解姿态估算
+
+| 文件与函数 | 计算职责 | 输入/输出 |
+| --- | --- | --- |
+| [BMI088driver.c](../Application/DeviceLayer/Imu/BMI088driver.c) `BMI088_init()` / `BMI088_read()` | 配置器件并读取采样 | SPI 寄存器 → 陀螺、加速度、温度 |
+| [BMI088Middleware.c](../Application/DeviceLayer/Imu/BMI088Middleware.c) | SPI/片选/延时适配 | 驱动调用 → SPI1 事务；不是姿态滤波器 |
+| [imu_sensor.c](../Application/DeviceLayer/Sensor/imu_sensor.c) `InitQuaternion()` | 建立姿态初值 | 100次加速度平均，采样间延时1 ms → 初始四元数 |
+| 同文件 `imu_update()` | 坐标变换、校准、滤波与算法调度 | 采样和时间差 → `imu_data.base_info` |
+| [bmi_EKF.c](../Application/DeviceLayer/Imu/bmi_EKF.c) `ekf_init()` / `ekf_update()` | 四元数 EKF 预测与观测更新 | 陀螺 rad/s、加速度、dt 秒 → 四元数/欧拉角 |
+| [control_task.c](../Application/TaskLayer/control_task.c) `imu_debug_update()` | 拷贝调试快照 | raw/base/state → `imu_dbg` |
+
+### EKF 为什么放在控制链之前
+
+陀螺积分适合描述短时旋转，但存在零偏；加速度观测提供重力方向约束。EKF 用非线性姿态模型融合这些量，云台再使用输出角度和角速度闭环。仅有重力观测不能提供绝对航向基准，本链路不能据此宣称长期 Yaw 无漂移。
+
+当前 `IMU_USE_EKF=1`。`ekf_init()` 调用参数为过程噪声1=10、过程噪声2=0.001、观测噪声=8000000、lambda=1；这些是算法内部权重，不能当作角度误差指标。定义位置为 `imu_sensor.c`，消费位置为 `bmi_EKF.c`。
+
+### 当前处理路径的细节
+
+- 校准累计2000次旋转后的三轴陀螺值；正常 EKF 路径当前只显式叠加 `gz_offset`，不能讲成三轴均执行相同零偏补偿。
+- 代码计算了低通后的 `gyro_/acc_`，但当前 `ekf_update()` 实参是未低通副本 `gyrox/gyroy/gyroz/accx/accy/accz`；角速度输出和世界系加速度使用滤波副本。不能根据前面存在 Lowpass 调用推断 EKF 使用了该滤波结果。
+- EKF 的 dt 由 `micros()` 差值换算秒；首次按1 ms建立，异常超过1 s时回退0.001 s。它与控制任务名义1 ms周期是两个概念。
+- 输出 `rate_pitch/rate_roll/rate_yaw` 由 rad/s 转 deg/s；欧拉角为deg。数据故障检查是采样六轴全零的累计计数，不能将它介绍为完整的传感器健康诊断。
+
+可用于讲解：“BMI088采样先适配安装坐标，再经过校准与四元数EKF生成姿态；云台消费姿态和角速度，设备在线、校准完成与姿态精度分别判断。”

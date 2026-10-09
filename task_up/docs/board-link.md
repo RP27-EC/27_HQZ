@@ -58,3 +58,25 @@ D1 b1–4 的速度字段映射范围为 [-8000,8000]；D2/C2 的 IMU 角映射 
 4. 最后核对 C1/C2 入队结果、下板反馈 age 和解码值；本地发送成功不是端到端确认。
 
 接收异常先核实双方标准 ID、过滤器、位时序和物理收发器，再核对字段定义。接口或位域调整需要同步[下板协议页](../../task_down/docs/board-link.md)和根 README。
+
+## 按函数讲解收发实现
+
+| 顺序 | 文件与函数 | 说明 |
+| --- | --- | --- |
+| 1 | [drv_can.c](../Application/DriverLayer/drv_can.c) 接收回调 | 从FIFO取帧，进入协议分发 |
+| 2 | [can_protocol.c](../Application/ProtocolLayer/can_protocol.c) `CAN2_rxDataHandler()` | 同一CAN2上区分Yaw电机与D帧标准ID |
+| 3 | [communicate.c](../Application/ProtocolLayer/communicate.c) `Board_Rx_01/02/03/05()` | 解码目标对象，更新心跳/接收时间；D3另存seen/flags/seq |
+| 4 | 同文件 `Board_GetHeatSnapshot()` | 在保存/恢复中断状态的临界区复制D3对象，供热量模块读取 |
+| 5 | `Board_Tx_Update()` / `Board_Tx_Meg_01/02()` | 从电机/云台/升降状态形成C1/C2，定点编码 |
+| 6 | `Send_To_Down_Board()` | 判断每类5 ms间隔及邮箱空位，单次最多尝试一帧 |
+| 7 | `C_Board_Communicate_HeartBeat()` | D1/D2任一离线即判总体离线；其他帧计数不能替代关键帧 |
+
+### 用一个数字说明定点编码
+
+D5角速度编码步长为0.1 deg/s：目标+50 deg/s对应有符号整数500，即大端字节 `01 F4`；-50 deg/s对应int16的-500，即 `FE 0C`。这与D2/C2按范围映射到uint16的方法不同。机械角是rad、IMU角是deg，均不能把两字节直接当浮点数。
+
+### 本协议没有整组原子接收保证
+
+D1/D2/D5有独立CAN ID；即使下板预留三个FIFO空位，仍是三次独立发送和接收。当前没有共同控制组序号、版本协商或整组事务确认，上板可能短时组合不同更新时间的字段。D3有源序号，但它用于热量数据校准，不能当作整个控制组序号。
+
+可用于讲解：“板间协议把模式、目标、手动速率和热量拆成经典CAN帧，上板按ID解码到共享对象；状态反馈单独回传，在线、字段有效和执行成功分别判断。”

@@ -60,3 +60,22 @@
 | b7 | bit0 cap switch、bit1 turbo、bit2 pre-charge | 三个位当前全为 0 |
 
 因此现有 0x222 是关闭输出项的配置帧；确认总线有 0x222 只能证明通信尝试，不能推断超电开关或预充已经打开。
+
+## 按函数讲解当前实现
+
+| 文件与函数 | 输入 → 输出 | 当前意义 |
+| --- | --- | --- |
+| [supercap.c](../Application/DeviceLayer/supercap.c) `SuperCap_Init()` | 零初值 → 设备/统计对象 | 初始OFFLINE，等待反馈 |
+| 同文件 `SuperCap_Tx()` | 配置宏 → 0x222控制帧 | CtrlTask每轮尝试发送；当前控制字段全零 |
+| `SuperCap_Rx()` | 0x211 → raw反馈、缩放值、时间戳 | 收帧更新 `rx_count/last_rx_ms` 并置ONLINE |
+| `SuperCap_Heartbeat()` | 最近接收年龄 → 状态 | 年龄达到100 ms转OFFLINE；不是放电状态判定 |
+| [supercap_protocol.c](../Application/ProtocolLayer/supercap_protocol.c) `SuperCap_Protocol_Decode/Encode()` | 字节 ↔ 协议结构 | 小端字段，与板间大端协议不同 |
+| [power_limit.c](../Application/AlgorithmLayer/power_limit.c) `Power_Limit_SetCapFeedback()` | 超电观测量 → 功率状态 | 记录观测，不参与目标预算/公共比例计算 |
+
+### 统计值应该怎样解释
+
+`SuperCap_Tx()` 调用发送后直接增加 `tx_count`，没有根据HAL返回过滤，因此该计数表示发送尝试次数，不能称为成功次数。`rx_count`和`last_rx_ms`表示程序收到并解码对应反馈，也不能确认电容已输出能量。
+
+`offline_count`有辅助计数，但真实离线转移依据 `HAL_GetTick()-last_rx_ms>=100` ms。上电OFFLINE时心跳函数不会凭计数自行转ONLINE，恢复由接收路径触发。
+
+可用于讲解：“超电模块当前只完成协议收发、在线维护和观测，输出功能宏关闭；功率限制使用裁判缓冲和电机模型，尚未把超电接入执行闭环。”

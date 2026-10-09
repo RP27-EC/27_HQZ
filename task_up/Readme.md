@@ -4,6 +4,8 @@
 
 上板采集 BMI088 姿态数据，执行云台/升降/发射控制并通过 CAN2 接收下板命令、回传状态。Keil Target 为 `My_C`。
 
+讲解项目时先读[项目讲解与源码速查](../README.md#项目讲解与源码速查)：包含双板分工、算法解释、参数数值、完整动作链和常见追问。本页继续提供上板启动与运行细节。
+
 ## 架构与启动
 
 ```mermaid
@@ -141,7 +143,7 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 | C1 byte1=0/1/2/3 | 就绪/停止、运动中、上位等待/就绪、故障；值 2 不能代替 `home_valid` |
 | `lift_debug.mode` | 手动调试路径；会绕开正常状态机的一部分动作判定 |
 
-找顶用电流阈值并结合低速或位置停滞确认；确认后建立零点并回退。对齐条件不满足会等待，不等于运动故障。异常边界与调试变量见[升降模块说明](docs/lift.md)。
+找顶用电流阈值并结合低速或位置停滞确认；当前完成后建立零点、生成上下目标，直接进入 `LIFT_READY_UP` 并卸力，没有进入保留的 `LIFT_RETRACT_DOWN` 回退分支。上端目标偏移 5 圈，下端目标偏移 280 圈，均相对 `top_zero`。常规下行对齐条件不满足会等待；已有零点的 `LIFT_WAIT` 下行分支可直接进入运动，不能将对齐描述成覆盖所有恢复路径。异常边界与调试变量见[升降模块说明](docs/lift.md)。
 
 ### 发射与热量 FSM
 
@@ -173,7 +175,7 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 | --- | --- |
 | `Application/ConfigLayer/gimbal_init_config.h` | 归中目标 0 deg；Yaw/Pitch 归中力矩上限 6 N·m；速度规划开关 0；超时 6000 ms |
 | `Application/ModuleLayer/gimbal.h` | 控制步长 0.001 s；Yaw 静摩擦前馈 0.3 N·m；Pitch/Yaw 最终默认力矩限幅 6 N·m；重力补偿开关 1 |
-| `Application/ConfigLayer/lift_config.h` | 行程 280 圈；找顶 2865 rpm；回退 5 圈；行程超时 90000 ms |
+| `Application/ConfigLayer/lift_config.h` | 下端目标距顶部零点 280 圈；找顶 2865 rpm；上端目标偏移 5 圈，当前找顶完成不自动回退；行程超时 90000 ms |
 | `Application/ConfigLayer/launcher_config.h` | 摩擦轮目标 1500 rpm；射频上限 15 发/s；热量余量 20；D3 超时 100 ms |
 | `Application/ConfigLayer/board_remote_config.h` | 下板遥控输入开；本地遥控关闭；C1/C2 各自最短间隔 5 ms |
 

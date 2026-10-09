@@ -60,3 +60,23 @@ chassis_cmd_t(vx, vy, wz)
 ```
 
 反馈也需区分原始与换算字段：`encoder_speed` 是转子 RPM；`speed` 是按减速比换算后的输出轴 rad/s；两者不是同一个量。怀疑轮序时应同时对照软件枚举、反馈 ID、槽位和实体左前/左后/右前/右后，避免仅凭数组下标推断线束位置。
+
+## 按源码讲解驱动适配
+
+| 文件与函数 | 输入 → 输出 | 职责边界 |
+| --- | --- | --- |
+| [motor.c](../Application/DeviceLayer/motor.c) | 实例配置 → `wheel_group`、各轮PID/反馈对象 | 轮序、型号和总线绑定，不计算整车运动学 |
+| [can_protocol.c](../Application/ProtocolLayer/can_protocol.c) `CAN1_rxDataHandler()` | FDCAN1标准ID/字节 → 对应轮更新 | 同一总线还需区分超电0x211 |
+| [RM_motor.c](../Application/HardwareLayer/RM_motor.c) `rm_motor_update()` | RM字节 → 编码器/rpm/current/temperature | 反馈解码并刷新在线计数 |
+| 同文件 `RPM_to_Rads()` / `Torque_to_Raw_Current()` | 型号与rpm/N·m → 输出轴rad/s/原始电流 | 单位换算依赖 `_3508_Reduction` 分支 |
+| `Group_Motor_Set_Torque()` | 四轮原始电流 → 0x200四槽 | 合帧发送；槽位与各反馈ID对应 |
+| [chassis_control.c](../Application/ModuleLayer/chassis_control.c) | 轮速误差 → 候选/最终力矩 | 运动学、闭环、限矩和限功位于业务模块 |
+| [drv_can.c](../Application/DriverLayer/drv_can.c) `CAN_SendData()` | 标准ID/数据 → HAL入队结果 | 不提供电机执行确认 |
+
+### 反馈与功率模型为何保留两套速度
+
+轮速闭环使用输出轴 `speed`，功率模型使用转子 `encoder_speed`；模型系数是按转子rpm拟合的，不能将输出轴rad/s直接代入。同理，模型输入电流是发送协议原始计数，不能直接替换为A或N·m。
+
+同名 `RM_motor.c` 在上下板各有一份，上板摩擦轮/升降使用单电机原始电流分支，下板四轮使用减速电机力矩换算分支。定位问题先核对实际构建板卡，避免改错另一板驱动。
+
+可用于讲解：“四轮电机驱动负责反馈解码、减速比和电流换算，底盘模块计算速度闭环并决定最终力矩；一次0x200命令包含四轮输出，任何轮离线由整组保护停机。”

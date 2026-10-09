@@ -23,7 +23,7 @@ flowchart LR
   ONLINE[四轮心跳] --> SCALE
 ```
 
-调度入口为 `task_down/Application/TaskLayer/Ctrl_Task.c`；输入/模式在 `chassis_input.c`、`chassis_follow.c`、`chassis_spin.c`，执行在 `chassis_control.c`。当前 `BOARD_COMM_DEBUG=1` 且 `CHASSIS_BRINGUP_ENABLE=1`，实际运行调试底盘链路。
+调度入口为 `task_down/Application/TaskLayer/control_task.c`；输入/模式在 `chassis_input.c`、`chassis_follow.c`、`chassis_spin.c`，执行在 `chassis_control.c`。当前 `BOARD_COMM_DEBUG=1` 且 `CHASSIS_BRINGUP_ENABLE=1`，实际运行调试底盘链路。
 
 ## 输入选择与模式
 
@@ -108,3 +108,34 @@ C2 超过 50 ms、角度非法或相邻反馈跳变超过 30 deg 会使跟随故
 ## 调试顺序
 
 先观察 `rc_dev.work_state` 与 `chassis_input_cmd`，再看跟随/小陀螺状态、C2 时间戳和角度符号；最后查看 `chassis_ctrl.state.wheel_target[]`、轮速、各轮力矩以及 `power_limit_state.target_power/scale/fallback_used/target_unreachable`。从架空底盘的单方向低输出开始，确认物理方向和软件 LF/LB/RF/RB 对应关系后再联调功率模型。
+
+## 按函数阅读控制与限功
+
+| 阅读顺序 | 文件与函数 | 输入 → 输出 |
+| --- | --- | --- |
+| 1 | [control_task.c](../Application/TaskLayer/control_task.c) `StartCtrlTask()` | 输入更新 → 模式/执行/发射请求调度 |
+| 2 | [chassis_input.c](../Application/ModuleLayer/chassis_input.c) `Chassis_Input_Update()` | RC/键鼠、模式 → `chassis_input_cmd` |
+| 3 | [chassis_follow.c](../Application/ModuleLayer/chassis_follow.c) `Chassis_Follow_UpdateMode()` / `Chassis_Follow_Update()` | 选档、C2、操作速率 → 坐标变换与纠偏wz |
+| 4 | [chassis_spin.c](../Application/ModuleLayer/chassis_spin.c) `Chassis_Spin_UpdateMode()` / `Chassis_Spin_Update()` | 选档与指令 → 旋转斜坡及平移变换 |
+| 5 | [chassis_control.c](../Application/ModuleLayer/chassis_control.c) `Chassis_Control_Update()` | 指令/在线 → 预算、轮速目标与执行 |
+| 6 | 同文件 `Chassis_Control_KinematicsInverse()` / `Chassis_Control_PidUpdate()` | 控制域vx/vy/wz → 四轮目标 → 候选力矩 |
+| 7 | [power_limit.c](../Application/AlgorithmLayer/power_limit.c) `Power_Limit_GetTarget()` / `Power_Limit_Apply()` | 裁判快照/电机模型 → 预算和公共比例 |
+| 8 | `Chassis_Control_Output()` / `Chassis_Control_Stop()` | 最终力矩 → RM组帧；异常时整组写零 |
+
+### 功率预算的实际计算
+
+有效裁判上限为 `limit_w` 时，基础预算 `base=max(20,limit_w-5)` W；缓冲值钳在0～60 J。缓冲误差 `e=max(0,59-buffer)` J，预算候选值为 `base-2·e-integral`。积分只随新的 `buffer_seq` 更新，时间步长取相邻接收时间差且最多200 ms，并有抗饱和处理；不能每1 ms重复积分同一裁判帧。
+
+缓冲低于45 J时，预算上界为 `20+(base-20)·buffer/45` W。降额立即生效；恢复仅在活动且有新帧时最多按10 W/s增加。满缓冲且活动时，积分扣减按1 W/s释放，停车满缓冲不自动释放。快照失效时重置在线预算状态并回退45 W。
+
+### 模型预测为什么采用公共比例
+
+每轮用电流原始计数I和电机轴rpm代入 `k0+k1·I+k2·rpm+k3·I·rpm+k4·I²+k5·rpm²`。候选输出超预算时，对四轮共同比例进行10次二分搜索；得到比例后，按最终原始电流量化结果复算。这样保持候选力矩方向和相互配比，但不能保证实际轮速比例或整车轨迹精度。
+
+`requested_power` 是候选功率预测，`estimate_power` 是最终输出预测，`target_power` 是预算，`scale` 是输出比例。零输出预测仍超预算时标记 `target_unreachable`，此时控制器没有凭空消除高速轮子的模型损耗，也不会额外增加制动力矩。
+
+### 参数应按层定位
+
+输入幅值/轮速环、跟随/小陀螺参数在 [chassis_config.h](../Application/ConfigLayer/chassis_config.h)；预算、缓冲PI和比例搜索在 [power_limit_config.h](../Application/ConfigLayer/power_limit_config.h)。几何长度、质量、轮半径虽然有配置，但当前四轮逆解直接按控制域组合，不使用这些参数完成标准SI运动学；讲解不能把控制量25直接称作25 m/s。
+
+可用于讲解：“底盘先仲裁模式并处理云台坐标，再分配四轮目标；各轮速度P环生成力矩，裁判缓冲反馈和功率模型进一步决定整组输出比例。”

@@ -1,5 +1,7 @@
 # 下板固件（STM32H723VGTx）
 
+讲解项目时先读[项目讲解与源码速查](../README.md#项目讲解与源码速查)：包含底盘跟随/四轮控制、功率预算算法、参数数值和按动作查询源码的入口。
+
 [返回项目总览](../README.md) · [上板工程](../task_up/Readme.md) · [下板模块目录](docs/README.md)
 
 下板处理遥控器/键鼠输入、四轮底盘、裁判系统数据、底盘功率预算及板间 CAN 调度。Keil Target 为 `DM-MC02`。
@@ -50,7 +52,7 @@ task_down/Application/
 | `Core/Src/main.c` | 外设初始化、设备/驱动初始化、启动 RTOS | 初始化 FDCAN、UART、DMA 等底层外设 |
 | `Application/DeviceLayer/device.c` | 设备对象初始化分支 | 初始化裁判、RC、底盘、发射与超电对象 |
 | `Application/TaskLayer/Command_Task.c` | DBUS 解析及键鼠状态 | 解析后延时 1 tick |
-| `Application/TaskLayer/Ctrl_Task.c` | 输入、跟随/自旋、底盘、发射、超电发送 | 1 tick 控制循环 |
+| `Application/TaskLayer/control_task.c` | 输入、跟随/自旋、底盘、发射、超电发送 | 1 tick 控制循环 |
 | `Application/TaskLayer/connect_task.c` | D1/D2/D3/D5 调度、D4条件发送 | 控制帧检查 FIFO，D3 单独调度 |
 | `Application/ProtocolLayer/judge_protocol.c` | 裁判同步、CRC、命令分发 | USART1 IDLE 后处理 DMA 缓冲 |
 

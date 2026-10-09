@@ -47,7 +47,7 @@
 | `LAUNCHER_FRIC_TARGET_RPM` | 1500 | 摩擦轮目标 rpm |
 | `LAUNCHER_FRIC_READY_TOL_RPM / READY_TIME_MS` | 500 / 100 | 达速误差 rpm / 确认 ms |
 | `LAUNCHER_DIAL_ANGLE_KP` | 0.08 | 单发位置增益，(deg/s)/count |
-| `LAUNCHER_DIAL_SPEED_KP / KI / KD` | 0.15 / 0.05 / 0 | 单发速度环，原参数 |
+| `LAUNCHER_DIAL_SPEED_KP / KI / KD` | 0.1 / 0.05 / 0 | 单发速度环，当前默认参数 |
 | `LAUNCHER_DIAL_HOLD_ANGLE_KP / HOLD_DEADBAND` | 0.04 / 100 | 待发位置增益 / count 死区 |
 | `LAUNCHER_DIAL_HOLD_SPEED_KP / KI / KD` | 0.15 / 0 / 0 | 待发速度阻尼，无积分 |
 | `LAUNCHER_DIAL_SETTLE_SPEED_DPS / SETTLE_TIME_MS` | 20 / 20 | 到位速度 deg/s / 确认 ms |
@@ -97,3 +97,30 @@ HAL 成功仅表示 CAN 驱动接纳发送，不能证明电机执行。目标�
 5. 无响应时记录拨盘观测、热量状态及电机位置/速度/电流反馈。
 
 本次未编译、未烧录、未做实机验证；静态检查不证明硬件效果。
+
+## 按函数阅读实现与许可边界
+
+| 文件与函数 | 输入 | 输出/关键动作 |
+| --- | --- | --- |
+| [下板 launch.c](../../task_down/Application/ModuleLayer/launch.c) `Launch_Data_Update()` | RC 在线、档位、鼠标按键状态 | 单发/连发模式和触发；键鼠分支提前返回，不经过后方遥控升降判据 |
+| 同文件 `Launch_Cmd_Transmit()` | 下板发射对象 | 写入 D1 `launch_state/shoot_mode/shoot_level` |
+| [上板 launcher.c](../Application/ModuleLayer/launcher.c) `Launcher_Work()` | D1、总线在线、电机在线/故障 | 分别生成摩擦轮使能、拨盘保持/供弹许可和触发边沿 |
+| `Launcher_HeatUpdate()` / `Launcher_HeatRefreshRate()` | D3、时间差、拨盘编码器进展 | 热量来源、估计、余量、阻塞和连发目标射频 |
+| `Launcher_DialUpdate()` | 单发上升沿/连发条件、许可、热量 | 请求接受/拒绝、启动等待、运动、制动和保持阶段 |
+| `Launcher_DialPositionControl()` / `Launcher_DialSpeedControl()` | 编码器目标/实际速度 | 单发位置串级控制或连发速度控制，KT 原始电流输出 |
+| `Launcher_FricControl()` | 目标 rpm、左右轮反馈 | 两轮独立 PI，按旋向写原始电流并发送 RM 组帧 |
+
+### 一个单发请求如何完成
+
+`shoot_level:0→1` 且单发模式 → 检查保持/供弹许可、READY、触发已释放 → 预占 10 热量 → 保存一个待启动请求 → KT 启动入队成功 → 旧目标累加 65536 count → 位置环给速度目标、速度环给电流 → 误差≤500 count 且速度≤20 deg/s 持续20 ms → 完成计数增加并保持原目标。
+
+忙碌时的新上升沿被拒绝，当前没有多单发队列；连续快速点击不保证每个点击都被执行。启动待发和动作超时是不同阶段，分别为 50 ms、500 ms；超时后的重新供弹要求释放触发。
+
+### 达速、热量新鲜度与触发是三个条件
+
+- `fric_ready` 根据两轮速度达标持续计数产生，当前不参与 `feed_allowed`；摩擦轮开启也不等于已经达速。
+- 热量预算尚未建立时 `ready=0`。建立后 D3 超时会转 `LAUNCHER_HEAT_ESTIMATE`，沿用已有上限/冷却率继续估计，当前不是“D3 超过100 ms 一律停发”。
+- 单发预占热量；连发按编码器正向进展高水位累计增热，反向回退不会立即抵消已累计增热。同一 D3 源序号不会每10 ms重复覆盖本地估计。
+- 下板长按判断来自按键更新计数，上板还检查拨盘状态和 `trigger_ready`；连发模式位为1仅表示请求，不能当作拨盘正在连续运动的证明。
+
+可用于讲解：“发射请求与执行分在两板；单发靠累计位置目标，连发靠独立速度环，热量模型限制是否接受请求和目标射频，拨盘停发后制动并保持。”

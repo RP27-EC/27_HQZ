@@ -63,3 +63,34 @@ F 键仅在遥控在线且 S1 上位时以按下沿翻转键鼠输入源。遥�
 ### D5 与本地底盘输入的分流
 
 遥控/键鼠数据在下板既参与 chassis input，也通过 D5 提供上板云台输入。D5 的键鼠来源位用于区分鼠标增量和角速度格式；下板底盘键位（WASD/QE、Z/X/C、R）不应误认为都由 D5 透传。追云台输入问题时走 [D5 通信页](board-link.md)；追底盘运动问题时继续看 [底盘控制页](chassis.md)。
+
+## 按函数读输入和按键状态
+
+| 文件与函数 | 作用 | 输出 |
+| --- | --- | --- |
+| [Command_Task.c](../Application/TaskLayer/Command_Task.c) | 调度输入解析与键鼠更新 | 供CtrlTask和ConnectTask消费 |
+| [rc_protocol.c](../Application/ProtocolLayer/rc_protocol.c) `rc_interrupt_update()` | 接收数据到遥控结构 | 通道、拨杆、鼠标和按键位图 |
+| 同文件 `keyboard_update()` / `keyboard_status_update()` | 按键按下/释放/长按状态 | `value/status/cnt`，区分上升沿与持续电平 |
+| [rc_sensor.c](../Application/DeviceLayer/Sensor/rc_sensor.c) | 设备检查、心跳与数据复位 | `rc_dev.work_state`及失联后的输入状态 |
+| [chassis_input.c](../Application/ModuleLayer/chassis_input.c) `Chassis_Input_KeyboardModeUpdate()` / `Chassis_Input_Keyboard()` | F来源切换、键鼠映射 | 统一指令与模式 |
+| 同文件 `Chassis_Input_UturnUpdate()` | R协同掉头状态机 | 前后基准、阶段、交接与完成/超时结果 |
+| [launch.c](../Application/ModuleLayer/launch.c) `Launch_Data_Update()` | 将鼠标/拨杆转成发射请求 | 单发/连发、触发电平 |
+
+### 长按和上升沿的区别
+
+`keyboard_status_update()` 在第一次按下更新为 `release_to_press`，持续按住时增加计数，到 `cnt_max` 后置 `long_press`，松开清计数。鼠标左右键 `cnt_max=500`，定义在 [rc_sensor.h](../Application/DeviceLayer/Sensor/rc_sensor.h)；它是更新次数门限，名义1 tick循环下约500 ms，不能当作独立计时器保证。
+
+F、R、B等动作读取的边沿及来源条件分别在消费函数中判断；鼠标左键在键鼠发射分支中长按选择连发。按键状态识别成功与上板接受供弹是不同步骤。
+
+### R掉头为什么有四个阶段
+
+| 阶段 | 意义 | 转移条件 |
+| --- | --- | --- |
+| IDLE | 等待有效R上升沿 | 键鼠跟随模式及C2反馈有效 |
+| PREPARE | 预发送固定机械终点 | 至少2个成功控制交接周期，且达到对应时间门限 |
+| POSITION | 上板定位到前/后终点 | 新C2反馈角误差≤0.5°连续100 ms |
+| RESTORE | 交还运行模式并等待交接 | 再满足交接时间和成功发送计数后回IDLE |
+
+PREPARE/POSITION累计2500 ms未完成时记录超时，并以当前机械角建立恢复基准；它不是“无论如何都转到180°”。过洞请求、无效反馈或退出对应模式会取消动作。
+
+可用于讲解：“输入层把字节、按键状态和操作来源拆开处理，再生成统一指令；R掉头同时等待通信交接和新的角度反馈，不能只靠一个延时完成。”

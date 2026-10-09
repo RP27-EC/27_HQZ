@@ -10,7 +10,7 @@
 | --- | --- | --- | --- |
 | D1 `0xD1` | 下→上 | 车状态与发射/升降请求 | 与 D2、D5 成组尝试，每 1 ms 调度 |
 | D2 `0xD2` | 下→上 | 云台目标/状态目标字段 | 同 D1；多字节值大端映射 |
-| D3 `0xD3` | 下→上 | 裁判热量快照 | 开启，10 ms；无有效裁判快照时本轮不发 |
+| D3 `0xD3` | 下→上 | 裁判热量快照 | 开启，10 ms；快照可复制时发送，无裁判数据也可能发flags=0 |
 | D4 `0xD4` | 下→上 | 裁判血量透传 | `BOARD_COMM_D4_ENABLE=0`，不发送 |
 | D5 `0xD5` | 下→上 | 遥控/键鼠云台手动命令 | 开启，随 D1/D2 成组调度 |
 | C1 `0xC1` | 上→下 | 上板电机在线与升降压缩状态 | 下板接收/更新心跳 |
@@ -36,7 +36,7 @@ D1、D2、D5 在调度层作为一个三帧控制组检查 FIFO 空位；协议�
 
 ## D3 有效位生成
 
-`Board_Tx_Pkt_03()` 先取得裁判热量快照；没有快照就不发送。bit0 仅当热量上限已见、非 0 且年龄小于 1500 ms 时置 1；bit1 仅当当前热量已见且年龄小于 300 ms 时置 1。帧 ID 周期 10 ms 不等于其字段一定有效；有效 flags 是上板发射状态机的关键输入。
+`Board_Tx_Pkt_03()` 先复制裁判热量快照；复制接口失败才不发送。当前对有效快照指针会返回复制成功，未收到裁判数据时也可发送flags=0。bit0仅当热量上限已见、非0且年龄小于1500 ms时置1；bit1仅当当前热量已见且年龄小于300 ms时置1。帧ID周期10 ms不等于其字段一定有效；有效flags是上板热量状态机的输入。
 
 D4 关闭时，即便裁判 HP 数据更新，也不会通过 ConnectTask 透传。D4 当前上板代码只清心跳，因此启用 D4 也需明确同步消费逻辑和两端兼容性。
 
@@ -61,3 +61,27 @@ D4 关闭时，即便裁判 HP 数据更新，也不会通过 ConnectTask 透传
 每一步对应不同观测量：本地下板看 `tx_pkt` 与 TX 结果；总线可观测帧 ID、长度和原始字节；上板看 `Board_Rx_Info`；控制行为看消费模块 Watch。单看 `gimbal_d1_tx_ok=1` 只能确认本地 HAL 接受发送请求，不能跳过后续链路步骤。
 
 排查顺序：核实两端总线引脚/收发器与终端，检查 FDCAN2/CAN2 的标准 ID 和位时序，再检查 filter 命中、发送 FIFO、D3 snapshot flags，最后检查对端回传与心跳。任何协议字段调整需同步上板解析、调试 Watch 和根 README 表。
+
+## 按函数讲解发送和反馈
+
+| 文件与函数 | 作用 | 下游 |
+| --- | --- | --- |
+| [control_task.c](../Application/TaskLayer/control_task.c) `Board_Debug_Gimbal_Command()` / `Board_Debug_Hole_Command()` | 更新云台机械目标、R状态和过洞请求 | D1/D2 |
+| [launch.c](../Application/ModuleLayer/launch.c) `Launch_Cmd_Transmit()` | 写发射许可、模式和触发 | D1 |
+| [board_protocol.c](../Application/ProtocolLayer/board_protocol.c) `Board_Tx_Pkt_01/02/03/05()` | 各帧独立打包与发送 | 上板共享解码对象 |
+| [connect_task.c](../Application/TaskLayer/connect_task.c) `StartConnectTask()` | D3优先排期、控制组容量判断、延后/重试 | FDCAN2 FIFO |
+| [can_protocol.c](../Application/ProtocolLayer/can_protocol.c) `CAN2_rxDataHandler()` | C1/C2标准ID分发 | `Board_Rx_Meg_01/02()` |
+| `Board_Rx_Meg_01/02()` | 解码电机/升降状态与角度 | `board.rx_meg`、C2有效位/时间戳 |
+| [chassis_input.c](../Application/ModuleLayer/chassis_input.c) `Chassis_Input_NotifyUturnTxCycle()` | 记录掉头阶段的成功控制交接 | PREPARE/RESTORE的转移条件 |
+
+### D5当前编码格式
+
+当前下板键鼠路径把鼠标X/Y映射为角速度，再编码有符号int16；增益Yaw=5、Pitch=-3 (deg/s)/count，上限分别200、150 deg/s，量化步长0.1 deg/s/LSB。机械键鼠模式中鼠标X主要交给底盘，掉头动作也会影响Yaw透传；不能把所有档位都解释为同一个鼠标到云台映射。
+
+协议支持 `cmd_type=鼠标增量`，但功能分支存在不代表当前发送该格式。讲解时以 `Board_Tx_Pkt_05()`实际写入的source/type和值为准。
+
+### 成组容量检查不等于事务提交
+
+预留3个空位减少控制组因FIFO容量不足而拆分的机会，但三帧分别调用HAL，不存在原子组提交或整组确认。某帧HAL失败时可能仍有其他帧入队；D1/D2成功标志用于下板交接逻辑，也不证明上板已消费。D3失败则保持旧成功时间并在后续任务轮次重试，统计成功间隔反映入队间隔而非裁判数据更新间隔。
+
+可用于讲解：“下板独立调度控制组和热量帧，分别处理容量不足与发送失败；上板反馈用于状态和闭环，但每个字段仍需检查来源、有效位和年龄。”

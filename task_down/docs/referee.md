@@ -36,7 +36,7 @@ USART1 RX/TX 为 PA10/PA9，115200 baud、8N1；接收使用 DMA 和空闲线回
 
 ## 热量与功率是两条分开的消费路径
 
-热量：`Judge_GetHeatSnapshot()` → `Board_Pack_D3()` → 下板 10 ms 发送 → 上板验证 D3 flags/接收年龄后更新热量源。当前 `BOARD_COMM_D3_ENABLE=1`；`BOARD_HEAT_LIMIT_TIMEOUT_MS=1500 ms`、`BOARD_HEAT_VALUE_TIMEOUT_MS=300 ms` 用于下板 D3 有效性。
+热量：`Judge_GetHeatSnapshot()` → `Board_Tx_Pkt_03()` → 下板 10 ms 发送 → 上板验证 D3 flags/接收年龄后更新热量源。当前 `BOARD_COMM_D3_ENABLE=1`；`BOARD_HEAT_LIMIT_TIMEOUT_MS=1500 ms`、`BOARD_HEAT_VALUE_TIMEOUT_MS=300 ms` 用于下板 D3 有效性。
 
 底盘功率：`Judge_GetPowerSnapshot()` → `Power_Limit_GetTarget()` → 四轮候选力矩经比例限幅。当前开关 `CHASSIS_POWER_LIMIT_ENABLE=1`；快照不满足新鲜度/范围条件时使用 45 W 固定回退预算。详细 PI/缓冲能量机制见[底盘功率限制](chassis.md)。D3 的发射热量字段不能替代底盘 `power_limit_state`。
 
@@ -53,3 +53,26 @@ USART1 RX/TX 为 PA10/PA9，115200 baud、8N1；接收使用 DMA 和空闲线回
 | D3 未发出 | `BOARD_COMM_D3_ENABLE`、ConnectTask 排期、CAN TX 结果计数 |
 
 裁判 UART 侧通常为裁判系统电气接口，不能与 CAN 收发器或普通 TTL 线序混用；依据实际裁判系统接口标准核实电平、地线与供电。CRC 通过只是帧格式正确，不证明字段值符合比赛场景或功率测量准确。
+
+## 按函数讲解解析与快照
+
+| 文件与函数 | 作用 | 消费者 |
+| --- | --- | --- |
+| [judge_protocol.c](../Application/ProtocolLayer/judge_protocol.c) `USART1_rxDataHandler()` / `judge_receive()` | 处理接收缓冲、寻找帧头、检查CRC和命令 | `judge.rx`绑定的更新函数 |
+| [judge.c](../Application/DeviceLayer/judge.c) `Judge_Data_Update()` | 按ID更新结构、seen、tick与序号 | 热量/功率快照、车状态 |
+| 同文件 `Judge_GetHeatSnapshot()` | 临界区复制热量结构 | D3打包；返回成功表示复制完成，不等于字段有效 |
+| 同文件 `Judge_GetPowerSnapshot()` | 临界区复制并校验在线和两个更新时间 | 下板功率预算 |
+| [board_protocol.c](../Application/ProtocolLayer/board_protocol.c) `Board_Tx_Pkt_03()` | 按不同有效期生成flags，打包热量 | 上板 `Launcher_HeatUpdate()` |
+
+### 为什么用快照而不是逐字段读取
+
+裁判字段由接收路径更新，控制任务读取时若跨越一次更新，可能组合出旧上限、新缓冲或不同序号的数据。两个快照接口保存原PRIMASK、短暂关中断完成复制后恢复原中断状态，避免单次复制被接收中断撕裂。它保证读取时的一致性，不保证不同裁判命令原本就来自同一时刻。
+
+### 零值、在线和有效性的区别
+
+- 枪管热量为0可能合法；D3热量有效位检查 `heat_seen` 与年龄，不能因热量为0判失效。
+- 热量上限为0则不建立参数有效位；功率上限还由功率模块检查20～120 W范围。
+- `Judge_GetHeatSnapshot()` 对有效指针返回复制成功，即便没有裁判数据也可得到全零初值；D3当前可以发送flags=0的帧。它不代表裁判有效，只能保证对端得到明确无效标志。
+- `heat_seq`区别新的裁判热量更新与10 ms重复转发；`buffer_seq`控制功率积分只随新缓冲帧更新。序号不代表CAN发送次数。
+
+可用于讲解：“裁判模块先校验帧格式，再维护带时间戳和序号的字段快照；热量和底盘功率分别判断有效性，避免用设备在线代替数据新鲜。”
