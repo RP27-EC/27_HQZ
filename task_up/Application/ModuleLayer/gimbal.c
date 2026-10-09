@@ -195,11 +195,11 @@ static void gimbal_pid_init(gimbal_t *gimbal)
 
     /* Yaw 陀螺仪串级 */
     pid = &gimbal->pid_info.yaw_gyro_outer;//  外环
-    pid->kp = 20.0f; pid->ki = 0.05f; pid->kd = 0.0f;
+    pid->kp = 10.0f; pid->ki = 0.05f; pid->kd = 0.0f;
     pid->integral_max = 200.0f; pid->out_max = 500.0f;
 
     pid = &gimbal->pid_info.yaw_gyro_inner;//  内环
-    pid->kp = 0.04f; pid->ki = 0.0f; pid->kd = 0.0f;
+    pid->kp = 0.06f; pid->ki = 0.0f; pid->kd = 0.0f;
     pid->integral_max = 0.0f; pid->out_max = 10.0f;
 
     /* Pitch 陀螺仪串级 */
