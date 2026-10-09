@@ -14,6 +14,12 @@
 #define BOARD_HEAT_LIMIT_TIMEOUT_MS   1500u // 裁判参数超时，ms
 #define BOARD_HEAT_VALUE_TIMEOUT_MS    300u // 裁判热量超时，ms
 #define BOARD_COMM_D5_ENABLE            1u
+#define BOARD_COMM_D6_ENABLE            1u // 弹速发送使能，0/1
+#define BOARD_COMM_D6_PERIOD_MS        100u // 弹速心跳间隔，ms
+#define BOARD_SPEED_BULLET_TYPE          1u // 首发心跳17mm，值1
+#define BOARD_SPEED_SHOOTER_NUMBER       1u // 首发第一机构，值1
+#define BOARD_SPEED_OFFLINE_AGE_MS   65535u // 裁判离线哨兵，ms
+#define BOARD_SPEED_MAX_AGE_MS       65534u // 在线年龄饱和值，ms
 
 /* S2 档位软件消抖，单位：1 ms 控制周期。 */
 #define BOARD_LAUNCH_S2_DEBOUNCE_TICKS  15u

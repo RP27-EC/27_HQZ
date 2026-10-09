@@ -228,6 +228,39 @@ void Board_GetHeatSnapshot(Board_Heat_Pkt_t *snapshot)
     __set_PRIMASK(irq_state);
 }
 
+void Board_Rx_06(uint8_t *rxbuf)
+{
+    uint16_t seq = ((uint16_t)rxbuf[2] << 8) | rxbuf[3];
+    uint16_t age = ((uint16_t)rxbuf[4] << 8) | rxbuf[5];
+    uint32_t now = HAL_GetTick();
+    if ((Board_Rx_Info.speed_pkt.seen == 0u) ||
+        (seq != Board_Rx_Info.speed_pkt.event_seq))
+    {
+        Board_Rx_Info.speed_pkt.event_rx_tick = now;
+        Board_Rx_Info.speed_pkt.event_age_ms = age;
+    }
+    Board_Rx_Info.speed_pkt.speed_cms = ((uint16_t)rxbuf[0] << 8) | rxbuf[1];
+    Board_Rx_Info.speed_pkt.event_seq = seq;
+    Board_Rx_Info.speed_pkt.age_ms = age;
+    Board_Rx_Info.speed_pkt.bullet_type = rxbuf[6];
+    Board_Rx_Info.speed_pkt.shooter_number = rxbuf[7];
+    Board_Rx_Info.speed_pkt.rx_tick = now;
+    Board_Rx_Info.speed_pkt.seen = 1u;
+}
+
+void Board_GetSpeedSnapshot(Board_Speed_Pkt_t *snapshot)
+{
+    uint32_t irq_state;
+    if (snapshot == NULL)
+    {
+        return;
+    }
+    irq_state = __get_PRIMASK();
+    __disable_irq();
+    *snapshot = Board_Rx_Info.speed_pkt;
+    __set_PRIMASK(irq_state);
+}
+
 /* D4 暂无数据字段，仅维持心跳 */
 void Board_Rx_04(uint8_t *rxbuf)
 {

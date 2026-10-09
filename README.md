@@ -72,7 +72,7 @@
 
 **发射**：下板生成许可、单发/连发模式和触发电平，上板执行闭环。单发只认触发上升沿，目标在前一次目标上累加 65536 count；到位并低速稳定后回保持。连发按热量许可生成拨盘速度。退出供弹后进入制动/保持，机构失能或离线则卸力。待发保持 PID 仍每轮计算，只在稳定 100 ms 后将拨盘力矩发送从 1 ms 降至 10 ms。
 
-当前 `Launcher_Work()` 以 D1 `launch_state` 和左右摩擦轮在线等条件生成 `fric_on`，再结合拨盘/过洞条件生成 `feed_allowed`；`fric_ready` 虽按 1500±500 rpm 连续 100 个控制周期计算，**当前没有参与供弹硬门槛**。键鼠左键长按状态选择连发，但实际动作仍受触发重置、拨盘忙状态、热量和供弹许可约束；“连发分支开启”不等于已确认鼠标连发效果。
+当前 `Launcher_Work()` 以 D1 `launch_state` 和左右摩擦轮在线等条件生成 `fric_on`，再结合拨盘/过洞条件生成 `feed_allowed`；`fric_ready` 要求达到最终目标±100 rpm并持续100 ms，作为新单发受理及连发启动门槛。新增D6逐发弹速控制：6000 rpm基准、22 m/s目标、三发均值修正、正常范围5400～6000 rpm、24 m/s锁止及25 m/s越限计数。键鼠左键长按选择连发，连发固定6000 rpm，不参与弹速学习，仍受反馈、热量和供弹许可约束。详见[单发弹速闭环](task_up/docs/launcher.md#单发弹速闭环)。
 
 源码重点：[lift.c](task_up/Application/ModuleLayer/lift.c)、[launch.c](task_down/Application/ModuleLayer/launch.c)、[launcher.c](task_up/Application/ModuleLayer/launcher.c)。
 
@@ -156,7 +156,7 @@
 | `LIFT_HOME_TIMEOUT_MS / LIFT_MOVE_TIMEOUT_MS` | 90000 / 90000 | 找顶/单次运动超时，ms |
 | `LIFT_DOWN_OVER_CURRENT_RAW / LIFT_UP_OVER_CURRENT_RAW` | 75 / 520 | 下行/上行过流阈值，协议原始量，不能当 A |
 | `LIFT_DOWN_OVER_CURRENT_CONFIRM_MS / LIFT_UP_OVER_CURRENT_CONFIRM_MS` | 200 / 500 | 对应过流确认时间，ms |
-| `LAUNCHER_FRIC_TARGET_RPM / LAUNCHER_FRIC_READY_TOL_RPM / LAUNCHER_FRIC_READY_TIME_MS` | 1500 / 500 / 100 | 摩擦轮目标/达速容差 rpm / 达速计数门限，当前仅观测 |
+| `LAUNCHER_FRIC_TARGET_RPM / LAUNCHER_FRIC_READY_TOL_RPM / LAUNCHER_FRIC_READY_TIME_MS` | 6000 / 100 / 100 | 基准目标/达速容差 rpm / 确认 ms；新单发及连发启动门槛 |
 | `LAUNCHER_FRIC_KP / LAUNCHER_FRIC_KI / LAUNCHER_FRIC_OUT_MAX` | 2 / 1 / 5000 | 摩擦轮 PI 增益 / 原始电流输出限幅 |
 | `LAUNCHER_DIAL_ONE_SHOT_ANGLE` | 65536 | 每发累加的电机编码器位移，count |
 | `LAUNCHER_DIAL_ANGLE_KP / LAUNCHER_DIAL_SPEED_KP / LAUNCHER_DIAL_SPEED_KI` | 0.08 / 0.1 / 0.05 | 单发位置外环/速度内环增益 |
@@ -206,7 +206,7 @@
 
 1. 先读本节“一分钟介绍”和技术要点表，能说出每块板的职责与完整数据流。
 2. 选“底盘跟随、云台控制、单发供弹”各一条链，按文件链接找函数，说明输入、反馈、计算、输出和保护。
-3. 记住常用数字：1 ms 控制节拍、5 ms 每类反馈、50 ms 跟随超时、6 N·m 云台限矩、280 圈升降目标、1500 rpm 摩擦轮、45 W 回退预算、59 J 缓冲目标。
+3. 记住常用数字：1 ms 控制节拍、5 ms 每类反馈、50 ms 跟随超时、6 N·m 云台限矩、280 圈升降目标、6000 rpm 摩擦轮基准、22 m/s弹速目标、45 W 回退预算、59 J 缓冲目标。
 4. 追问某个 PID/状态时再打开参数表和模块文档，不把旧分支、配置上限或观测标志说成已验证的实际效果。
 
 ## 文档导航
@@ -327,7 +327,7 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 - **上板云台**：BMI088 原始采样 → BMI088 中间层/EKF → `imu_dev` 姿态和角速度 → Yaw/Pitch 模式控制 → DM 电机 CAN 力矩。`G_MEC` 使用机械 Yaw 定位控制；`G_RATE` 使用角速度目标和内环；Pitch 叠加余弦重力补偿。最终力矩限幅为 6 N·m（具体状态/配置见[上板云台文档](task_up/docs/gimbal.md)）。
 - **下板底盘**：UART5 DBUS + 键鼠 → `Chassis_Input_Update()` → 跟随/小陀螺 → 四轮速度 P 控制 → 公共功率比例缩放 → RM 电机 0x200 组帧。四轮任一离线或指令异常时停输出。
 - **裁判与发射**：USART1 DMA/IDLE 收帧 → SOF/CRC8/CRC16 校验 → 裁判命令更新热量/功率快照 → D3；上板校验 D3 flags/时间新鲜度 → 本地热量估计/限频 → 摩擦轮和拨盘输出。
-- **板间反馈**：下板 FDCAN2 发 D1/D2/D3/D5；上板 CAN2 回 C1/C2。心跳/有效位与帧接收分开判断。
+- **板间反馈**：下板 FDCAN2 发 D1/D2/D3/D5/D6；上板 CAN2 回 C1/C2。心跳/有效位与帧接收分开判断。
 
 云台、升降、发射状态机和底盘输入/掉头状态机详见对应模块文档；仅在 C 代码实际选择的路径描述为运行功能。
 
@@ -353,6 +353,7 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 | `0xD3` | 下→上 | b0–1 热量上限；b2–3 枪管热量；b4–5 冷却率；b6 源序号；b7 bit0 参数有效、bit1 热量有效 | 热量单位按裁判系统；当前周期 10 ms；无效位不会因收到 CAN 帧而自动变有效 |
 | `0xD4` | 下→上 | b0–7 血量字节 | 默认 `BOARD_COMM_D4_ENABLE=0`；上板目前仅更新该 ID 心跳 |
 | `0xD5` | 下→上 | b0 bit0 有效、bit1 来源、bit2 控制类型；b1 鼠标键；b2–3 有符号 Yaw；b4–5 有符号 Pitch；b6–7 保留 | 当前角速度量化为 0.1 deg/s/LSB；键鼠运行路径发角速度格式 |
+| `0xD6` | 下→上 | b0–1 弹速0.01 m/s；b2–3 uint16序号；b4–5 源年龄ms；b6 类型；b7 机构 | 新事件尝试发送、100 ms心跳；年龄65535离线，零弹速首发心跳不学习 |
 | `0xC1` | 上→下 | b0 bit0–6：Yaw/Pitch/升降/右左摩擦轮/拨盘/视觉在线；b1 升降状态；b2–5 当前为 0 deg 的映射值；b6–7 为 0 | 每类反馈最短发送间隔 5 ms，C1/C2 交替争用邮箱 |
 | `0xC2` | 上→下 | b0–1 Yaw 机械；b2–3 Pitch 机械；b4–5 Yaw IMU；b6–7 Pitch IMU | 机械映射 [-4,4] rad；IMU 映射 [-360,360] deg |
 
@@ -362,7 +363,7 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 | --- | --- | --- |
 | 云台归中/输出 | `task_up/Application/ConfigLayer/gimbal_init_config.h`、`task_up/Application/ModuleLayer/gimbal.h` | 归中目标 0 deg；超时 6000 ms；稳定 30 ms；Yaw/Pitch 力矩上限 6 N·m；Pitch 重力补偿开关 |
 | 升降 | `task_up/Application/ConfigLayer/lift_config.h` | 行程 280 电机圈；找顶速度 2865 rpm；找顶/运动超时 90000 ms；位置量以 count 计，不等于机械 mm |
-| 发射/热量 | `task_up/Application/ConfigLayer/launcher_config.h` | 摩擦轮目标 1500 rpm；热量余量 20；恢复余量 30；最大 15 发/s；D3 超时 100 ms |
+| 发射/热量 | `task_up/Application/ConfigLayer/launcher_config.h` | 6000 rpm基准、22 m/s目标、24 m/s锁止；单发5400～6000 rpm；热量余量20、恢复30、最大15发/s；D3超时100 ms |
 | 底盘 | `task_down/Application/ConfigLayer/chassis_config.h` | `CHASSIS_MAX_VX/VY/WZ=25/25/20`（工程控制域，不直接等同 SI 单位）；普通跟随停止1°/恢复2°，特殊回正到位0.5°后恢复普通死区；停稳受扰和小陀螺退出可叠加辅助前馈，见[控制说明](task_down/docs/chassis.md#跟随闭环与故障锁存)；反馈超时50 ms；轮力矩受模式限幅 |
 | 底盘功率 | `task_down/Application/ConfigLayer/power_limit_config.h` | 开关 1；裁判快照无效时回退预算 45 W；在线余量 5 W；超电反馈当前只记录，不参与该闭环 |
 | 板间帧 | `task_down/Application/ConfigLayer/board_comm_config.h`、`task_up/Application/ConfigLayer/board_remote_config.h` | D1/D2 1 ms、D3 10 ms、D4 关闭、D5 开启；上板每类反馈最短 5 ms |

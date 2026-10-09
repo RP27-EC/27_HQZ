@@ -63,6 +63,10 @@ void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
         Board_Rx_05(rxBuf);
         break;
 
+    case ID_BOARD_RX6:
+        Board_Rx_06(rxBuf);
+        break;
+
     default:
         break;
     }

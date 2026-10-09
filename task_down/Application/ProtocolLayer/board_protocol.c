@@ -21,6 +21,11 @@ Board_Tx_Pkt_t board_tx_pkt; /* 下板发送缓存 */
 Board_Rx_Meg_t board_rx_meg; /* 上板反馈缓存 */
 volatile float board_manual_yaw_rate_deg_s;
 
+static uint32_t board_speed_tx_tick; // 最近D6成功时刻，ms
+static uint16_t board_speed_tx_seq; // 最近D6逐发序号，循环
+static uint8_t board_speed_tx_seen; // D6已入队，0/1
+static uint8_t board_speed_tx_online; // 最近源在线状态，0/1
+
 Board_Status_t board_status = /* 板间链路状态 */
 {
 	.offline_cnt_max = BOARD_OFFLINE_CNT_MAX,
@@ -40,6 +45,10 @@ Board_t board = /* 板间通信对象 */
 /* 绑定收发函数并复位链路状态 */
 void Board_Init(Board_t* board)
 {
+    board_speed_tx_tick = 0u;
+    board_speed_tx_seq = 0u;
+    board_speed_tx_seen = 0u;
+    board_speed_tx_online = 0u;
 	board->status->offline_cnt = board->status->offline_cnt_max;
 	board->status->status = DEV_OFFLINE;
 	board->status->gimbal_rx_time_ms = 0u;
@@ -66,6 +75,58 @@ void Board_Init(Board_t* board)
 	board->heartbeat = Board_Heart_Beat;
 }
 
+
+/* D6不占用控制报文预留容量 */
+void Board_Tx_Pkt_06(Board_t* board)
+{
+    judge_speed_snapshot_t snapshot;
+    uint8_t packet[8];
+    uint32_t age;
+    uint32_t now;
+    (void)board;
+    Judge_GetSpeedSnapshot(&snapshot);
+    now = HAL_GetTick();
+    if ((board_speed_tx_seen != 0u) &&
+        (snapshot.event_seq == board_speed_tx_seq) &&
+        (snapshot.online == board_speed_tx_online) &&
+        ((uint32_t)(now - board_speed_tx_tick) < BOARD_COMM_D6_PERIOD_MS))
+    {
+        return;
+    }
+    if (snapshot.online == 0u)
+    {
+        age = BOARD_SPEED_OFFLINE_AGE_MS;
+    }
+    else if (snapshot.seen == 0u)
+    {
+        age = 0u;
+        snapshot.bullet_type = BOARD_SPEED_BULLET_TYPE;
+        snapshot.shooter_number = BOARD_SPEED_SHOOTER_NUMBER;
+    }
+    else
+    {
+        age = (uint32_t)(now - snapshot.sample_tick);
+        if (age > BOARD_SPEED_MAX_AGE_MS)
+        {
+            age = BOARD_SPEED_MAX_AGE_MS;
+        }
+    }
+    packet[0] = (uint8_t)(snapshot.speed_cms >> 8);
+    packet[1] = (uint8_t)snapshot.speed_cms;
+    packet[2] = (uint8_t)(snapshot.event_seq >> 8);
+    packet[3] = (uint8_t)snapshot.event_seq;
+    packet[4] = (uint8_t)(age >> 8);
+    packet[5] = (uint8_t)age;
+    packet[6] = snapshot.bullet_type;
+    packet[7] = snapshot.shooter_number;
+    if (CAN_SendData(&hfdcan2, ID_PKT_06, packet) == HAL_OK)
+    {
+        board_speed_tx_tick = HAL_GetTick();
+        board_speed_tx_seq = snapshot.event_seq;
+        board_speed_tx_online = snapshot.online;
+        board_speed_tx_seen = 1u;
+    }
+}
 
 /* 每次周期累加离线计数，收到报文时清零 */
 void Board_Heart_Beat(Board_t* board)

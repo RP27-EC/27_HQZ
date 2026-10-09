@@ -4,12 +4,12 @@
 /* 摩擦轮速度控制 */
 #define LAUNCHER_DIAL_ENABLE              1u // 拨盘控制使能，0/1
 #define LAUNCHER_REPEAT_ENABLE            1u // 连发控制使能，0/1
-#define LAUNCHER_FRIC_TARGET_RPM          1500.0f // 摩擦轮目标，rpm
+#define LAUNCHER_FRIC_TARGET_RPM          6000.0f // 启动及连发目标，rpm
 #define LAUNCHER_FRIC_RAMP_RPM_PER_MS     20.0f // 升速斜坡，rpm/ms
 #define LAUNCHER_FRIC_STOP_RAMP_RPM_PER_MS 20.0f // 停机斜坡，rpm/ms
 #define LAUNCHER_FRIC_STOP_SPEED_RPM      100.0f // 停转速度上限，rpm
 #define LAUNCHER_FRIC_STOP_CONFIRM_MS     1000u // 停转确认时间，ms
-#define LAUNCHER_FRIC_READY_TOL_RPM       500.0f // 达速允许误差，rpm
+#define LAUNCHER_FRIC_READY_TOL_RPM       100.0f // 达速允许误差，rpm
 #define LAUNCHER_FRIC_READY_TIME_MS       100u // 达速确认时间，ms
 #define LAUNCHER_FRIC_KP                  2.0f // 比例增益，原始量/rpm
 #define LAUNCHER_FRIC_KI                  1.0f // 积分增益，原始量/累积误差
@@ -19,6 +19,23 @@
 #define LAUNCHER_FRIC_OUT_MAX             5000.0f // 电流输出限幅，原始量
 #define LAUNCHER_FRIC_L_DIRECTION         1.0f // 左轮旋向，正负1
 #define LAUNCHER_FRIC_R_DIRECTION         -1.0f // 右轮旋向，正负1
+
+/* 逐发弹速修正 */
+#define LAUNCHER_SPEED_TARGET_MPS        22.0f // 目标弹速，m/s
+#define LAUNCHER_SPEED_DEADBAND_MPS       0.3f // 修正死区，m/s
+#define LAUNCHER_SPEED_GUARD_MPS         24.0f // 高弹速锁止，m/s
+#define LAUNCHER_SPEED_LIMIT_MPS         25.0f // 规则上限，m/s
+#define LAUNCHER_SPEED_MIN_RPM         5400.0f // 正常修正下限，rpm
+#define LAUNCHER_SPEED_MAX_RPM         6000.0f // 正常修正上限，rpm
+#define LAUNCHER_SPEED_GAIN              20.0f // 修正增益，rpm/(m/s)
+#define LAUNCHER_SPEED_STEP_MAX_RPM      50.0f // 每组三发步长，rpm
+#define LAUNCHER_SPEED_SAMPLE_COUNT       3u // 同目标样本数，发
+#define LAUNCHER_SPEED_WAIT_MS         1000u // 单发反馈等待，ms
+#define LAUNCHER_SPEED_LINK_MS          300u // D6链路超时，ms
+#define LAUNCHER_SPEED_REARM_MS        1000u // 切换后隔离旧反馈，ms
+#define LAUNCHER_SPEED_GUARD_SCALE        0.9f // 锁止降速比例，0~1
+#define LAUNCHER_SPEED_BULLET_TYPE        1u // 17mm弹丸类型，值1
+#define LAUNCHER_SPEED_SHOOTER_NUMBER     1u // 第一17mm机构，值1
 
 /* 单发位置控制 */
 #define LAUNCHER_DIAL_ANGLE_KP            0.08f // 位置增益，(deg/s)/count

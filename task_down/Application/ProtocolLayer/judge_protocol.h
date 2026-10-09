@@ -24,7 +24,8 @@ typedef struct
 
 extern drv_judge_info_t drv_judge_info;
 
-void judge_receive(uint8_t *rxBuf);
+void judge_receive(uint8_t *rxBuf, uint16_t size);
+void USART1_rxDataHandler(uint8_t *rxBuf, uint16_t size);
 
 
 #endif

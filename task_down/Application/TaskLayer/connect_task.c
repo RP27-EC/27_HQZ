@@ -61,6 +61,12 @@ void StartConnectTask(void const *argument)
             board.tx_04(&board);
         }
 #endif
+#if BOARD_COMM_D6_ENABLE
+        if (HAL_FDCAN_GetTxFifoFreeLevel(&hfdcan2) > control_slots)
+        {
+            Board_Tx_Pkt_06(&board);
+        }
+#endif
 #endif
 
         osDelay(BOARD_COMM_D1D2_PERIOD_MS);

@@ -45,6 +45,44 @@ extern launcher_t launcher;
 
 typedef enum
 {
+    LAUNCHER_SPEED_OK = 0, // 允许新发射，值0
+    LAUNCHER_SPEED_LINK, // D6链路失效，值1
+    LAUNCHER_SPEED_SOURCE, // 裁判源离线，值2
+    LAUNCHER_SPEED_TIMEOUT, // 发射反馈超时，值3
+    LAUNCHER_SPEED_ASSOCIATION, // 事件关联异常，值4
+    LAUNCHER_SPEED_HIGH, // 高弹速锁止，值5
+    LAUNCHER_SPEED_WAITING, // 保留兼容编号，值6
+    LAUNCHER_SPEED_REARM, // 切换后隔离反馈，值7
+} launcher_speed_reason_e;
+
+typedef struct
+{
+    float target_rpm; // 最终摩擦轮目标，rpm
+    float single_target_rpm; // 单发修正目标，rpm
+    float latest_mps; // 最近有效弹速，m/s
+    float average_mps; // 最近三发均值，m/s
+    float sample_sum_mps; // 同目标弹速和，m/s
+    uint32_t wait_tick; // 单发实际开始时刻，ms
+    uint32_t feedback_age_ms; // 当前样本年龄，ms
+    uint32_t guard_count; // 高弹速事件次数，循环
+    uint32_t limit_count; // 达25m/s次数，循环
+    uint32_t timeout_count; // 发射反馈超时次数，循环
+    uint32_t association_count; // 关联异常次数，循环
+    uint16_t event_seq; // 最近事件序号，uint16循环
+    uint16_t pending_seq; // 受理前事件序号，循环
+    uint8_t sample_count; // 本组样本数，0~2
+    uint8_t waiting; // 学习等待弹速，0/1
+    uint8_t source_ready; // 弹速源及链路有效，0/1
+    uint8_t feed_ready; // 弹速允许新发射，0/1
+    uint8_t at_limit; // 修正到转速边界，0/1
+    uint8_t guard_latched; // 高弹速锁止，0/1
+    launcher_speed_reason_e block_reason; // 新发射阻止原因，0~7
+} launcher_speed_t;
+
+extern launcher_speed_t launcher_speed;
+
+typedef enum
+{
     LAUNCHER_DIAL_REJECT_NONE = 0, // 无拒绝，值0
     LAUNCHER_DIAL_REJECT_HEAT, // 热量不足，值1
     LAUNCHER_DIAL_REJECT_BUSY, // 动作未结束，值2
@@ -52,12 +90,14 @@ typedef enum
     LAUNCHER_DIAL_REJECT_INTERLOCK, // 失能或互锁，值4
     LAUNCHER_DIAL_REJECT_START, // 启动发送超时，值5
     LAUNCHER_DIAL_REJECT_TIMEOUT, // 单发未完成，值6
+    LAUNCHER_DIAL_REJECT_FRIC, // 摩擦轮未达速，值7
+    LAUNCHER_DIAL_REJECT_SPEED, // 弹速反馈或保护，值8
 } launcher_dial_reject_e;
 
 typedef struct
 {
     launcher_state_e state; // 拨盘独立阶段，0~9
-    launcher_dial_reject_e reject_reason; // 最近拒绝原因，0~6
+    launcher_dial_reject_e reject_reason; // 最近拒绝原因，0~8
     int64_t target_angle; // 累计目标，count
     int64_t target_error; // 目标减反馈，count
     float speed_target_dps; // 最近速度目标，deg/s

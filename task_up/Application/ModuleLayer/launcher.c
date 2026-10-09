@@ -13,6 +13,25 @@
 launcher_t launcher; /* 发射机构对外状态 */
 launcher_heat_t launcher_heat;
 launcher_dial_t launcher_dial;
+launcher_speed_t launcher_speed;
+
+typedef struct
+{
+    uint32_t repeat_tick; // 连发最近反馈时刻，ms
+    uint32_t rearm_tick; // 反馈隔离开始时刻，ms
+    uint32_t learning_tick; // 学习隔离起点，ms
+    uint16_t last_seq; // 最近消费序号，uint16循环
+    uint8_t seq_seen; // 序号基准有效，0/1
+    uint8_t last_mode; // 上次单发或连发，0/1
+    uint8_t last_request; // 上次摩擦轮开关，0/1
+    uint8_t last_vehicle; // 上次整车使能，0/1
+    uint8_t last_source; // 上次反馈源有效，0/1
+    uint8_t reserved; // 单发已受理未启动，0/1
+    uint8_t learning_blocked; // 关联不明暂停学习，0/1
+    launcher_speed_reason_e fault; // 反馈阻止原因，0~4
+} launcher_speed_runtime_t;
+
+static launcher_speed_runtime_t launcher_speed_runtime;
 
 typedef struct
 {
@@ -69,6 +88,318 @@ static float Launcher_Ramp(float current, float target, float step)
     }
 
     return target;
+}
+
+static void Launcher_SpeedClearSamples(void)
+{
+    launcher_speed.sample_count = 0u;
+    launcher_speed.sample_sum_mps = 0.0f;
+}
+
+static void Launcher_SpeedFail(launcher_speed_reason_e reason)
+{
+    if ((reason == LAUNCHER_SPEED_TIMEOUT) &&
+        (launcher_speed_runtime.fault != reason))
+    {
+        launcher_speed.timeout_count++;
+    }
+    if ((reason == LAUNCHER_SPEED_ASSOCIATION) &&
+        (launcher_speed_runtime.fault != reason))
+    {
+        launcher_speed.association_count++;
+    }
+    launcher_speed_runtime.fault = reason;
+    launcher_speed.waiting = 0u;
+    launcher_speed_runtime.reserved = 0u;
+    launcher_dial.trigger_ready = 0u;
+    Launcher_SpeedClearSamples();
+}
+
+static void Launcher_SpeedDropLearning(launcher_speed_reason_e reason, uint32_t now)
+{
+    if (reason == LAUNCHER_SPEED_TIMEOUT)
+    {
+        launcher_speed.timeout_count++;
+    }
+    else if (reason == LAUNCHER_SPEED_ASSOCIATION)
+    {
+        launcher_speed.association_count++;
+    }
+    launcher_speed.waiting = 0u;
+    launcher_speed_runtime.learning_blocked = 1u;
+    launcher_speed_runtime.learning_tick = now;
+    Launcher_SpeedClearSamples();
+}
+
+static void Launcher_SpeedResetGroup(void)
+{
+    launcher_speed.waiting = 0u;
+    launcher_speed_runtime.reserved = 0u;
+    launcher_speed_runtime.learning_blocked = 0u;
+    launcher_speed_runtime.fault = LAUNCHER_SPEED_OK;
+    launcher_speed.single_target_rpm = LAUNCHER_FRIC_TARGET_RPM;
+    launcher_speed.at_limit = 0u;
+    launcher_dial.trigger_ready = 0u;
+    Launcher_SpeedClearSamples();
+}
+
+/* 弹速外环只按新事件更新 */
+static void Launcher_SpeedUpdate(uint32_t now, uint8_t vehicle_on,
+                                 uint8_t request, uint8_t mode)
+{
+    Board_Speed_Pkt_t snapshot;
+    uint32_t age;
+    uint32_t elapsed;
+    uint16_t delta;
+    uint8_t fresh;
+    uint8_t matching;
+    uint8_t new_event = 0u;
+    uint8_t reset_group;
+    float speed;
+    float error;
+    float step;
+    float next;
+    Board_GetSpeedSnapshot(&snapshot);
+    now = HAL_GetTick();
+    reset_group = ((mode != launcher_speed_runtime.last_mode) ||
+                   ((request != 0u) && (launcher_speed_runtime.last_request == 0u)) ||
+                   ((vehicle_on != 0u) && (launcher_speed_runtime.last_vehicle == 0u))) ? 1u : 0u;
+    if ((request != 0u) && (launcher_speed_runtime.last_request == 0u))
+    {
+        launcher_speed.guard_latched = 0u;
+    }
+    if (reset_group != 0u)
+    {
+        Launcher_SpeedResetGroup();
+        launcher_speed_runtime.rearm_tick = now;
+        launcher_speed_runtime.last_seq = snapshot.event_seq;
+        launcher_speed_runtime.seq_seen = snapshot.seen;
+        launcher_fric_ready_count = 0u;
+        launcher.fric_ready = 0u;
+    }
+    launcher_speed_runtime.last_mode = mode;
+    launcher_speed_runtime.last_request = request;
+    launcher_speed_runtime.last_vehicle = vehicle_on;
+
+    age = (uint32_t)(now - snapshot.event_rx_tick);
+    if (age > (UINT32_MAX - snapshot.event_age_ms))
+    {
+        age = UINT32_MAX;
+    }
+    else
+    {
+        age += snapshot.event_age_ms;
+    }
+    launcher_speed.feedback_age_ms = age;
+    fresh = ((snapshot.seen != 0u) && (snapshot.speed_cms != 0u) &&
+             (age <= LAUNCHER_SPEED_WAIT_MS)) ? 1u : 0u;
+    matching = ((snapshot.bullet_type == LAUNCHER_SPEED_BULLET_TYPE) &&
+                (snapshot.shooter_number == LAUNCHER_SPEED_SHOOTER_NUMBER)) ? 1u : 0u;
+    launcher_speed.source_ready = ((vehicle_on != 0u) &&
+        (snapshot.seen != 0u) &&
+        ((uint32_t)(now - snapshot.rx_tick) < LAUNCHER_SPEED_LINK_MS) &&
+        (snapshot.age_ms != UINT16_MAX)) ? 1u : 0u;
+
+    if (launcher_speed.source_ready == 0u)
+    {
+        Launcher_SpeedFail(((snapshot.seen == 0u) ||
+            ((uint32_t)(now - snapshot.rx_tick) >= LAUNCHER_SPEED_LINK_MS) ||
+            (vehicle_on == 0u)) ? LAUNCHER_SPEED_LINK : LAUNCHER_SPEED_SOURCE);
+    }
+    else
+    {
+        if ((launcher_speed_runtime.learning_blocked != 0u) &&
+            (launcher_speed.waiting == 0u) &&
+            (launcher_speed_runtime.reserved == 0u) &&
+            ((uint32_t)(now - launcher_speed_runtime.learning_tick) >= LAUNCHER_SPEED_WAIT_MS))
+        {
+            launcher_speed_runtime.learning_blocked = 0u;
+        }
+        if (launcher_speed_runtime.seq_seen == 0u)
+        {
+            launcher_speed_runtime.last_seq = snapshot.event_seq;
+            launcher_speed_runtime.seq_seen = 1u;
+            new_event = 1u;
+        }
+        else if (snapshot.event_seq != launcher_speed_runtime.last_seq)
+        {
+            new_event = 1u;
+            launcher_speed_runtime.last_seq = snapshot.event_seq;
+        }
+        launcher_speed.event_seq = snapshot.event_seq;
+        if (launcher_speed_runtime.last_source == 0u)
+        {
+            launcher_speed_runtime.rearm_tick = now;
+            launcher_dial.trigger_ready = 0u;
+            if ((launcher_speed_runtime.fault == LAUNCHER_SPEED_LINK) ||
+                (launcher_speed_runtime.fault == LAUNCHER_SPEED_SOURCE))
+            {
+                launcher_speed_runtime.fault = LAUNCHER_SPEED_OK;
+            }
+        }
+
+        if ((new_event != 0u) && (matching != 0u) && (fresh != 0u))
+        {
+            speed = (float)snapshot.speed_cms * 0.01f;
+            launcher_speed.latest_mps = speed;
+            launcher_speed_runtime.repeat_tick = now;
+            if (speed >= LAUNCHER_SPEED_GUARD_MPS)
+            {
+                launcher_speed.guard_count++;
+                if (speed >= LAUNCHER_SPEED_LIMIT_MPS)
+                {
+                    launcher_speed.limit_count++;
+                }
+                if (launcher_speed.guard_latched == 0u)
+                {
+                    launcher_speed.target_rpm =
+                        ((mode != 0u) ? LAUNCHER_FRIC_TARGET_RPM :
+                         launcher_speed.single_target_rpm) * LAUNCHER_SPEED_GUARD_SCALE;
+                    launcher_speed.guard_latched = 1u;
+                }
+                launcher_speed.waiting = 0u;
+                launcher_speed_runtime.reserved = 0u;
+                launcher_dial.trigger_ready = 0u;
+                Launcher_SpeedClearSamples();
+            }
+            else if (launcher_speed_runtime.reserved != 0u)
+            {
+                Launcher_SpeedDropLearning(LAUNCHER_SPEED_ASSOCIATION, now);
+                launcher_speed.pending_seq = snapshot.event_seq;
+            }
+            else if ((launcher_speed.waiting != 0u) && (mode == 0u))
+            {
+                delta = (uint16_t)(snapshot.event_seq - launcher_speed.pending_seq);
+                elapsed = (uint32_t)(now - launcher_speed.wait_tick);
+                if ((delta != 1u) || (elapsed > LAUNCHER_SPEED_WAIT_MS) ||
+                    (age > elapsed) ||
+                    ((uint32_t)(snapshot.event_rx_tick - launcher_speed.wait_tick) >
+                     LAUNCHER_SPEED_WAIT_MS))
+                {
+                    Launcher_SpeedDropLearning(LAUNCHER_SPEED_ASSOCIATION, now);
+                }
+                else if (launcher_speed_runtime.learning_blocked != 0u)
+                {
+                    launcher_speed.waiting = 0u;
+                    Launcher_SpeedClearSamples();
+                }
+                else
+                {
+                    launcher_speed.waiting = 0u;
+                    launcher_speed.sample_sum_mps += speed;
+                    launcher_speed.sample_count++;
+                    if (launcher_speed.sample_count >= LAUNCHER_SPEED_SAMPLE_COUNT)
+                    {
+                        launcher_speed.average_mps = launcher_speed.sample_sum_mps /
+                            (float)LAUNCHER_SPEED_SAMPLE_COUNT;
+                        error = LAUNCHER_SPEED_TARGET_MPS - launcher_speed.average_mps;
+                        if (fabsf(error) > LAUNCHER_SPEED_DEADBAND_MPS)
+                        {
+                            step = constrain(LAUNCHER_SPEED_GAIN * error,
+                                -LAUNCHER_SPEED_STEP_MAX_RPM, LAUNCHER_SPEED_STEP_MAX_RPM);
+                            next = launcher_speed.single_target_rpm + step;
+                            launcher_speed.at_limit = ((next <= LAUNCHER_SPEED_MIN_RPM) ||
+                                (next >= LAUNCHER_SPEED_MAX_RPM)) ? 1u : 0u;
+                            launcher_speed.single_target_rpm = constrain(next,
+                                LAUNCHER_SPEED_MIN_RPM, LAUNCHER_SPEED_MAX_RPM);
+                            launcher_fric_ready_count = 0u;
+                            launcher.fric_ready = 0u;
+                        }
+                        else
+                        {
+                            launcher_speed.at_limit = 0u;
+                        }
+                        Launcher_SpeedClearSamples();
+                    }
+                }
+            }
+            else if ((launcher_speed_runtime.fault == LAUNCHER_SPEED_TIMEOUT) ||
+                     (launcher_speed_runtime.fault == LAUNCHER_SPEED_ASSOCIATION))
+            {
+                /* 恢复样本不参与学习 */
+                launcher_speed_runtime.fault = LAUNCHER_SPEED_OK;
+                launcher_dial.trigger_ready = 0u;
+                launcher_speed_runtime.rearm_tick = now;
+                Launcher_SpeedClearSamples();
+            }
+        }
+        else if ((new_event != 0u) && (launcher_speed.waiting != 0u))
+        {
+            Launcher_SpeedDropLearning(LAUNCHER_SPEED_ASSOCIATION, now);
+        }
+        if ((launcher_speed.waiting != 0u) &&
+            ((uint32_t)(now - launcher_speed.wait_tick) >= LAUNCHER_SPEED_WAIT_MS))
+        {
+            Launcher_SpeedDropLearning(LAUNCHER_SPEED_TIMEOUT, now);
+        }
+        if ((launcher_dial.state == LAUNCHER_REPEAT) && (request != 0u) &&
+            ((uint32_t)(now - launcher_speed_runtime.repeat_tick) >= LAUNCHER_SPEED_WAIT_MS))
+        {
+            Launcher_SpeedFail(LAUNCHER_SPEED_TIMEOUT);
+        }
+    }
+    launcher_speed_runtime.last_source = launcher_speed.source_ready;
+    if ((request == 0u) || (vehicle_on == 0u))
+    {
+        launcher_speed.waiting = 0u;
+        launcher_speed_runtime.reserved = 0u;
+        Launcher_SpeedClearSamples();
+    }
+    if (launcher_speed.guard_latched == 0u)
+    {
+        launcher_speed.target_rpm = (mode != 0u) ?
+            LAUNCHER_FRIC_TARGET_RPM : launcher_speed.single_target_rpm;
+    }
+    launcher_speed.block_reason = (launcher_speed.guard_latched != 0u) ?
+        LAUNCHER_SPEED_HIGH : launcher_speed_runtime.fault;
+    if ((launcher_speed.block_reason == LAUNCHER_SPEED_OK) &&
+        ((uint32_t)(now - launcher_speed_runtime.rearm_tick) < LAUNCHER_SPEED_REARM_MS))
+    {
+        launcher_speed.block_reason = LAUNCHER_SPEED_REARM;
+    }
+    launcher_speed.feed_ready = ((launcher_speed.source_ready != 0u) &&
+        (launcher_speed.block_reason == LAUNCHER_SPEED_OK)) ? 1u : 0u;
+}
+
+static uint8_t Launcher_SpeedReserve(void)
+{
+    Board_Speed_Pkt_t snapshot;
+    uint32_t now;
+    Board_GetSpeedSnapshot(&snapshot);
+    now = HAL_GetTick();
+    if ((snapshot.event_seq != launcher_speed_runtime.last_seq) ||
+        (snapshot.age_ms == UINT16_MAX) || (snapshot.seen == 0u) ||
+        ((uint32_t)(now - snapshot.rx_tick) >= LAUNCHER_SPEED_LINK_MS))
+    {
+        return 0u;
+    }
+    /* 重叠反馈只隔离学习 */
+    if (launcher_speed.waiting != 0u)
+    {
+        Launcher_SpeedDropLearning(LAUNCHER_SPEED_ASSOCIATION, now);
+    }
+    if (launcher_speed_runtime.learning_blocked != 0u)
+    {
+        launcher_speed_runtime.learning_tick = now;
+    }
+    launcher_speed.pending_seq = snapshot.event_seq;
+    launcher_speed_runtime.reserved = 1u;
+    return 1u;
+}
+
+static void Launcher_SpeedStart(uint32_t now)
+{
+    now = HAL_GetTick();
+    launcher_speed.wait_tick = now;
+    launcher_speed.waiting = 1u;
+    launcher_speed_runtime.reserved = 0u;
+    if (launcher_speed_runtime.learning_blocked != 0u)
+    {
+        launcher_speed_runtime.learning_tick = now;
+    }
+    launcher_fric_ready_count = 0u;
+    launcher.fric_ready = 0u;
+    launcher_dial.trigger_ready = 0u;
 }
 
 /* 左/右摩擦轮是否在线 */
@@ -648,8 +979,20 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
     float speed = fabsf((float)dail_motor.KT_motor_info.rx_info.speed);
     launcher_dial_reject_e reason;
 
+    if ((launcher_dial.pending_single != 0u) &&
+        ((launcher_speed.source_ready == 0u) ||
+         (launcher_speed.guard_latched != 0u) ||
+         (launcher_speed_runtime.fault != LAUNCHER_SPEED_OK) ||
+         (launcher_speed_runtime.reserved == 0u)))
+    {
+        Launcher_DialReject(LAUNCHER_DIAL_REJECT_SPEED);
+        launcher_dial.pending_single = 0u;
+        launcher_speed_runtime.reserved = 0u;
+    }
+
     if (launcher_dial.hold_allowed == 0u)
     {
+        launcher_speed_runtime.reserved = 0u;
         launcher_dial.trigger_ready = 0u;
         reason = ((Board_HeartBeat.status != DEV_ONLINE) ||
                   (launcher.dial_online == 0u)) ?
@@ -678,6 +1021,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
 
     if (launcher_dial.feed_allowed == 0u)
     {
+        launcher_speed_runtime.reserved = 0u;
         if (launcher_dial.pending_single != 0u)
         {
             Launcher_DialReject(LAUNCHER_DIAL_REJECT_INTERLOCK);
@@ -696,6 +1040,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
     else if ((launcher_heat.ready == 0u) ||
              (launcher_heat.heat > launcher_heat.heat_limit))
     {
+        launcher_speed_runtime.reserved = 0u;
         if (launcher_dial.pending_single != 0u)
         {
             Launcher_DialReject(LAUNCHER_DIAL_REJECT_HEAT);
@@ -726,8 +1071,21 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         {
             Launcher_DialReject(LAUNCHER_DIAL_REJECT_INTERLOCK);
         }
+        else if (launcher_speed.feed_ready == 0u)
+        {
+            Launcher_DialReject(LAUNCHER_DIAL_REJECT_SPEED);
+        }
+        else if (launcher.fric_ready == 0u)
+        {
+            Launcher_DialReject(LAUNCHER_DIAL_REJECT_FRIC);
+        }
+        else if (Launcher_SpeedReserve() == 0u)
+        {
+            Launcher_DialReject(LAUNCHER_DIAL_REJECT_SPEED);
+        }
         else if (Launcher_HeatReserveSingle() == 0u)
         {
+            launcher_speed_runtime.reserved = 0u;
             Launcher_DialReject(LAUNCHER_DIAL_REJECT_HEAT);
         }
         else
@@ -746,6 +1104,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         launcher_dial.start_timeout_count++;
         launcher_dial.pending_single = 0u;
         launcher_dial.trigger_ready = 0u;
+        launcher_speed_runtime.reserved = 0u;
     }
 
     if (launcher_dial_stopped != 0u)
@@ -770,6 +1129,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         launcher_dial.settling = 0u;
         launcher.jam_tick = 0u;
         Launcher_DialClearPid();
+        Launcher_SpeedStart(now);
     }
 
     continuous = ((continuous != 0u) &&
@@ -778,11 +1138,12 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
     {
     case LAUNCHER_READY:
 #if LAUNCHER_REPEAT_ENABLE
-        if (continuous != 0u)
+        if ((continuous != 0u) && (launcher.fric_ready != 0u))
         {
             launcher_dial.state = LAUNCHER_REPEAT;
             launcher_dial.state_tick = now;
             launcher.jam_tick = 0u;
+            launcher_speed_runtime.repeat_tick = now;
             Launcher_HeatStartRepeat();
             Launcher_DialClearPid();
         }
@@ -792,12 +1153,13 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
     case LAUNCHER_SINGLE:
 #if LAUNCHER_REPEAT_ENABLE
         /* 长按优先于单发超时 */
-        if (continuous != 0u)
+        if ((continuous != 0u) && (launcher.fric_ready != 0u))
         {
             launcher_dial.state = LAUNCHER_REPEAT;
             launcher_dial.state_tick = now;
             launcher_dial.settling = 0u;
             launcher.jam_tick = 0u;
+            launcher_speed_runtime.repeat_tick = now;
             Launcher_HeatStartRepeat();
             Launcher_DialClearPid();
             break;
@@ -968,7 +1330,11 @@ static void Launcher_UpdateFrictionReady(uint8_t enabled)
     if ((enabled != 0u) &&
         (Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
         (Launcher_FricOnline(SHOOT_FRIC_R) != 0u) &&
-        (launcher.fric_target_rpm >= (LAUNCHER_FRIC_TARGET_RPM * 0.5f)) &&
+        (launcher.fric_target_rpm == launcher_speed.target_rpm) &&
+        (((float)rm_motor[SHOOT_FRIC_L].rx_info->encoder_speed *
+          LAUNCHER_FRIC_L_DIRECTION) > 0.0f) &&
+        (((float)rm_motor[SHOOT_FRIC_R].rx_info->encoder_speed *
+          LAUNCHER_FRIC_R_DIRECTION) > 0.0f) &&
         (fabsf(l_speed - launcher.fric_target_rpm) <=
          LAUNCHER_FRIC_READY_TOL_RPM) &&
         (fabsf(r_speed - launcher.fric_target_rpm) <=
@@ -996,6 +1362,11 @@ void Launcher_Init(void)
     memset(&launcher_heat, 0, sizeof(launcher_heat));
     memset(&launcher_heat_runtime, 0, sizeof(launcher_heat_runtime));
     memset(&launcher_dial, 0, sizeof(launcher_dial));
+    memset(&launcher_speed, 0, sizeof(launcher_speed));
+    memset(&launcher_speed_runtime, 0, sizeof(launcher_speed_runtime));
+    launcher_speed.single_target_rpm = LAUNCHER_FRIC_TARGET_RPM;
+    launcher_speed.target_rpm = LAUNCHER_FRIC_TARGET_RPM;
+    launcher_speed.block_reason = LAUNCHER_SPEED_LINK;
     launcher_dial.state = LAUNCHER_SLEEP;
     launcher_dial.run_tx_status = (uint8_t)HAL_ERROR;
     launcher_dial.torque_tx_status = (uint8_t)HAL_ERROR;
@@ -1136,6 +1507,9 @@ void Launcher_Work(void)
                (Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
                (Launcher_FricOnline(SHOOT_FRIC_R) != 0u)) ? 1u : 0u;
 
+    Launcher_SpeedUpdate(now, vehicle_on,
+                         Board_Rx_Info.shoot_pkt.launch_state, shoot_mode);
+
 #if LAUNCHER_DIAL_ENABLE
     launcher_dial.hold_allowed = ((vehicle_on != 0u) &&
         (launcher.dial_online != 0u) &&
@@ -1165,6 +1539,7 @@ void Launcher_Work(void)
     continuous = ((launcher_dial.feed_allowed != 0u) &&
                   (launcher_dial.trigger_ready != 0u) &&
                   (shoot_level != 0u) && (shoot_mode != 0u) &&
+                  (launcher_speed.feed_ready != 0u) &&
                   (launcher_heat.ready != 0u) &&
                   (launcher_heat.blocked == 0u) &&
                   (launcher_heat.target_rate > 0.0f)) ? 1u : 0u;
@@ -1222,11 +1597,17 @@ void Launcher_Work(void)
         launcher.enabled = 1u;
         launcher_fric_stop_count = 0u;
         launcher.state = LAUNCHER_READY;
-        launcher.fric_target_rpm = LAUNCHER_FRIC_TARGET_RPM;
+        launcher.fric_target_rpm = Launcher_Ramp(
+            launcher.fric_target_rpm, launcher_speed.target_rpm,
+            LAUNCHER_FRIC_RAMP_RPM_PER_MS);
         Launcher_UpdateFrictionReady(1u);
         Launcher_FricControl(1u);
     }
 
+    if ((launcher_dial.state == LAUNCHER_READY) && (launcher.fric_ready == 0u))
+    {
+        continuous = 0u;
+    }
     Launcher_DialUpdate(now, single_rising, continuous);
     launcher_dial.target_angle = launcher_dial_target;
     launcher_dial.target_error = launcher_dial_target - (int64_t)current_angle;

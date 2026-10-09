@@ -53,7 +53,7 @@ task_down/Application/
 | `Application/DeviceLayer/device.c` | 设备对象初始化分支 | 初始化裁判、RC、底盘、发射与超电对象 |
 | `Application/TaskLayer/Command_Task.c` | DBUS 解析及键鼠状态 | 解析后延时 1 tick |
 | `Application/TaskLayer/control_task.c` | 输入、跟随/自旋、底盘、发射、超电发送 | 1 tick 控制循环 |
-| `Application/TaskLayer/connect_task.c` | D1/D2/D3/D5 调度、D4条件发送 | 控制帧检查 FIFO，D3 单独调度 |
+| `Application/TaskLayer/connect_task.c` | D1/D2/D3/D5/D6 调度、D4条件发送 | 控制组预留FIFO，D3独立排期、D6新事件及100 ms心跳 |
 | `Application/ProtocolLayer/judge_protocol.c` | 裁判同步、CRC、命令分发 | USART1 IDLE 后处理 DMA 缓冲 |
 
 ### 数据对象与板间接口
@@ -157,7 +157,7 @@ USART1 使用 DMA 接收后由空闲线处理函数调用 `judge_receive()`；�
 
 | 配置文件 | 关键当前值/用途 |
 | --- | --- |
-| `Application/ConfigLayer/board_comm_config.h` | Debug=1；D1/D2=1 ms；D3=10 ms 开；D4=10 ms 但关闭；D5 开；热量有效超时 300 ms、参数上限超时 1500 ms |
+| `Application/ConfigLayer/board_comm_config.h` | Debug=1；D1/D2=1 ms；D3=10 ms开；D4关闭；D5/D6开；D6心跳100 ms；热量有效300 ms、参数1500 ms |
 | `Application/ConfigLayer/chassis_config.h` | 底盘 bring-up/遥控/键鼠/跟随/小陀螺开关；速度环 kp=0.8；测试力矩 2 N·m；跟随/小陀螺力矩 4 N·m |
 | `Application/ConfigLayer/power_limit_config.h` | 开关 1；回退 45 W；裁判上限 margin 5 W；buffer 目标 59 J、guard 45 J；时间步长上限 200 ms |
 | `Application/ConfigLayer/supercap_config.h` | bring-up 通信开、离线超时 100 ms；功率输出/预充/Turbo/缓冲开关均为 0 |

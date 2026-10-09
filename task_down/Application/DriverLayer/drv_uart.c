@@ -23,7 +23,7 @@ __WEAK void USART9_rxDataHandler(uint8_t *rxBuf);
 __WEAK void USART8_rxDataHandler(uint8_t *rxBuf);
 __WEAK void USART7_rxDataHandler(uint8_t *rxBuf);
 __WEAK void USART5_rxDataHandler(uint8_t *rxBuf);
-__WEAK void USART1_rxDataHandler(uint8_t *rxBuf);
+__WEAK void USART1_rxDataHandler(uint8_t *rxBuf, uint16_t size);
 static HAL_StatusTypeDef DMA_Start(DMA_HandleTypeDef *hdma, \
                             uint32_t SrcAddress, \
                             uint32_t DstAddress, \
@@ -224,14 +224,12 @@ static void uart_rx_idle_callback(UART_HandleTypeDef* huart)
 	
 	else if (huart == &huart1)
 	{
-		/* clear DMA transfer complete flag */
+		uint16_t size;
 		__HAL_DMA_DISABLE(huart->hdmarx);
-		HAL_UART_Receive_DMA(&huart1, usart1_dma_rxbuf, USART1_RX_BUF_LEN);
-		/* handle dbus data dbus_buf from DMA */
-		USART1_rxDataHandler(usart1_dma_rxbuf);
-		memset(usart1_dma_rxbuf, 0, USART1_RX_BUF_LEN);
-		/* restart dma transmission */	  
-		__HAL_DMA_ENABLE(huart->hdmarx);		
+		size = USART1_RX_BUF_LEN - __HAL_DMA_GET_COUNTER(huart->hdmarx);
+		HAL_UART_DMAStop(huart);
+		USART1_rxDataHandler(usart1_dma_rxbuf, size);
+		HAL_UART_Receive_DMA(huart, usart1_dma_rxbuf, USART1_RX_BUF_LEN);
 	}
 	
 	else if (huart == &huart7)
@@ -362,8 +360,10 @@ void WL_UART_printf(char *format, ...)
 
 /* rxData Handler [Weak] functions -------------------------------------------*/
 /* __WEAK */
-__WEAK void USART1_rxDataHandler(uint8_t *rxBuf)
+__WEAK void USART1_rxDataHandler(uint8_t *rxBuf, uint16_t size)
 {	
+    (void)rxBuf;
+    (void)size;
 }
 
 /* __WEAK */

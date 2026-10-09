@@ -4,6 +4,7 @@
 #include "imu_sensor.h"
 #include "cap.h"
 #include "drv_tick.h"
+#include <string.h>
 
 typedef struct
 {
@@ -18,6 +19,7 @@ typedef struct
 
 static volatile judge_power_data_t judge_power_data;
 static volatile judge_heat_snapshot_t judge_heat_data;
+static volatile judge_speed_snapshot_t judge_speed_data;
 
 Judge_Info_t Judge_Info;
 Judge_Pkt_t Judge_Pkt;
@@ -37,6 +39,7 @@ Judge_t judge =
 /* 裁判系统初始化 */
 void Judge_Init(Judge_t* judge)
 {
+    memset((void *)&judge_speed_data, 0, sizeof(judge_speed_data));
     judge_heat_data.limit_tick = 0u;
     judge_heat_data.heat_tick = 0u;
     judge_heat_data.heat_limit = 0u;
@@ -117,6 +120,20 @@ uint8_t Judge_GetHeatSnapshot(judge_heat_snapshot_t *snapshot)
     *snapshot = judge_heat_data;
     __set_PRIMASK(irq_state);
     return 1u;
+}
+
+void Judge_GetSpeedSnapshot(judge_speed_snapshot_t *snapshot)
+{
+    uint32_t irq_state;
+    if (snapshot == NULL)
+    {
+        return;
+    }
+    irq_state = __get_PRIMASK();
+    __disable_irq();
+    *snapshot = judge_speed_data;
+    snapshot->online = (judge.status->status == DEV_ONLINE) ? 1u : 0u;
+    __set_PRIMASK(irq_state);
 }
 
 uint8_t Judge_GetPowerData(uint16_t *limit_w, uint16_t *buffer_j)
@@ -261,6 +278,22 @@ void Judge_Data_Update(uint16_t id, uint8_t *rxBuf)
 
     case ID_shoot_data:
       memcpy(&judge.info->shoot_data, rxBuf, LEN_shoot_data);
+
+          if ((judge.info->shoot_data.initial_speed > 0.0f) &&
+              (judge.info->shoot_data.initial_speed <= 655.34f) &&
+              (judge.info->shoot_data.bullet_type >= 1u) &&
+              (judge.info->shoot_data.bullet_type <= 2u) &&
+              (judge.info->shoot_data.shooter_number >= 1u) &&
+              (judge.info->shoot_data.shooter_number <= 3u))
+          {
+              judge_speed_data.speed_cms = (uint16_t)(
+                  judge.info->shoot_data.initial_speed * 100.0f + 0.5f);
+              judge_speed_data.bullet_type = judge.info->shoot_data.bullet_type;
+              judge_speed_data.shooter_number = judge.info->shoot_data.shooter_number;
+              judge_speed_data.sample_tick = HAL_GetTick();
+              judge_speed_data.event_seq++;
+              judge_speed_data.seen = 1u;
+          }
 		
 		  judge.pkt->initial_speed = judge.info->shoot_data.initial_speed;
 		  judge.pkt->launching_frequency = judge.info->shoot_data.launching_frequency;

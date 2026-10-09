@@ -15,7 +15,7 @@ flowchart LR
   DRIVER --> RTOS[FreeRTOS 调度器]
   SPI[BMI088 SPI1] --> IMU[采样/姿态解算]
   IMU --> CTL[1 ms ControlTask]
-  CAN2[CAN2 接收 D1/D2/D3/D5] --> CTL
+  CAN2[CAN2 接收 D1/D2/D3/D5/D6] --> CTL
   CTL --> MODULE[Module_Work: Gimbal/Lift]
   CTL --> LAUNCH[Launcher_Work]
   MODULE --> DM[DM Yaw/Pitch]
@@ -47,7 +47,7 @@ task_up/Application/
 | `ModuleLayer/gimbal.c` | 目标选择、模式 FSM、两轴控制 | DM Yaw/Pitch 力矩 |
 | `ModuleLayer/lift.c` | 找顶、行程控制、对齐互锁 | RM2006 力矩和 C1 状态 |
 | `ModuleLayer/launcher.c` | 热量预算、发射状态、拨盘/摩擦轮 | RM3508/KT4005 输出 |
-| `ProtocolLayer/communicate.c` | D1–D5 解包、C1/C2 打包、心跳 | CAN2 上下板数据交换 |
+| `ProtocolLayer/communicate.c` | D1–D6 解包、C1/C2 打包、心跳 | CAN2 上下板数据交换 |
 
 ### 数据结构与跨模块接口
 
@@ -149,7 +149,7 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 
 ### 发射与热量 FSM
 
-- 发射请求由下板 D1 发来，供弹要求有效许可、摩擦轮与拨盘在线、热量预算有效；`fric_ready` 仍为观测值。
+- 发射请求由下板D1发来，新单发还要求双轮达速及D6弹速路径有效；上一发漏发或未反馈不阻止下一发；连发固定6000 rpm并受弹速保护，见[单发弹速闭环](docs/launcher.md#单发弹速闭环)。
 - 拨盘独立阶段见 `launcher_dial.state`：摩擦轮关闭、S2 中位时保持；过洞请求期间停机，退出请求后等待 `LAUNCHER_DIAL_HOLE_RELEASE_DELAY_MS=2000 ms` 恢复保持，不依赖升降到位或故障码。整车失能、断联、拨盘离线或发射机构故障时卸力，供弹仍受下板发射许可约束。
 - 单发累加原目标，释放后完成本发；500 ms 未完成则制动后保持当前位置。启动发送失败最多等待 50 ms，拒绝/超时/许可中断后须释放再触发。
 - 待发位置 KP=0.04、死区 100 count，速度 KP=0.15、KI/KD=0；单发和连发力度不变。拨盘与连发使能为 1，堵转退让为 0；主路径不进入旧 `SPINUP/INIT` 枚举值。
@@ -159,7 +159,7 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 
 ## Protocol & Tuning
 
-板间公共布局由[根 README](../README.md#protocol--tuning)维护；物理接口为下板 FDCAN2 ↔ 上板 CAN2，8 字节经典 CAN。此板接收 D1–D5，发送 C1/C2。
+板间公共布局由[根 README](../README.md#protocol--tuning)维护；物理接口为下板 FDCAN2 ↔ 上板 CAN2，8 字节经典 CAN。此板接收 D1–D6，发送 C1/C2。
 
 | 报文 | 本板处理 |
 | --- | --- |
@@ -168,6 +168,7 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 | D3 | 热量上限/枪管热量/冷却率/源序号/有效 flags |
 | D4 | 当前只更新心跳，不处理血量字段 |
 | D5 | 角速度、输入来源和鼠标键；角速度量化步长 0.1 deg/s/LSB |
+| D6 | 弹速0.01 m/s、uint16事件序号、源年龄ms、类型和机构编号 |
 | C1 | 电机在线位和升降状态；剩余字段当前发 0 |
 | C2 | Yaw/Pitch 机械角 rad 与 IMU 角 deg |
 
@@ -178,7 +179,7 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 | `Application/ConfigLayer/gimbal_init_config.h` | 归中目标 0 deg；Yaw/Pitch 归中力矩上限 6 N·m；速度规划开关 0；超时 6000 ms |
 | `Application/ModuleLayer/gimbal.h` | 控制步长 0.001 s；Yaw 静摩擦前馈 0.3 N·m；Pitch/Yaw 最终默认力矩限幅 6 N·m；重力补偿开关 1 |
 | `Application/ConfigLayer/lift_config.h` | 下端目标距顶部零点 280 圈；找顶 2865 rpm；上端目标偏移 5 圈，当前找顶完成不自动回退；行程超时 90000 ms |
-| `Application/ConfigLayer/launcher_config.h` | 摩擦轮目标 1500 rpm；射频上限 15 发/s；热量余量 20；D3 超时 100 ms |
+| `Application/ConfigLayer/launcher_config.h` | 基准6000 rpm；目标22 m/s；三发修正5400～6000 rpm；24 m/s锁止；射频上限15发/s；D3超时100 ms |
 | `Application/ConfigLayer/board_remote_config.h` | 下板遥控输入开；本地遥控关闭；C1/C2 各自最短间隔 5 ms |
 
 ### 控制状态判读
@@ -188,7 +189,7 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 | 云台正在运行 | D1 心跳/`car_state` 有效、DM 与 IMU 在线、模式分支有有效目标 | `init_flag=1`（初始化超时分支也会置位） |
 | D5 手动输入生效 | valid=1，source/type 与格式匹配，数据年龄可接受 | D5 心跳计数增长 |
 | 升降下行开始 | 零点已建立、D1 请求有效、Yaw/速度对齐满足配置窗口、升降电机在线 | `is_hole=1` |
-| 发射许可成立 | 板间/发射状态有效、左右摩擦轮在线、D3 热量源有效、拨盘条件满足 | 摩擦轮反馈接近目标（当前 `fric_ready` 不作为单发硬门槛） |
+| 发射许可成立 | 板间/发射状态有效、双轮达速、热量和D6弹速路径有效、拨盘条件满足 | 单发不等待上一发弹速；漏发/超时仅清空学习；`launcher_speed.block_reason`及拨盘拒绝原因 |
 
 详细条件、状态枚举和变量路径分别见[云台](docs/gimbal.md)、[升降](docs/lift.md)和[发射](docs/launcher.md)。建议先按模块页定位软件状态，再核实驱动器反馈和机械状态。
 

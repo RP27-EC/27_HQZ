@@ -29,6 +29,7 @@
 #define  ID_PKT_03     0xD3  /* 射击热量信息 */
 #define  ID_PKT_04     0xD4  /* 血量数据 */
 #define  ID_PKT_05     0xD5  /* 遥控/键鼠控制 */
+#define  ID_PKT_06     0xD6  /* 逐发弹速及源年龄 */
 /* 上板发送报文 */
 #define  ID_MEG_01     0xC1  /* 设备在线状态 */
 #define  ID_MEG_02     0xC2  /* 云台姿态反馈 */
@@ -185,6 +186,8 @@ void Board_Tx_Pkt_03(Board_t* board);
 void Board_Tx_Pkt_04(Board_t* board);
 
 void Board_Tx_Pkt_05(Board_t* board);
+
+void Board_Tx_Pkt_06(Board_t* board);
 
 void Board_Rx_Meg_01(Board_t* board,uint8_t* rxbuf);
 

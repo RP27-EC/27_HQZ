@@ -541,6 +541,19 @@ typedef struct
 
 uint8_t Judge_GetHeatSnapshot(judge_heat_snapshot_t *snapshot);
 
+typedef struct
+{
+    uint32_t sample_tick; // 弹速采样时刻，ms
+    uint16_t speed_cms; // 实测弹速，0.01m/s
+    uint16_t event_seq; // 逐发序号，uint16循环
+    uint8_t bullet_type; // 弹丸类型，1~2
+    uint8_t shooter_number; // 发射机构编号，1~3
+    uint8_t seen; // 已有有效样本，0/1
+    uint8_t online; // 裁判心跳在线，0/1
+} judge_speed_snapshot_t;
+
+void Judge_GetSpeedSnapshot(judge_speed_snapshot_t *snapshot);
+
 void Shooting_Cmd_Excute_Tick_Calculating(uint8_t flag);
 void Speed_Statistic(void);
 

@@ -16,6 +16,7 @@
 #define ID_BOARD_RX3 0xD3  /* 裁判系统射击信息 */
 #define ID_BOARD_RX4 0xD4  /* 血量数据 */
 #define ID_BOARD_RX5 0xD5  /* 遥控/键鼠控制量 */
+#define ID_BOARD_RX6 0xD6  /* 逐发弹速及源年龄 */
 
 /* 整车状态报文 */
 typedef struct
@@ -70,6 +71,19 @@ typedef struct
     uint32_t rx_tick; /* D3接收时刻，ms */
 } Board_Heat_Pkt_t;
 
+typedef struct
+{
+    uint16_t speed_cms; // 实测弹速，0.01m/s
+    uint16_t event_seq; // 逐发序号，uint16循环
+    uint16_t age_ms; // 源年龄，65535为离线
+    uint8_t bullet_type; // 弹丸类型，1~2
+    uint8_t shooter_number; // 发射机构编号，1~3
+    uint8_t seen; // D6已接收，0/1
+    uint32_t rx_tick; // 最近D6接收时刻，ms
+    uint32_t event_rx_tick; // 本事件首收时刻，ms
+    uint16_t event_age_ms; // 本事件首收源年龄，ms
+} Board_Speed_Pkt_t;
+
 /* 上板接收缓存 */
 typedef struct
 {
@@ -78,6 +92,7 @@ typedef struct
     Board_Shoot_Pkt_t shoot_pkt; /* 发射控制，各位0/1 */
     Board_Remote_Cmd_Pkt_t remote_cmd_pkt; /* 键鼠命令，单位见类型 */
     Board_Heat_Pkt_t heat_pkt; /* 热量快照，见成员单位 */
+    Board_Speed_Pkt_t speed_pkt; // 弹速快照，见成员单位
 } Board_Rx_Info_t;
 
 /* 云台姿态反馈，机械角单位 rad，IMU 角单位 deg */
@@ -143,6 +158,8 @@ void Board_Rx_01(uint8_t *rxbuf);
 void Board_Rx_02(uint8_t *rxbuf);
 void Board_Rx_03(uint8_t *rxbuf);
 void Board_GetHeatSnapshot(Board_Heat_Pkt_t *snapshot);
+void Board_Rx_06(uint8_t *rxbuf);
+void Board_GetSpeedSnapshot(Board_Speed_Pkt_t *snapshot);
 void Board_Rx_04(uint8_t *rxbuf);
 void Board_Rx_05(uint8_t *rxbuf);
 void Send_To_Down_Board(void);

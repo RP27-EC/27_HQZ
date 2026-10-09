@@ -42,6 +42,12 @@ USART1 RX/TX 为 PA10/PA9，115200 baud、8N1；接收使用 DMA 和空闲线回
 
 配置宏 `BOARD_JUDGE_ENABLE=0` 当前没有守护 USART1 初始化或裁判解析调用；它不能代表本配置下裁判 UART 不运行。以 `DRIVER_Init()`、`USART1_Init()` 和 RX 回调实际执行路径为准。
 
+## 逐发弹速
+
+USART1 IDLE 回调在停止DMA前取得实际接收长度，将完整接收片段交给有界流解析器；保留半帧并校验CRC8/CRC16，`0x0207` 还要求7字节负载。无效数值不发布新弹速，发射后无有效数据将由上板反馈超时处理。
+
+`Judge_GetSpeedSnapshot()` 原子复制实测弹速、uint16事件序号、类型/机构、采样时刻和裁判在线状态；`Board_Tx_Pkt_06()` 转发D6，新事件立即尝试，旧事件100 ms重发并增加年龄。详细字段见[下板协议](board-link.md#d6-弹速与源状态)，控制与人工验收见[上板发射](../../task_up/docs/launcher.md#单发弹速闭环)。
+
 ## 数据和故障定位
 
 | 现象 | 观察点 |
