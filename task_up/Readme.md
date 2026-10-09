@@ -114,6 +114,8 @@ Get-Content "$env:TEMP\Train_code_plus_up.log"
 
 `G_MEC` 中 Yaw 以机械位置误差生成速率目标，再经速度反馈/力矩控制；Pitch 与 `G_RATE` 共用角速度通路，包含操作输入与松杆保持。`G_INIT` 使用位置外环和速度内环，并受 6 N·m 力矩限幅。Pitch 重力补偿按 `K*cos(angle-middle)+bias` 计算；当前归中配置 `K=1.1 N·m`、偏置 `0 N·m`、开关为 1。
 
+`G_RATE` 的 Yaw 速率输入松手后先以零速度目标制动，IMU 角速度连续 20 ms 小于 3 deg/s 后锁住实际朝向；制动最长 300 ms，超时也恢复角度保持。参数位于 `Application/ConfigLayer/gimbal_rate_config.h`，Watch 状态为 `Gimbal.feedforward.yaw_release.phase`（0 锁角、1 主动转向、2 制动）。
+
 ### 云台状态转移
 
 | 状态 | 进入条件/行为 |

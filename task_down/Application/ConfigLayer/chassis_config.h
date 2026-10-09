@@ -78,7 +78,7 @@
 
 /* 仅停稳受扰和小陀螺退出启用。 */
 #define CHASSIS_FOLLOW_RECOVERY_ARRIVE_DEG 0.5f // 特殊回正到位误差，°
-#define CHASSIS_FOLLOW_RECOVERY_FF_WZ     10.0f  // 辅助前馈转速控制量，≥0
+#define CHASSIS_FOLLOW_RECOVERY_FF_WZ     0.0f  // 前馈控制量，0关闭，≥0
 #define CHASSIS_FOLLOW_RECOVERY_TRIGGER_DEG 6.0f // 受扰触发误差，°
 #define CHASSIS_FOLLOW_RECOVERY_FULL_DEG  7.0f  // 前馈全幅误差，>停止角，°
 #define CHASSIS_FOLLOW_RECOVERY_STABLE_MS 200u  // 停稳确认时间，ms

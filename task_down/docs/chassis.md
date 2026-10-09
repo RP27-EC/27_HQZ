@@ -42,9 +42,9 @@ flowchart LR
 
 辅助回正前馈仅由以下条件触发：
 
-- 无转向和平移输入、误差在 1°内、旋转输出归零、四轮反馈均低于既有 `CHASSIS_STOP_SPEED_BAND=1.0 rad/s`，持续 200 ms 后设置 `chassis_follow.disturbance_armed=1`；随后误差达到 6°，触发一次辅助前馈。该判据识别停稳后的偏离，不能区分外力来源。
-- 小陀螺直接切跟随，设置 `recovery_pending=1`；等待小陀螺输出斜坡归零后，误差大于 0.5°就启用辅助前馈，即使此前已进入普通 1°死区。等待交接最多 4000 ms。
-- 比例增益固定为原值 20。辅助前馈沿纠偏方向叠加，幅值为 `CHASSIS_FOLLOW_RECOVERY_FF_WZ=10.0` 转速控制量；7°及以上全幅，0.5～7°线性收小，0.5°以内为零。特殊回正穿过普通 1°死区，到 0.5°内结束；若持续 4000 ms 仍未到位则退出辅助，恢复普通跟随，超时不代表到位。总输出仍限于原 ±40 控制量。
+- 无转向和平移输入、误差在 1°内、旋转输出归零、四轮反馈均低于既有 `CHASSIS_STOP_SPEED_BAND=1.0 rad/s`，持续 200 ms 后设置 `chassis_follow.disturbance_armed=1`；随后误差达到 6°，触发一次特殊回正状态。该判据识别停稳后的偏离，不能区分外力来源。
+- 小陀螺直接切跟随，设置 `recovery_pending=1`；等待小陀螺输出斜坡归零后，误差大于 0.5°就进入特殊回正状态，即使此前已进入普通 1°死区。等待交接最多 4000 ms。
+- 比例增益固定为原值 20。`CHASSIS_FOLLOW_RECOVERY_FF_WZ=0.0`，受扰／小陀螺退出的辅助前馈已关闭；普通跟随反馈及遥控器前馈保留。特殊回正状态仍穿过普通 1°死区，到 0.5°内结束；若持续 4000 ms 仍未到位则退出特殊回正，恢复普通跟随，超时不代表到位。总输出仍限于原 ±40 控制量。
 - 主动摇杆/鼠标/QE 转向、R 掉头、跟随中心变化、退出跟随、无效指令或底盘故障会清除辅助前馈与停稳确认。普通转向松手后的追赶不直接触发辅助前馈。力矩、限功和反馈保护沿用原路径。
 
 Keil Watch 可观察 `chassis_follow.correction_stopped`、`disturbance_armed`、`recovery_pending`、`recovery_active`（均为 0/1）以及 `yaw_error_rad`、`recovery_ff`（符号在最终旋转方向映射前，单位为转速控制量）。这些状态只描述软件控制阶段，效果需人工编译、烧录与台架验证。
@@ -97,7 +97,7 @@ C2 超过 50 ms、角度非法或相邻反馈跳变超过 30 deg 会使跟随故
 | 同上 | `CHASSIS_FOLLOW_KP`, `MAX_WZ` | 20 控制量/rad、40 控制量 |
 | 同上 | `CHASSIS_FOLLOW_DEADBAND_DEG`, `RESUME_DEG` | 普通停止 1°、恢复 2° |
 | 同上 | `CHASSIS_FOLLOW_RECOVERY_ARRIVE_DEG` | 特殊回正到位 0.5° |
-| 同上 | `CHASSIS_FOLLOW_RECOVERY_FF_WZ` | 回正前馈幅值 10.0 转速控制量 |
+| 同上 | `CHASSIS_FOLLOW_RECOVERY_FF_WZ` | 回正前馈幅值 0.0，辅助前馈关闭 |
 | 同上 | `CHASSIS_FOLLOW_RECOVERY_TRIGGER_DEG`, `RECOVERY_FULL_DEG` | 受扰触发 6°、前馈全幅 7° |
 | 同上 | `CHASSIS_FOLLOW_RECOVERY_STABLE_MS`, `RECOVERY_TIMEOUT_MS` | 停稳 200 ms、等待交接/辅助各 4000 ms |
 | 同上 | `CHASSIS_FOLLOW_TIMEOUT_MS`, `YAW_JUMP_LIMIT_DEG` | 50 ms、30 deg |

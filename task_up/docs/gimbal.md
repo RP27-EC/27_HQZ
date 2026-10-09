@@ -37,7 +37,7 @@ flowchart LR
 ## 两轴闭环与补偿
 
 - **Yaw 机械保持**：机械角误差经软死区和计数域位置环形成速率目标，IMU 角速度用于内环反馈；内环反馈另有速度死区。当前补偿路径由 IMU/电机相对速率之差估计底盘旋转，再滤波、渐入前馈；头文件中的静摩擦参数不等于本路径必然叠加静摩擦力矩。
-- **速率与松杆保持**：操作速率幅值低于 2 deg/s 时保持环进入；高于 8 deg/s 时完全交还手动输入，中间区域用于平滑接管。Yaw、Pitch 保持环参数分别配置。
+- **速率与松杆保持**：`G_RATE` 的 Yaw 速率输入大于 2 deg/s 时标记主动转向；松手回到 ≤2 deg/s 后，速度目标置零，制动期间保持角跟随 IMU 且角度修正不参与输出。IMU 角速度连续 20 ms 小于 3 deg/s，或制动达到 300 ms 后，锁住当时实际角度并恢复保持。锁角后的外力扰动不重新捕获朝向。Pitch、机械模式及增量角输入保留原交接逻辑。
 - **Pitch 输出**：速率控制结果与重力补偿合成后再限矩；重力项使用中点角、正负方向、幅值和偏置，不是固定常数。
 - **单位边界**：IMU角度及人工输入命令使用 deg、deg/s；机械位置控制接口有 deg/rad 转换；DM 输出为 N·m。跨协议字段请以[板间协议页](board-link.md)的映射范围为准。
 
@@ -53,6 +53,8 @@ flowchart LR
 | `gimbal.h`：`GIMBAL_YAW_MIDDLE_DEG` / `GIMBAL_PITCH_MIDDLE_DEG` | -22.224138 / 148.573157 deg | 当前机械中点常量；与归中目标不是同一组参数 |
 | `GIMBAL_TORQUE_LIMIT` | 6 N·m | 运行输出最终限幅 |
 | `GIMBAL_RATE_HOLD_ENTER_DEG_S` / `GIMBAL_RATE_HOLD_EXIT_DEG_S` | 2 / 8 deg/s | 速控松杆保持环接管门限 |
+| `ConfigLayer/gimbal_rate_config.h`：`GIMBAL_YAW_RELEASE_STOP_DEG_S` | 3 deg/s | Yaw 制动停稳速度阈值 |
+| `GIMBAL_YAW_RELEASE_STABLE_MS` / `GIMBAL_YAW_RELEASE_TIMEOUT_MS` | 20 / 300 ms | 连续停稳时间 / 制动超时 |
 
 运行控制中较常观察的参数（均定义在 `task_up/Application/ModuleLayer/gimbal.h`）：
 
@@ -64,7 +66,7 @@ flowchart LR
 | `GIMBAL_RATE_CMD_RAMP_DEG_S_PER_MS` | 6 deg/s/ms | 速率命令斜坡变化限制 |
 | `GIMBAL_MEC_YAW_MAX_RATE_DEG_S` | 300 deg/s | 机械 Yaw 运动目标限速 |
 | `GIMBAL_MEC_YAW_FRICTION_FF_NM` | 0.3 N·m | 保留调参值；当前统一机械定位函数未消费此项 |
-| `GIMBAL_YAW_HOLD_KP/KI` | 20 / 0.003 | Yaw 位置保持 PI；输出 deg/s |
+| `GIMBAL_YAW_HOLD_KP/KI` | 15 / 0.003 | Yaw 位置保持 PI；输出 deg/s |
 | `GIMBAL_PITCH_HOLD_KP/KI` | 50 / 0 | Pitch 位置保持 PI；输出 deg/s |
 | `GIMBAL_MEC_HOLD_KP_NM_PER_DEG` | 1.5 | 宏名保留旧单位；当前作为计数域位置环增益使用 |
 | `GIMBAL_MEC_HOLD_RATE_KP_NM_PER_DPS` / `GIMBAL_MEC_HOLD_RATE_OUT_MAX_NM` | 0.1 / 6.0 | 机械 Yaw 速度内环增益 / 输出限幅 N·m |
@@ -102,6 +104,7 @@ flowchart LR
 | 2 | `Gimbal.gimbal_mode`、`init_info.init_flag` | 确认选中模式与归中状态，必要时查超时标志 |
 | 3 | `Gimbal.base_info`、`Board_Rx_Info.gimbal_target_pkt`、`remote_cmd_pkt` | 对照角度单位、角速度、机械目标与手动输入 |
 | 4 | 位置/速度误差、hold 状态、feedforward | 分辨目标生成、反馈方向和保持/补偿分支 |
+| 4a | `Gimbal.feedforward.yaw_release.phase` | 0 锁角、1 主动转向、2 松手制动；正常松手为 1→2→0 |
 | 5 | `tx_info.torque`、DM 反馈与 CAN 发送状态 | 判断是否在软件限幅后仍有命令以及反馈是否跟随 |
 
 字段层级按 `gimbal.h` 当前结构定义核实。若只观察最终 torque，无法区分“目标未生成”“反馈无效”“输出被限幅”或“驱动器未执行”。
@@ -133,7 +136,7 @@ IMU 离线时该定位函数清 PID 并返回零；恢复首轮对齐误差历�
 | 路径 | 位置/保持输入 | 速度反馈 | 参数入口 |
 | --- | --- | --- | --- |
 | 机械 Yaw | D2 机械目标与电机机械角，内部转 count | IMU Yaw deg/s | `gimbal_tune` 的机械保持项；旧 `yaw_mec_outer/inner` 初始化值不是当前统一定位律 |
-| 速控 Yaw | D5 速率与 IMU 角度保持修正 | IMU Yaw deg/s | `yaw_hold` 与 `yaw_gyro_inner`，速度 KP=0.04 |
+| 速控 Yaw | D5 速率与 IMU 角度保持修正 | IMU Yaw deg/s | `yaw_hold` 与 `yaw_gyro_inner`，速度 KP=0.06 |
 | 运行 Pitch | D5 速率、角度保持和升降零位请求 | 电机机械速度由 rad/s 转 deg/s | `pitch_hold` 与 `pitch_gyro_inner`，速度 KP=0.03 |
 | 初始化两轴 | 机械角归中目标 | 机械速度 | [gimbal_init_config.h](../Application/ConfigLayer/gimbal_init_config.h) |
 

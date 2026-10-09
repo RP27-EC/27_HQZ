@@ -11,6 +11,7 @@
 #include "rp_device_config.h"
 #include "gimbal_init_config.h"
 #include "gimbal_turn_config.h"
+#include "gimbal_rate_config.h"
 
 /*
  * 云台控制层对外接口。
@@ -208,24 +209,40 @@ typedef struct
     float pitch_gravity_middle_deg;    /* Pitch 归中重力补偿相位 */
 } gimbal_init_info_t;
 
+typedef enum
+{
+    GIMBAL_YAW_RELEASE_HOLD = 0, // 锁角保持，状态0
+    GIMBAL_YAW_RELEASE_MANUAL = 1, // 主动转向，状态1
+    GIMBAL_YAW_RELEASE_BRAKE = 2 // 松手制动，状态2
+} gimbal_yaw_release_phase_e;
+
+typedef struct
+{
+    gimbal_yaw_release_phase_e phase; // 松手阶段，0~2
+    uint32_t brake_start_ms; // 制动起始时刻，ms
+    uint32_t stable_start_ms; // 停稳起始时刻，ms
+    uint8_t stable_tracking; // 连续停稳计时，0/1
+} gimbal_yaw_release_t;
+
 /* 云台前馈量。 */
 typedef struct
 {
-    float yaw_rate_cmd_deg_s;       /* 操作手原始 Yaw 角速度指令 */
-    float pitch_rate_cmd_deg_s;     /* 操作手原始 Pitch 角速度指令 */
-    uint8_t manual_source;          /* 当前操作输入源 */
-    uint8_t manual_source_changed;  /* 输入源切换标志 */
-    float mouse_dx_counts;          /* 鼠标 X 原始增量 */
-    float mouse_dy_counts;          /* 鼠标 Y 原始增量 */
-    float yaw_rate_target_deg_s;    /* 速控分支使用的 Yaw 目标角速度 */
-    float pitch_rate_target_deg_s;  /* 速控分支使用的 Pitch 目标角速度 */
-    float yaw_rate_cmd_last_deg_s;  /* 上一周期 Yaw 指令 */
-    float pitch_rate_cmd_last_deg_s;/* 上一周期 Pitch 指令 */
-    float yaw_torque_ff_nm;         /* Yaw 最终力矩前馈 */
-    float pitch_torque_ff_nm;       /* Pitch 最终力矩前馈 */
-    float yaw_hold_angle_deg;       /* 速控回中后保持的 Yaw 角度 */
-    float pitch_hold_angle_deg;     /* 速控回中后保持的 Pitch 角度 */
-    uint8_t pitch_zero_hold_last;
+    float yaw_rate_cmd_deg_s;       // Yaw输入角速度，deg/s
+    float pitch_rate_cmd_deg_s;     // Pitch输入角速度，deg/s
+    uint8_t manual_source;          // 输入源，0遥控/1键鼠
+    uint8_t manual_source_changed;  // 输入源变更，0/1
+    float mouse_dx_counts;          // 鼠标横向增量，count
+    float mouse_dy_counts;          // 鼠标纵向增量，count
+    float yaw_rate_target_deg_s;    // Yaw目标角速度，deg/s
+    float pitch_rate_target_deg_s;  // Pitch目标角速度，deg/s
+    float yaw_rate_cmd_last_deg_s;  // 上次Yaw指令，deg/s
+    float pitch_rate_cmd_last_deg_s;// 上次Pitch指令，deg/s
+    float yaw_torque_ff_nm;         // Yaw力矩前馈，N·m
+    float pitch_torque_ff_nm;       // Pitch力矩前馈，N·m
+    float yaw_hold_angle_deg;       // Yaw保持朝向，deg
+    float pitch_hold_angle_deg;     // Pitch保持机械角，deg
+    uint8_t pitch_zero_hold_last;   // 上次Pitch锁零，0/1
+    gimbal_yaw_release_t yaw_release; // Yaw松手阶段，0~2
 } gimbal_feedforward_t;
 
 /* Runtime tuning values. Edit these in Keil Watch without reflashing. */

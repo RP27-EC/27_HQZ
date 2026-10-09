@@ -561,12 +561,72 @@ static float gimbal_hold_blend(float rate_mag)
     return (exit - rate_mag) / (exit - enter);
 }
 
-/*
- * 更新速控模式目标角速度。
- *
- * 遥控器按纯角速度输入；鼠标按增量累加虚拟目标角，保持环输出角速度。
- * 内环仍是速控，鼠标停止后虚拟目标角保持不动。
- */
+static void gimbal_yaw_release_reset(gimbal_t *gimbal)
+{
+    gimbal_yaw_release_t *release = &gimbal->feedforward.yaw_release;
+
+    release->phase = GIMBAL_YAW_RELEASE_HOLD;
+    release->brake_start_ms = 0u;
+    release->stable_start_ms = 0u;
+    release->stable_tracking = 0u;
+}
+
+static uint8_t gimbal_yaw_release_update(gimbal_t *gimbal, float yaw_mag)
+{
+    gimbal_yaw_release_t *release = &gimbal->feedforward.yaw_release;
+    uint32_t now = HAL_GetTick();
+
+    if (yaw_mag > gimbal_tune.rate_hold_enter_deg_s)
+    {
+        release->phase = GIMBAL_YAW_RELEASE_MANUAL;
+        release->stable_tracking = 0u;
+        gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
+        integral_to_zero(&gimbal->pid_info.yaw_hold);
+        return 0u;
+    }
+
+    if (release->phase == GIMBAL_YAW_RELEASE_MANUAL)
+    {
+        release->phase = GIMBAL_YAW_RELEASE_BRAKE;
+        release->brake_start_ms = now;
+        release->stable_tracking = 0u;
+    }
+
+    if (release->phase != GIMBAL_YAW_RELEASE_BRAKE)
+    {
+        return 0u;
+    }
+
+    // NOTE: 制动期间不拉回旧角
+    gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
+    integral_to_zero(&gimbal->pid_info.yaw_hold);
+
+    if (gimbal_abs(gimbal->base_info.yaw_imu_speed) < GIMBAL_YAW_RELEASE_STOP_DEG_S)
+    {
+        if (release->stable_tracking == 0u)
+        {
+            release->stable_start_ms = now;
+            release->stable_tracking = 1u;
+        }
+    }
+    else
+    {
+        release->stable_tracking = 0u;
+    }
+
+    if (((release->stable_tracking != 0u) &&
+         ((uint32_t)(now - release->stable_start_ms) >= GIMBAL_YAW_RELEASE_STABLE_MS)) ||
+        ((uint32_t)(now - release->brake_start_ms) >= GIMBAL_YAW_RELEASE_TIMEOUT_MS))
+    {
+        release->phase = GIMBAL_YAW_RELEASE_HOLD;
+        release->stable_tracking = 0u;
+        return 0u;
+    }
+
+    return 1u;
+}
+
+// NOTE: 增量角输入保留原锁角
 static void gimbal_update_rate_targets(gimbal_t *gimbal)
 {
     float yaw_cmd = gimbal->feedforward.yaw_rate_cmd_deg_s;
@@ -597,6 +657,7 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
 
     if (gimbal->feedforward.manual_source_changed != 0u)
     {
+        gimbal_yaw_release_reset(gimbal);
         gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
         if ((pitch_zero_hold == 0u) && (pitch_zero_transition == 0u))
         {
@@ -655,12 +716,21 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     }
     else
     {
-        /*
-         * 遥控器接管区间：保持角跟随当前角，同时清掉积分。
-         * 保持角跟随保证手动响应不被拖慢，清积分保证上一次保持的积分
-         * 不会残留到下一次松杆，避免交接瞬间产生力矩突变。
-         */
-        if (yaw_mag > gimbal_tune.rate_hold_enter_deg_s)
+        yaw_blend = gimbal_hold_blend(yaw_mag);
+        if (gimbal->gimbal_mode == G_RATE)
+        {
+            uint8_t yaw_braking = gimbal_yaw_release_update(gimbal, yaw_mag);
+
+            if (yaw_mag <= gimbal_tune.rate_hold_enter_deg_s)
+            {
+                yaw_cmd = 0.0f;
+            }
+            if (yaw_braking != 0u)
+            {
+                yaw_blend = 0.0f;
+            }
+        }
+        else if (yaw_mag > gimbal_tune.rate_hold_enter_deg_s)
         {
             gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
             integral_to_zero(&gimbal->pid_info.yaw_hold);
@@ -672,7 +742,6 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
             integral_to_zero(&gimbal->pid_info.pitch_hold);
         }
 
-        yaw_blend = gimbal_hold_blend(yaw_mag);
         pitch_blend = gimbal_hold_blend(pitch_mag);
     }
 
@@ -1421,6 +1490,7 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal->feedforward.yaw_hold_angle_deg = 0.0f;
     gimbal->feedforward.pitch_hold_angle_deg = 0.0f;
     gimbal->feedforward.pitch_zero_hold_last = 0u;
+    gimbal_yaw_release_reset(gimbal);
     gimbal->feedforward.manual_source = GIMBAL_INPUT_RC;
     gimbal->feedforward.manual_source_changed = 0u;
     gimbal->feedforward.mouse_dx_counts = 0.0f;
@@ -1451,6 +1521,7 @@ void Gimbal_Work(gimbal_t *gimbal)
     //  模式切换保护
     if (selected_mode != gimbal->gimbal_mode)
     {
+        gimbal_yaw_release_reset(gimbal);
         gimbal_mec_yaw_ff_blend = 0.0f;
         gimbal_mec_yaw_chassis_rate_lpf = 0.0f;
         gimbal_mec_yaw_hard_hold = 0u;
