@@ -59,7 +59,7 @@
 #define CHASSIS_FOLLOW_YAW_REFERENCE_ENABLE 1u // 使用前后基准，0/1
 #define CHASSIS_FOLLOW_YAW_ANGLE_SIGN     1.0f // 角度方向，±1
 #define CHASSIS_FOLLOW_TRANSLATION_SIGN   1.0f // 平移方向，±1
-#define CHASSIS_FOLLOW_WZ_SIGN            -2.0f // 旋转输出方向，±1
+#define CHASSIS_FOLLOW_WZ_SIGN            -1.4f // 旋转输出方向，±1
 #define CHASSIS_FOLLOW_KP                 20.0f // 转速控制量/rad
 #define CHASSIS_FOLLOW_MAX_WZ             40.0f // 转速控制量上限，>0
 #define CHASSIS_FOLLOW_WZ_STEP            0.4f  // 转速控制量/周期，>0
@@ -92,9 +92,9 @@
 /* 架空调试阶段限速，稳定后再逐步恢复到 50/50/40。 */
 //直接映射到遥控器
 //50 50 40有点太快了，改小一点
-#define CHASSIS_MAX_VX                  25.0f
-#define CHASSIS_MAX_VY                  25.0f
-#define CHASSIS_MAX_WZ                  20.0f
+#define CHASSIS_MAX_VX                  15.0f
+#define CHASSIS_MAX_VY                  15.0f
+#define CHASSIS_MAX_WZ                  17.0f
 #define CHASSIS_TURN_CYCLE_SPEED        45.0f
 #define CHASSIS_RC_DEADBAND             30.0f
 #define CHASSIS_RC_AXIS_MAX             660.0f
