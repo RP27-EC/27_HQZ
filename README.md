@@ -72,7 +72,7 @@
 
 **发射**：下板生成许可、单发/连发模式和触发电平，上板执行闭环。单发只认触发上升沿，目标在前一次目标上累加 65536 count；到位并低速稳定后回保持。连发按热量许可生成拨盘速度。退出供弹后进入制动/保持，机构失能或离线则卸力。待发保持 PID 仍每轮计算，只在稳定 100 ms 后将拨盘力矩发送从 1 ms 降至 10 ms。
 
-当前 `Launcher_Work()` 以 D1 `launch_state` 和左右摩擦轮在线等条件生成 `fric_on`，再结合拨盘/过洞条件生成 `feed_allowed`；`fric_ready` 要求达到最终目标±100 rpm并持续100 ms，作为新单发受理及连发启动门槛。新增D6逐发弹速控制：6000 rpm基准、22 m/s目标、三发均值修正、正常范围5400～6000 rpm、24 m/s锁止及25 m/s越限计数。键鼠左键长按选择连发，连发固定6000 rpm，不参与弹速学习，仍受反馈、热量和供弹许可约束。详见[单发弹速闭环](task_up/docs/launcher.md#单发弹速闭环)。
+当前 `Launcher_Work()` 以 D1 `launch_state` 和左右摩擦轮在线等条件生成 `fric_on`，再结合拨盘/过洞条件生成 `feed_allowed`；`fric_ready` 要求达到最终目标±100 rpm并持续100 ms，作为新单发受理及连发启动门槛。新增D6逐发弹速控制：6000 rpm基准、22 m/s目标、三发均值修正、正常范围5400～6000 rpm、24 m/s锁止及25 m/s越限计数。键鼠左键长按选择连发，连发以6000 rpm启动，同目标三条有效反馈均值修正独立目标；缺少弹速仅清空学习，链路、热量、高弹速和供弹许可仍约束发射。详见[单发弹速闭环](task_up/docs/launcher.md#单发弹速闭环)。
 
 源码重点：[lift.c](task_up/Application/ModuleLayer/lift.c)、[launch.c](task_down/Application/ModuleLayer/launch.c)、[launcher.c](task_up/Application/ModuleLayer/launcher.c)。
 

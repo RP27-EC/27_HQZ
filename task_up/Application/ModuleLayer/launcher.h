@@ -39,6 +39,8 @@ typedef struct
     uint8_t dial_online;      /* 1 = 拨盘在线 */
     uint8_t last_shoot_level; /* 上周期发射电平 */
     uint8_t fault;            /* 1 = 机构故障 */
+    float fric_l_output_raw; // 左轮最终电流指令，原始量
+    float fric_r_output_raw; // 右轮最终电流指令，原始量
 } launcher_t;
 
 extern launcher_t launcher;
@@ -48,8 +50,8 @@ typedef enum
     LAUNCHER_SPEED_OK = 0, // 允许新发射，值0
     LAUNCHER_SPEED_LINK, // D6链路失效，值1
     LAUNCHER_SPEED_SOURCE, // 裁判源离线，值2
-    LAUNCHER_SPEED_TIMEOUT, // 发射反馈超时，值3
-    LAUNCHER_SPEED_ASSOCIATION, // 事件关联异常，值4
+    LAUNCHER_SPEED_TIMEOUT, // 保留超时编号，值3
+    LAUNCHER_SPEED_ASSOCIATION, // 保留关联编号，值4
     LAUNCHER_SPEED_HIGH, // 高弹速锁止，值5
     LAUNCHER_SPEED_WAITING, // 保留兼容编号，值6
     LAUNCHER_SPEED_REARM, // 切换后隔离反馈，值7
@@ -59,8 +61,9 @@ typedef struct
 {
     float target_rpm; // 最终摩擦轮目标，rpm
     float single_target_rpm; // 单发修正目标，rpm
+    float repeat_target_rpm; // 连发修正目标，rpm
     float latest_mps; // 最近有效弹速，m/s
-    float average_mps; // 最近三发均值，m/s
+    float average_mps; // 当前模式三条均值，m/s
     float sample_sum_mps; // 同目标弹速和，m/s
     uint32_t wait_tick; // 单发实际开始时刻，ms
     uint32_t feedback_age_ms; // 当前样本年龄，ms

@@ -4,7 +4,7 @@
 /* 摩擦轮速度控制 */
 #define LAUNCHER_DIAL_ENABLE              1u // 拨盘控制使能，0/1
 #define LAUNCHER_REPEAT_ENABLE            1u // 连发控制使能，0/1
-#define LAUNCHER_FRIC_TARGET_RPM          6000.0f // 启动及连发目标，rpm
+#define LAUNCHER_FRIC_TARGET_RPM          6000.0f // 单连发启动基准，rpm
 #define LAUNCHER_FRIC_RAMP_RPM_PER_MS     20.0f // 升速斜坡，rpm/ms
 #define LAUNCHER_FRIC_STOP_RAMP_RPM_PER_MS 20.0f // 停机斜坡，rpm/ms
 #define LAUNCHER_FRIC_STOP_SPEED_RPM      100.0f // 停转速度上限，rpm
@@ -20,7 +20,12 @@
 #define LAUNCHER_FRIC_L_DIRECTION         1.0f // 左轮旋向，正负1
 #define LAUNCHER_FRIC_R_DIRECTION         -1.0f // 右轮旋向，正负1
 
-/* 逐发弹速修正 */
+/* 连发掉速恢复 */
+#define LAUNCHER_FRIC_REPEAT_BOOST_KP      1.0f // 额外恢复增益，原始量/rpm
+#define LAUNCHER_FRIC_REPEAT_BOOST_DEAD_RPM 100.0f // 恢复补偿死区，rpm
+#define LAUNCHER_FRIC_REPEAT_BOOST_MAX     1500.0f // 单轮额外输出上限，原始量
+
+/* 单发与连发弹速修正 */
 #define LAUNCHER_SPEED_TARGET_MPS        22.0f // 目标弹速，m/s
 #define LAUNCHER_SPEED_DEADBAND_MPS       0.3f // 修正死区，m/s
 #define LAUNCHER_SPEED_GUARD_MPS         24.0f // 高弹速锁止，m/s
@@ -29,8 +34,8 @@
 #define LAUNCHER_SPEED_MAX_RPM         6000.0f // 正常修正上限，rpm
 #define LAUNCHER_SPEED_GAIN              20.0f // 修正增益，rpm/(m/s)
 #define LAUNCHER_SPEED_STEP_MAX_RPM      50.0f // 每组三发步长，rpm
-#define LAUNCHER_SPEED_SAMPLE_COUNT       3u // 同目标样本数，发
-#define LAUNCHER_SPEED_WAIT_MS         1000u // 单发反馈等待，ms
+#define LAUNCHER_SPEED_SAMPLE_COUNT       3u // 同目标有效样本，条
+#define LAUNCHER_SPEED_WAIT_MS         1000u // 反馈学习超时，ms
 #define LAUNCHER_SPEED_LINK_MS          300u // D6链路超时，ms
 #define LAUNCHER_SPEED_REARM_MS        1000u // 切换后隔离旧反馈，ms
 #define LAUNCHER_SPEED_GUARD_SCALE        0.9f // 锁止降速比例，0~1
