@@ -6,6 +6,7 @@
 #include <stddef.h>
 
 #include "board_protocol.h"
+#include "board_comm_config.h"
 #include "chassis_input.h"
 #include "main.h"
 #include "rc_sensor.h"
@@ -145,6 +146,19 @@ void Chassis_Spin_UpdateMode(void)
         (rc_dev.info->s2.value == RC_SW_DOWN))
     {
         selected = 1u; /* S1 上、S2 下 */
+    }
+#endif
+
+#if BOARD_LIFT_ENABLE
+    /* 仅底部停机状态禁转 */
+    if ((board.status->status == DEV_ONLINE) &&
+        (board.rx_meg->state_meg.is_down == 0u))
+    {
+        selected = 0u;
+        spin_ramp_wz = 0.0f;
+        spin_last_selected = 0u;
+        chassis_spin.target_wz = 0.0f;
+        chassis_spin.output_wz = 0.0f;
     }
 #endif
 
