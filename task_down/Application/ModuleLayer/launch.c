@@ -18,6 +18,10 @@ static uint8_t launch_s2_filter_initialized;
 static uint8_t launch_s2_raw_last;
 static uint8_t launch_s2_filtered;
 static uint8_t launch_s2_stable_ticks;
+static uint8_t launch_keyboard_active; // 上拍键鼠模式，0/1
+static uint8_t launch_keyboard_fric_on; // 键鼠摩擦轮使能，0/1
+static uint8_t launch_keyboard_last_g; // 上拍G键电平，0/1
+static uint8_t launch_keyboard_mouse_ready; // 开轮后左键已释放，0/1
 
 /* 发射机构全局对象 */
 
@@ -84,6 +88,10 @@ static void Launch_Init(Launch_t *launch)
     launch->heart_beat = Launch_Offline_Update; /* 绑定心跳任务 */
     Launch_Reset_S2_Filter();
     Launch_Reset_Shoot_Arm();
+    launch_keyboard_active = 0u;
+    launch_keyboard_fric_on = 0u;
+    launch_keyboard_last_g = 0u;
+    launch_keyboard_mouse_ready = 0u;
 }
 
 /* 根据键鼠或遥控拨杆更新发射状态与模式 */
@@ -91,15 +99,40 @@ static void Launch_Data_Update(Launch_t *launch)
 {
     uint8_t s1; /* S1 档位 */
     uint8_t s2; /* S2 档位 */
+    uint8_t g_now;
+    uint8_t mouse_down;
 
     if (Chassis_Input_IsKeyboardMode() != 0u)
     {
         Launch_Reset_Shoot_Arm();
         Launch_Reset_S2_Filter();
-        launch->state = L_UNLOCK; /* 键鼠直接解锁 */
+        g_now = ((rc_dev.info->key_v & KEY_PRESSED_OFFSET_G) != 0u) ? 1u : 0u;
+        mouse_down = (uint8_t)(rc_dev.info->mouse_btn_l.value & 0x01u);
+        if (launch_keyboard_active == 0u)
+        {
+            launch_keyboard_active = 1u;
+            launch_keyboard_fric_on = 0u;
+            launch_keyboard_last_g = g_now;
+            launch_keyboard_mouse_ready = 0u;
+        }
+        if ((g_now != 0u) && (launch_keyboard_last_g == 0u))
+        {
+            launch_keyboard_fric_on ^= 1u;
+            launch_keyboard_mouse_ready = 0u;
+        }
+        launch_keyboard_last_g = g_now;
+        if (launch_keyboard_fric_on == 0u)
+        {
+            launch_keyboard_mouse_ready = 0u;
+        }
+        else if (mouse_down == 0u)
+        {
+            launch_keyboard_mouse_ready = 1u;
+        }
+        launch->state = (launch_keyboard_fric_on != 0u) ? L_UNLOCK : L_LOCK;
 
-        /* 键鼠：左键按下发射，长按切连发 */
-        if ((rc_dev.info->mouse_btn_l.value & 0x01u) != 0u)
+        // NOTE: 开轮后先释放左键
+        if ((mouse_down != 0u) && (launch_keyboard_mouse_ready != 0u))
         {
             launch->mode = (rc_dev.info->mouse_btn_l.status == long_press) ?
                            REPEAT_SHOT : SINGLE_SHOT;
@@ -114,15 +147,20 @@ static void Launch_Data_Update(Launch_t *launch)
         return;
     }
 
+    launch_keyboard_active = 0u;
+    launch_keyboard_fric_on = 0u;
+    launch_keyboard_mouse_ready = 0u;
+    launch_keyboard_last_g = 0u;
+
     /* 遥控掉线立即锁定 */
     if (rc_dev.work_state != DEV_ONLINE)
     {
-    Launch_Reset_Shoot_Arm(); /* 掉线清除解锁 */
-    Launch_Reset_S2_Filter();
-    launch->state = L_LOCK;
-    launch->mode = SINGLE_SHOT;
-    launch->shoot_level = 0u;
-    return;
+        Launch_Reset_Shoot_Arm();
+        Launch_Reset_S2_Filter();
+        launch->state = L_LOCK;
+        launch->mode = SINGLE_SHOT;
+        launch->shoot_level = 0u;
+        return;
     }
 
 #if BOARD_LIFT_ENABLE

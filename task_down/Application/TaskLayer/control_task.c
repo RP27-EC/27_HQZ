@@ -20,39 +20,23 @@
 
 typedef struct
 {
-    volatile uint8_t rc_state;
-    volatile uint8_t s1;
-    volatile uint8_t s2;
-    volatile uint8_t b_value;
-    volatile uint8_t button_event;
-    volatile uint8_t is_hole;
-    volatile uint8_t exit_pending;
-    volatile uint8_t hole_rear_blocked; /* 反向时按 B 被拒绝 */
+    volatile uint8_t rc_state; // 遥控在线状态，0/1
+    volatile uint8_t s1; // 左拨杆档位，1~3
+    volatile uint8_t s2; // 右拨杆档位，1~3
+    volatile uint8_t b_value; // B键按下电平，0/1
+    volatile uint8_t button_event; // B键按下边沿，0/1
+    volatile uint8_t is_hole; // 下降请求有效，0/1
+    volatile uint8_t exit_pending; // 上升退出等待，0/1
 } board_lift_debug_t;
 
 volatile board_lift_debug_t board_lift_dbg;
 volatile uint8_t board_hole_request;
 volatile uint8_t board_hole_exit_pending;
 
-/* 云台机械模式前后方向状态：0 前，1 后。
- * 放在文件级是因为过洞命令也要判它（反向不允许进狗洞），而且 R 键现在在
- * 任何 S1 位置都要能切换，只有遥控离线才复位。 */
+// NOTE: 下降时同步复位朝向
 static uint8_t board_gimbal_yaw_rear = 0u;
 
 #if BOARD_COMM_DEBUG
-/* 生效中的"前后方向"：键鼠模式看掉头基准，遥控模式看上面那套状态。
- * 过洞的反向拦截必须用生效值，否则键鼠掉头后判断会失效。 */
-static uint8_t Board_Debug_YawRear(void)
-{
-    if (Chassis_Input_IsKeyboardMode() != 0u)
-    {
-        return Chassis_Input_IsKeyboardYawRear();
-    }
-
-    return board_gimbal_yaw_rear;
-}
-
-
 static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
 {
     static uint8_t last_b_value = 0u;
@@ -72,7 +56,6 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
         board_hole_exit_pending = 0u;
         board_lift_dbg.is_hole = 0u;
         board_lift_dbg.exit_pending = 0u;
-        board_lift_dbg.hole_rear_blocked = 0u;
         board.tx_pkt->gimbal_target_pkt.is_hole = 0u;
         return 0u;
     }
@@ -87,20 +70,9 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     {
         if (board_hole_request == 0u)
         {
-            /*
-             * 狗洞只允许云台正对前方时进入。反向时忽略这次按键、不置位请求，
-             * 上板升降因此不会进入对位/下压流程。
-             */
-            if (Board_Debug_YawRear() == 0u)
-            {
-                board_hole_request = 1u;
-                board_hole_exit_pending = 0u;
-                board_lift_dbg.hole_rear_blocked = 0u;
-            }
-            else
-            {
-                board_lift_dbg.hole_rear_blocked = 1u;
-            }
+            board_gimbal_yaw_rear = 0u;
+            board_hole_request = 1u;
+            board_hole_exit_pending = 0u;
         }
         else
         {
@@ -128,10 +100,7 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     if ((board_hole_request != 0u) || (board_hole_exit_pending != 0u))
     {
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
-        /*
-         * 过洞强制云台回前方零位，掉头基准也要跟着回前方：否则跟随中心还停在
-         * 180deg，云台被拉回前方时跟随环会用 180deg 误差把底盘转过去。
-         */
+        // NOTE: 回正同步跟随基准
         Chassis_Input_ResetYawReference();
         board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = BOARD_MEC_YAW_FRONT_RAD;
         board.tx_pkt->gimbal_target_pkt.pitch_mec_tar =

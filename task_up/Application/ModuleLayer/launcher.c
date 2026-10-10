@@ -35,6 +35,7 @@ typedef struct
 } launcher_speed_runtime_t;
 
 static launcher_speed_runtime_t launcher_speed_runtime;
+static uint8_t launcher_keyboard_press_ready; // 本次键鼠按住许可，0/1
 
 typedef struct
 {
@@ -141,6 +142,7 @@ static void Launcher_SpeedLearn(float speed, uint8_t mode)
 
 static void Launcher_SpeedFail(launcher_speed_reason_e reason)
 {
+    launcher_keyboard_press_ready = 0u;
     if ((reason == LAUNCHER_SPEED_TIMEOUT) &&
         (launcher_speed_runtime.fault != reason))
     {
@@ -224,7 +226,8 @@ static void Launcher_SpeedUpdate(uint32_t now, uint8_t vehicle_on,
             (launcher_speed_runtime.fault == LAUNCHER_SPEED_OK) &&
             (launcher_speed.guard_latched == 0u) &&
             ((launcher_dial.trigger_ready != 0u) ||
-             (launcher_speed_runtime.press_single_started != 0u))) ? 1u : 0u;
+             (launcher_speed_runtime.press_single_started != 0u) ||
+             (launcher_keyboard_press_ready != 0u))) ? 1u : 0u;
         Launcher_SpeedResetGroup();
         launcher_dial.trigger_ready = continue_press;
         launcher_speed_runtime.rearm_tick = (continue_press != 0u) ?
@@ -308,6 +311,7 @@ static void Launcher_SpeedUpdate(uint32_t now, uint8_t vehicle_on,
             launcher_speed_runtime.repeat_tick = now;
             if (speed >= LAUNCHER_SPEED_GUARD_MPS)
             {
+                launcher_keyboard_press_ready = 0u;
                 launcher_speed.guard_count++;
                 if (speed >= LAUNCHER_SPEED_LIMIT_MPS)
                 {
@@ -911,6 +915,11 @@ static void Launcher_DialEnterStuckRecovery(uint8_t continuous)
 
 static void Launcher_DialReject(launcher_dial_reject_e reason)
 {
+    if ((reason != LAUNCHER_DIAL_REJECT_FRIC) &&
+        (reason != LAUNCHER_DIAL_REJECT_SPEED))
+    {
+        launcher_keyboard_press_ready = 0u;
+    }
     launcher_speed_runtime.press_single_started = 0u;
     launcher_dial.reject_reason = reason;
     launcher_dial.rejected_count++;
@@ -935,6 +944,7 @@ static void Launcher_DialEnterHold(uint32_t now, uint8_t capture)
 
 static void Launcher_DialEnterBrake(uint32_t now)
 {
+    launcher_keyboard_press_ready = 0u;
     launcher_speed_runtime.press_single_started = 0u;
     launcher_dial.trigger_ready = 0u;
     launcher_dial.state = LAUNCHER_STOPPING;
@@ -1205,7 +1215,8 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
     }
 
     continuous = ((continuous != 0u) &&
-                  (launcher_dial.trigger_ready != 0u)) ? 1u : 0u;
+                  ((launcher_dial.trigger_ready != 0u) ||
+                   (launcher_keyboard_press_ready != 0u))) ? 1u : 0u;
     switch (launcher_dial.state)
     {
     case LAUNCHER_READY:
@@ -1227,7 +1238,13 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
 
     case LAUNCHER_SINGLE:
 #if LAUNCHER_REPEAT_ENABLE
-        /* 长按优先于单发超时 */
+        // NOTE: 等待达速不占单发计时
+        if ((continuous != 0u) && (launcher_keyboard_press_ready != 0u) &&
+            (launcher.fric_ready == 0u))
+        {
+            Launcher_DialEnterHold(now, 1u);
+            break;
+        }
         if ((continuous != 0u) && (launcher.fric_ready != 0u))
         {
             launcher_dial.state = LAUNCHER_REPEAT;
@@ -1463,6 +1480,7 @@ void Launcher_Init(void)
     memset(&launcher_dial, 0, sizeof(launcher_dial));
     memset(&launcher_speed, 0, sizeof(launcher_speed));
     memset(&launcher_speed_runtime, 0, sizeof(launcher_speed_runtime));
+    launcher_keyboard_press_ready = 0u;
     launcher_speed.single_target_rpm = LAUNCHER_FRIC_TARGET_RPM;
     launcher_speed.repeat_target_rpm = LAUNCHER_FRIC_TARGET_RPM;
     launcher_speed.target_rpm = LAUNCHER_FRIC_TARGET_RPM;
@@ -1579,6 +1597,27 @@ void Launcher_Init(void)
     launcher_dial_hold_speed_pid.kd = LAUNCHER_DIAL_HOLD_SPEED_KD;
 }
 
+static void Launcher_KeyboardPressUpdate(uint8_t fric_on)
+{
+    if ((Board_Rx_Info.remote_cmd_pkt.valid == 0u) ||
+        (Board_Rx_Info.remote_cmd_pkt.ctrl_source != 1u) ||
+        (Board_HeartBeat.offline_cnt_5 >= Board_HeartBeat.offline_cnt_max) ||
+        (fric_on == 0u) || (launcher_dial.feed_allowed == 0u) ||
+        (launcher_speed.source_ready == 0u) ||
+        (launcher_speed_runtime.fault != LAUNCHER_SPEED_OK) ||
+        (launcher_speed.guard_latched != 0u) ||
+        (launcher_heat.ready == 0u) || (launcher_heat.blocked != 0u) ||
+        (launcher_heat.target_rate <= 0.0f))
+    {
+        launcher_keyboard_press_ready = 0u;
+    }
+    else if ((Board_Rx_Info.shoot_pkt.shoot_level == 0u) &&
+             ((Board_Rx_Info.remote_cmd_pkt.button_bits & 0x01u) == 0u))
+    {
+        launcher_keyboard_press_ready = 1u;
+    }
+}
+
 /* 发射机构周期任务 */
 void Launcher_Work(void)
 {
@@ -1625,6 +1664,7 @@ void Launcher_Work(void)
 #endif
     launcher_dial.feed_allowed = ((launcher_dial.hold_allowed != 0u) &&
         (fric_on != 0u) && (Board_Rx_Info.shoot_pkt.is_hole == 0u)) ? 1u : 0u;
+    Launcher_KeyboardPressUpdate(fric_on);
     if ((launcher_dial.hold_allowed == 0u) ||
         ((last_feed_allowed != 0u) && (launcher_dial.feed_allowed == 0u)))
     {
@@ -1641,7 +1681,8 @@ void Launcher_Work(void)
                      (shoot_mode == 0u)) ? 1u : 0u;
     launcher.last_shoot_level = shoot_level;
     continuous = ((launcher_dial.feed_allowed != 0u) &&
-                  (launcher_dial.trigger_ready != 0u) &&
+                  (((Board_Rx_Info.remote_cmd_pkt.ctrl_source == 1u) ?
+                    launcher_keyboard_press_ready : launcher_dial.trigger_ready) != 0u) &&
                   (shoot_level != 0u) && (shoot_mode != 0u) &&
                   (launcher_speed.feed_ready != 0u) &&
                   (launcher_heat.ready != 0u) &&

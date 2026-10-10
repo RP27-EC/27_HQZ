@@ -156,11 +156,7 @@ static uint8_t lift_alignment_ok(void)
         return 0u;
     }
 
-    /*
-     * 狗洞升降只允许云台正对前方。下板已经在反向时拒绝过洞请求，这里是
-     * 独立于命令状态的一道兜底：判据直接看实际机械角，前方为 0°。
-     * LIFT_ALIGN_DOWN 没有超时，不满足时只是停在上面等，不会报故障。
-     */
+    // NOTE: 实际回正后才下降
     if (lift_abs(lift_wrap_deg(Gimbal.base_info.yaw_mec_angle)) >
         LIFT_FRONT_TOL_DEG)
     {
@@ -642,7 +638,7 @@ void Lift_Work(void)
     {
         if (lift.home_valid != 0u)
         {
-            lift_enter_state(is_hole ? LIFT_MOVING_DOWN : LIFT_MOVING_UP, now);
+            lift_enter_state(is_hole ? LIFT_ALIGN_DOWN : LIFT_MOVING_UP, now);
         }
         else if ((is_hole != 0u) ||
                  ((now - lift.init_tick) >= LIFT_AUTO_HOME_DELAY_MS))

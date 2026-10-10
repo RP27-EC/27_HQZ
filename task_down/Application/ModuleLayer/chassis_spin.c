@@ -8,6 +8,7 @@
 #include "board_protocol.h"
 #include "board_comm_config.h"
 #include "chassis_input.h"
+#include "control_task.h"
 #include "main.h"
 #include "rc_sensor.h"
 #include "rp_math.h"
@@ -150,9 +151,10 @@ void Chassis_Spin_UpdateMode(void)
 #endif
 
 #if BOARD_LIFT_ENABLE
-    /* 仅底部停机状态禁转 */
-    if ((board.status->status == DEV_ONLINE) &&
-        (board.rx_meg->state_meg.is_down == 0u))
+    // NOTE: 每次下降持续禁转
+    if ((board_hole_request != 0u) ||
+        ((board.status->status == DEV_ONLINE) &&
+         (board.rx_meg->state_meg.is_down == 0u)))
     {
         selected = 0u;
         spin_ramp_wz = 0.0f;
