@@ -122,7 +122,7 @@
 /* 遥控器摇杆中位死区 */
 #define GIMBAL_RC_AXIS_DEADBAND            20.0f
 /* 遥控器满杆时 Yaw 最大目标角速度*/
-#define GIMBAL_MANUAL_YAW_RATE_DEG_S       200.0f
+#define GIMBAL_MANUAL_YAW_RATE_DEG_S       150.0f
 /* 操作手 Yaw 方向符号 */
 #define GIMBAL_MANUAL_YAW_SIGN             (-1.0f)
 /* 遥控器满杆时 Pitch 最大目标角速度*/

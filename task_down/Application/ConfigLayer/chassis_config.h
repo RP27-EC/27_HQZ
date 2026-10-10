@@ -42,8 +42,8 @@
 /* 键鼠机械档：鼠标 X 直接转底盘，等价遥控 S1 下位时 ch0 的转向作用。
  * 增益单位 rad/s per 鼠标计数，初值对齐 D5 鼠标手感（5 deg/s per count）。
  * 上车要标定：GAIN 决定转速手感，SIGN 决定左右方向。 */
-#define CHASSIS_KEY_MECH_MOUSE_WZ_GAIN    10.0f
-#define CHASSIS_KEY_MECH_MOUSE_WZ_MAX     15.0f
+#define CHASSIS_KEY_MECH_MOUSE_WZ_GAIN    8.0f
+#define CHASSIS_KEY_MECH_MOUSE_WZ_MAX     13.0f
 #define CHASSIS_KEY_MECH_MOUSE_WZ_SIGN    1.0f
 
 /* 到位门限与跟随死区匹配，避免交接后补转。 */
@@ -92,8 +92,8 @@
 /* 架空调试阶段限速，稳定后再逐步恢复到 50/50/40。 */
 //直接映射到遥控器
 //50 50 40有点太快了，改小一点
-#define CHASSIS_MAX_VX                  15.0f
-#define CHASSIS_MAX_VY                  15.0f
+#define CHASSIS_MAX_VX                  18.0f
+#define CHASSIS_MAX_VY                  18.0f
 #define CHASSIS_MAX_WZ                  17.0f
 #define CHASSIS_TURN_CYCLE_SPEED        45.0f
 #define CHASSIS_RC_DEADBAND             30.0f
