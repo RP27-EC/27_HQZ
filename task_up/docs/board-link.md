@@ -8,22 +8,22 @@
 
 | ID | 方向 | 解码字段 | 上板实际使用 |
 | --- | --- | --- | --- |
-| `0xD1` | 下→上 | b0：car state、gimbal mode、vision mode、game start、color；b1–4：vx/vy 定点值；b5：launch/mode/trigger/is_hole | 车辆使能、云台模式、发射输入和升降请求 |
+| `0xD1` | 下→上 | b0：车辆状态、云台模式、bit3–5 保留、比赛状态、颜色；b1–4 保留；b5：发射许可/模式/触发/过洞/R掉头 | 车辆使能、云台模式、发射输入和升降请求 |
 | `0xD2` | 下→上 | 4 个 uint16 大端：Pitch IMU、Yaw IMU、Pitch 机械、Yaw 机械 | 缓存模式目标；各控制模式选择使用对应目标 |
 | `0xD3` | 下→上 | b0–1 热量上限、b2–3 当前热量、b4–5 冷却率；b6 序号；b7 bit0 参数有效、bit1 热量有效 | 发射热量数据及独立新鲜度检查 |
 | `0xD4` | 下→上 | 保留 8 字节 | 当前只清心跳计数，不消费血量字段 |
 | `0xD5` | 下→上 | b0 bit0 valid/bit1 source/bit2 cmd_type；b1 按键；b2–3 Yaw、b4–5 Pitch 有符号大端；b6–7 保留 | 来源为键鼠且 cmd_type=1 时取鼠标增量；否则按 0.1 deg/s/LSB 解释角速度 |
 | `0xD6` | 下→上 | b0–1 弹速0.01 m/s；b2–3 uint16逐发序号；b4–5 源年龄ms；b6 类型；b7 机构编号 | 原子弹速快照、单发修正及高弹速保护 |
-| `0xC1` | 上→下 | b0 bit0–6：Yaw、Pitch、lift、右/左摩擦轮、dial、vision 在线；b1：升降压缩状态；b2–5：当前编码的 0 deg 保留值；b6–7：0 | 下板用于设备状态显示、模式互锁和故障观察 |
+| `0xC1` | 上→下 | b0 bit0–5：Yaw、Pitch、lift、右/左摩擦轮、dial 在线；bit6–7 保留；b1：升降压缩状态；b2–7 保留 | 下板用于模式互锁和故障观察 |
 | `0xC2` | 上→下 | 4 个 uint16 大端：Yaw 机械、Pitch 机械、Yaw IMU、Pitch IMU | 下板跟随/机械掉头使用机械 Yaw，调试显示四轴反馈 |
 
-D1 b1–4 的速度字段映射范围为 [-8000,8000]；D2/C2 的 IMU 角映射 [-360,360] deg、机械角映射 [-4,4] rad。整型值为映射量，不是 IEEE 浮点数。具体编码/解码以 `communicate.c` 为准。
+D1 b1–4 为保留位；D2/C2 的 IMU 角映射 [-360,360] deg、机械角映射 [-4,4] rad。整型值为映射量，不是 IEEE 浮点数。具体编码/解码以 `communicate.c` 为准。
 
 ## 接收字段逐字节说明
 
 | 帧/字节 | 位或编码 | 上板解析结果 | 消费边界 |
 | --- | --- | --- | --- |
-| D1 b0 | bit0–1 car_state；bit2 gimbal_mode；bit3–5 vision_mode；bit6 game_start；bit7 my_color | 上板解码车辆状态与模式 | 当前云台选择只按 `gimbal_mode` 的 0/非0 分支选择 MEC/RATE；vision 字段不会自动启用视觉控制 |
+| D1 b0 | bit0–1 car_state；bit2 gimbal_mode；bit3–5 保留；bit6 game_start；bit7 my_color | 上板解码车辆状态与模式 | 云台模式选择 MEC/RATE |
 | D1 b5 | bit0 launch_state；bit1 shoot_mode；bit2 shoot_level；bit3 is_hole；bit4 r_turn_active | 发射许可/模式/触发/升降请求及R掉头状态 | bit4只在机械Yaw控制中选择R专用斜坡及最大速度；需同步更新上下板 |
 | D2 b0–7 | 四个 uint16，大端 | Pitch IMU、Yaw IMU、Pitch mec、Yaw mec | IMU 区间 [-360,360] deg；机械角区间 [-4,4] rad；超范围编码会饱和 |
 | D3 b0–5 | heat_limit、barrel_heat、cooling_rate 各 uint16 大端 | 裁判量与冷却率快照 | b7 bit0 参数有效、bit1 热量有效；收帧只刷新 `rx_tick`，不会替发送端保证其数据有效 |

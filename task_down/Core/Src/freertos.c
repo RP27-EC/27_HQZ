@@ -77,13 +77,6 @@ const osThreadAttr_t UpdataTask_attributes = {
   .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
-/* Definitions for UITask */
-osThreadId_t UITaskHandle;
-const osThreadAttr_t UITask_attributes = {
-  .name = "UITask",
-  .stack_size = 512 * 4,
-  .priority = (osPriority_t) osPriorityAboveNormal,
-};
 /* Definitions for ConnectTask */
 osThreadId_t ConnectTaskHandle;
 const osThreadAttr_t ConnectTask_attributes = {
@@ -101,7 +94,6 @@ void StartMonitorTask(void *argument);
 void StartCtrlTask(void *argument);
 void StartCommandTask(void *argument);
 void StartUpdataTask(void *argument);
-void StartUITask(void *argument);
 void StartConnectTask(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -145,11 +137,6 @@ void MX_FREERTOS_Init(void) {
   /* creation of UpdataTask */
 #if !BOARD_COMM_DEBUG
   UpdataTaskHandle = osThreadNew(StartUpdataTask, NULL, &UpdataTask_attributes);
-#endif
-
-  /* creation of UITask */
-#if BOARD_UI_ENABLE
-  UITaskHandle = osThreadNew(StartUITask, NULL, &UITask_attributes);
 #endif
 
   /* creation of ConnectTask */
@@ -235,24 +222,6 @@ __weak void StartUpdataTask(void *argument)
     osDelay(1);
   }
   /* USER CODE END StartUpdataTask */
-}
-
-/* USER CODE BEGIN Header_StartUITask */
-/**
-* @brief Function implementing the UITask thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_StartUITask */
-__weak void StartUITask(void *argument)
-{
-  /* USER CODE BEGIN StartUITask */
-  /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
-  /* USER CODE END StartUITask */
 }
 
 /* USER CODE BEGIN Header_StartConnectTask */

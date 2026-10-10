@@ -11,11 +11,10 @@
  *	@class	device
  */
 typedef enum {
-	DEV_ID_IMU = 0,
-  DEV_ID_IMU_EX,
-	DEV_ID_RC,
-	DEV_ID_VISION,
-	DEV_ID_CNT,
+	DEV_ID_IMU = 0, // IMU编号0
+  DEV_ID_IMU_EX, // 副IMU编号1
+	DEV_ID_RC, // 遥控器编号2
+	DEV_ID_CNT, // 设备数3
 } dev_id_t;
 
 /**
@@ -79,12 +78,6 @@ typedef enum {
 	
 	RM_MOTOR_LIST,
 } dev_rm_motor_list_e;			  //  Yaw轴kt电机CAN1  0x142 2个包  
-									  //CAN1 底盘1个包
-									  //UI四个，整车信息1个（5ms发一次，也就是0.2个包）
-									  //收game_robot_status 0.01个包（10Hz），
-									  //power_heat_data0.05个包
-								      //shoot_data 子弹发射后下主控才发送，忽略不计
-								      //总共2+2+1+0.2+0.05+0
 
 
 

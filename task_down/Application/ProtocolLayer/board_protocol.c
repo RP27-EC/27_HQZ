@@ -152,29 +152,20 @@ uint8_t pkt_03[8]; /* D3 射击信息发送缓存 */
 uint8_t pkt_04[8]; /* D4 血量数据发送缓存 */
 uint8_t pkt_05[8]; /* D5 遥控控制发送缓存 */
 
-/* 打包 D1：整车状态、速度与发射状态 */
+/* 打包 D1：整车状态与发射状态 */
 
 void Board_Tx_Pkt_01(Board_t* board)
 {
 	board->status->gimbal_d1_tx_ok = 0u;
 	board->status->gimbal_d2_tx_ok = 0u;
-	memset(pkt_01, 0, 8); /* 清空缓存 */
+	memset(pkt_01, 0, 8); /* 保留位和字节置零 */
 	
 	pkt_01[0] |= (board->tx_pkt->car_pkt.car_state & 0x03) << 0;   /* 车辆状态 */
 	pkt_01[0] |= (board->tx_pkt->car_pkt.gimbal_mode & 0x01) << 2; /* 云台模式 */
-	pkt_01[0] |= (board->tx_pkt->car_pkt.vision_mode & 0x07) << 3; /* 视觉模式 */
 	pkt_01[0] |= (board->tx_pkt->car_pkt.game_start & 0x01) << 6;  /* 比赛开始 */
 	pkt_01[0] |= (board->tx_pkt->car_pkt.my_color & 0x01) << 7;    /* 己方颜色 */
 	
-	uint16_t t1,t2; /* 速度压缩值 */
-	
-	t1 = float_to_uint(board->tx_pkt->car_pkt.v_x,-8000.f,8000.f,16); /* v_x 压缩值 */
-	t2 = float_to_uint(board->tx_pkt->car_pkt.v_y,-8000.f,8000.f,16); /* v_y 压缩值 */
-	
-	pkt_01[1] = t1>>8; /* v_x 高字节 */
-	pkt_01[2] = t1;    /* v_x 低字节 */
-	pkt_01[3] = t2>>8; /* v_y 高字节 */
-	pkt_01[4] = t2;    /* v_y 低字节 */
+	/* 字节1~4保留，缓存初始化为0 */
 
 									 
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.launch_state & 0x01) << 0; /* 发射许可 */
@@ -421,18 +412,7 @@ void Board_Rx_Meg_01(Board_t* board,uint8_t* rxbuf)
 	board->rx_meg->state_meg.r_fric_state= (rxbuf[0] >> 3) & 0x01;
 	board->rx_meg->state_meg.l_fric_state= (rxbuf[0] >> 4) & 0x01;
 	board->rx_meg->state_meg.dial_motor_state= (rxbuf[0] >> 5) & 0x01;
-	board->rx_meg->state_meg.vision_state= (rxbuf[0] >> 6) & 0x01;
 	board->rx_meg->state_meg.is_down= rxbuf[1];
-	
-	uint16_t t1 = ((uint16_t)rxbuf[2] << 8) | rxbuf[3]; /* Yaw 目标原始值 */
-  uint16_t t2 = ((uint16_t)rxbuf[4] << 8) | rxbuf[5]; /* Pitch 目标原始值 */
-
-  board->rx_meg->vision_meg.vision_yaw_tar = uint_to_float(t1, -360.0f, 360.0f,16);
-  board->rx_meg->vision_meg.vision_pitch_tar = uint_to_float(t2, -360.0f, 360.0f,16);
-	board->rx_meg->vision_meg.is_find_target = (rxbuf[6] >> 0) & 0x01;
-	
-
- 
 	
 	board->status->offline_cnt = 0;
 }

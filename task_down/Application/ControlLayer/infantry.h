@@ -56,7 +56,6 @@ typedef struct{
 	bool    imu_flag;  //陀螺仪模式标志
   bool    turn_flag;   //小陀螺模式标志
 	bool    hole_flag;  //过洞模式标志
-	uint8_t vision_flag;  //自瞄标志(0:无, 1:装甲板, 2:小符, 3:大符, 4:前哨站）
 	bool    broken_flag;  //损坏标志
 	
 	bool    cap_use_flag; //超电使用标志

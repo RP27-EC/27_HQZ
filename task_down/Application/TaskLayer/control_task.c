@@ -2,8 +2,6 @@
 
 #include "control_task.h"
 #include "cap.h"
-#include "ui.h"
-#include "priority_ui.h"
 #include "infantry.h"
 #include "board_protocol.h"
 #include "rc_sensor.h"
@@ -337,8 +335,6 @@ static void Board_Debug_Gimbal_Command(void)
 }
 #endif
 
-uint8_t open_ui = 0; /* UI 首次发送延迟标志 */
-
 /* 下板 1 kHz 控制任务，按调试阶段切换控制链路 */
 
 void StartCtrlTask(void const *argument)
@@ -370,18 +366,6 @@ void StartCtrlTask(void const *argument)
         cap.tx();
 #endif
 
-#if BOARD_UI_ENABLE
-    /* 第一阶段 UI 首帧跳过后再持续刷新 */
-        if (open_ui == 0)
-        {
-            open_ui = 1;
-        }
-        else
-        {
-            Ui_Info_Update();
-            Ui_Send();
-        }
-#endif
 #endif
 
 #if SUPERCAP_BRINGUP_ENABLE

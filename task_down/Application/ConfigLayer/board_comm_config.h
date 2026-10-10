@@ -32,7 +32,6 @@
 
 #define BOARD_CAP_ENABLE                0u
 #define BOARD_JUDGE_ENABLE              0u
-#define BOARD_UI_ENABLE                 0u
 
 /* S1 下位机械模式：右摇杆目标步长与 Pitch 限位。 */
 #define BOARD_MEC_YAW_FRONT_RAD         0.0f

@@ -184,17 +184,17 @@ void kf_calc_gain(KalmanFilter_t *kf)
         kf->MatStatus = mat_trans(&kf->H, &kf->HT); // z|x => x|z
         kf->temp_matrix.numRows = kf->H.numRows;
         kf->temp_matrix.numCols = kf->Pminus.numCols;
-        kf->MatStatus = mat_mul(&kf->H, &kf->Pminus, &kf->temp_matrix); // temp_matrix = H锟斤拷P'(k)
+        kf->MatStatus = mat_mul(&kf->H, &kf->Pminus, &kf->temp_matrix); // temp_matrix = H*P'(k)
         kf->temp_matrix1.numRows = kf->temp_matrix.numRows;
         kf->temp_matrix1.numCols = kf->HT.numCols;
-        kf->MatStatus = mat_mul(&kf->temp_matrix, &kf->HT, &kf->temp_matrix1); // temp_matrix1 = H锟斤拷P'(k)锟斤拷HT
+        kf->MatStatus = mat_mul(&kf->temp_matrix, &kf->HT, &kf->temp_matrix1); // temp_matrix1 = H*P'(k)*HT
         kf->S.numRows = kf->R.numRows;
         kf->S.numCols = kf->R.numCols;
         kf->MatStatus = mat_add(&kf->temp_matrix1, &kf->R, &kf->S); // S = H P'(k) HT + R
-        kf->MatStatus = mat_inv(&kf->S, &kf->temp_matrix1);     // temp_matrix1 = inv(H锟斤拷P'(k)锟斤拷HT + R)
+        kf->MatStatus = mat_inv(&kf->S, &kf->temp_matrix1);     // temp_matrix1 = inv(H*P'(k)*HT + R)
         kf->temp_matrix.numRows = kf->Pminus.numRows;
         kf->temp_matrix.numCols = kf->HT.numCols;
-        kf->MatStatus = mat_mul(&kf->Pminus, &kf->HT, &kf->temp_matrix); // temp_matrix = P'(k)锟斤拷HT
+        kf->MatStatus = mat_mul(&kf->Pminus, &kf->HT, &kf->temp_matrix); // temp_matrix = P'(k)*HT
         kf->MatStatus = mat_mul(&kf->temp_matrix, &kf->temp_matrix1, &kf->K);
     }
 }
@@ -207,10 +207,10 @@ void kf_update_state(KalmanFilter_t *kf)
         kf->MatStatus = mat_mul(&kf->H, &kf->xhatminus, &kf->temp_vector); // temp_vector = H xhat'(k)
         kf->temp_vector1.numRows = kf->z.numRows;
         kf->temp_vector1.numCols = 1;
-        kf->MatStatus = mat_sub(&kf->z, &kf->temp_vector, &kf->temp_vector1); // temp_vector1 = z(k) - H锟斤拷xhat'(k)
+        kf->MatStatus = mat_sub(&kf->z, &kf->temp_vector, &kf->temp_vector1); // temp_vector1 = z(k) - H*xhat'(k)
         kf->temp_vector.numRows = kf->K.numRows;
         kf->temp_vector.numCols = 1;
-        kf->MatStatus = mat_mul(&kf->K, &kf->temp_vector1, &kf->temp_vector); // temp_vector = K(k)锟斤拷(z(k) - H锟斤拷xhat'(k))
+        kf->MatStatus = mat_mul(&kf->K, &kf->temp_vector1, &kf->temp_vector); // temp_vector = K(k)*(z(k) - H*xhat'(k))
         kf->MatStatus = mat_add(&kf->xhatminus, &kf->temp_vector, &kf->xhat);
     }
 }
@@ -222,8 +222,8 @@ void kf_update_cov(KalmanFilter_t *kf)
         kf->temp_matrix.numCols = kf->H.numCols;
         kf->temp_matrix1.numRows = kf->temp_matrix.numRows;
         kf->temp_matrix1.numCols = kf->Pminus.numCols;
-        kf->MatStatus = mat_mul(&kf->K, &kf->H, &kf->temp_matrix);                 // temp_matrix = K(k)锟斤拷H
-        kf->MatStatus = mat_mul(&kf->temp_matrix, &kf->Pminus, &kf->temp_matrix1); // temp_matrix1 = K(k)锟斤拷H锟斤拷P'(k)
+        kf->MatStatus = mat_mul(&kf->K, &kf->H, &kf->temp_matrix);                 // temp_matrix = K(k)*H
+        kf->MatStatus = mat_mul(&kf->temp_matrix, &kf->Pminus, &kf->temp_matrix1); // temp_matrix1 = K(k)*H*P'(k)
         kf->MatStatus = mat_sub(&kf->Pminus, &kf->temp_matrix1, &kf->P);
     }
 }

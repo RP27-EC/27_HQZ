@@ -1,4 +1,4 @@
-/* rp_config.h - 閰嶇疆鎬诲叆鍙� */
+/* rp_config.h - 设备配置 */
 
 
 #ifndef __RP_CONFIG_H

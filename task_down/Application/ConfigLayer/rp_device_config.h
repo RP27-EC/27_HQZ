@@ -8,11 +8,10 @@
 /* 设备层 --------------------------------------------------------------------*/
 /* enum */
 typedef enum {
-	DEV_ID_IMU = 0,
-  DEV_ID_IMU_EX,
-	DEV_ID_RC,
-	DEV_ID_VISION,
-	DEV_ID_CNT,
+	DEV_ID_IMU = 0, // IMU编号0
+  DEV_ID_IMU_EX, // 副IMU编号1
+	DEV_ID_RC, // 遥控器编号2
+	DEV_ID_CNT, // 设备数3
 } dev_id_t;
 
 /* enum */

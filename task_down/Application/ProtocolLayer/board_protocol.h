@@ -41,11 +41,8 @@
 typedef struct{
   uint8_t car_state;    /* 车辆状态，0~3 */
   uint8_t gimbal_mode;  /* 机械/速控，0/1 */
-  uint8_t vision_mode;  /* 视觉模式，0~7 */
   uint8_t game_start;   /* 比赛开始，0/1 */
   uint8_t my_color;     /* 己方颜色，0/1 */
-  float v_x;            /* 纵向指令，-8000~8000 */
-  float v_y;            /* 横向指令，-8000~8000 */
   uint8_t r_turn_active; /* R掉头进行中，0/1 */
 }Board_Car_Pkt_t;
 
@@ -100,14 +97,6 @@ typedef struct{
 	float pitch_imu; /* Pitch IMU 角，deg */
 }Board_Gimbal_Meg_t;
 
-/* 视觉目标反馈 */
-typedef struct{
-	float vision_yaw_tar;   /* 视觉 Yaw 目标 */
-	float vision_pitch_tar; /* 视觉 Pitch 目标 */
-	uint8_t is_find_target; /* 1 = 已识别目标 */
-}Board_Vision_Meg_t;
-
-
 /* 上板设备在线状态 */
 typedef struct{
   uint8_t yaw_motor_state;    /* Yaw 电机在线 */
@@ -116,7 +105,6 @@ typedef struct{
 	uint8_t r_fric_state;       /* 右摩擦轮在线 */
 	uint8_t l_fric_state;       /* 左摩擦轮在线 */
 	uint8_t dial_motor_state;   /* 拨盘在线 */
-	uint8_t vision_state;       /* 视觉在线 */
   uint8_t is_down;            /* 下板状态标志 */
 }Board_State_Meg_t;
 
@@ -124,7 +112,6 @@ typedef struct{
 /* 上板接收缓存 */
 typedef struct{
 	Board_Gimbal_Meg_t gimbal_meg; /* 云台姿态 */
-	Board_Vision_Meg_t vision_meg; /* 视觉目标 */
 	Board_State_Meg_t state_meg;   /* 设备状态 */
 }Board_Rx_Meg_t;
 

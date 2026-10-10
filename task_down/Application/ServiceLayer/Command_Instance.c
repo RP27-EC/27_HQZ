@@ -127,7 +127,7 @@ void Command_Update(void)
 		
 		  command[KNEE_STRIKE].update(&command[KNEE_STRIKE],rc_info->C.status == release_to_press);
 			
-			command[U_TURN].update(&command[U_TURN],rc_info->R.status == release_to_press );//&& (D_Board_Tx_Pkt.vision_mode == 0 || (D_Board_Tx_Pkt.vision_mode != 0 && D_Board_Rx_Info.vision_state == 0))
+			command[U_TURN].update(&command[U_TURN],rc_info->R.status == release_to_press );
 			
 //			command[L_TURN45].update(&command[L_TURN45],rc_info->Q.status == release_to_press);
 //			

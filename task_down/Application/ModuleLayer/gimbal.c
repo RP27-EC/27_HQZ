@@ -1,7 +1,6 @@
 /* gimbal.c - 云台控制 */
 
 #include "gimbal.h"
-#include "vision.h"
 #include "infantry.h"
 #include "board_protocol.h"
 #include "rp_math.h"
@@ -251,17 +250,10 @@ static void  Gimbal_Slave_Update(Gimbal_t* gimbal)
 }
 
 
-/* 主控模式：视觉/掉头/操作手更新 IMU 目标并处理底盘复位 */
+/* 主控模式更新 IMU 目标并处理底盘复位 */
 static void  Gimbal_Boss_Update(Gimbal_t* gimbal)
 {
-	//视觉模式上板直接用视觉包目标值，下板需要实时更新目标值防止退出视觉时目标值衔接错误导致头动
-	if(vision.mode != V_NORMAL && board.rx_meg->state_meg.vision_state == true && board.rx_meg->vision_meg.is_find_target == true)  
-	{
-		gimbal->target.yaw_imu_tar = board.rx_meg->vision_meg.vision_yaw_tar;
-	  gimbal->target.pitch_imu_tar = board.rx_meg->vision_meg.vision_pitch_tar;
-	}
-	//掉头处理
-  else if(infantry.flag.U_turn_flag.value == true)
+	if(infantry.flag.U_turn_flag.value == true)
 	{
 		if(infantry.flag.U_turn_flag.form == RISING)
 		{

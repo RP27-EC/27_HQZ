@@ -752,11 +752,6 @@
               <FilePath>..\Application\ConfigLayer\config_uart.c</FilePath>
             </File>
             <File>
-              <FileName>config_uart.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Application\ConfigLayer\config_uart.h</FilePath>
-            </File>
-            <File>
               <FileName>rp_user_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Application\ConfigLayer\rp_user_config.h</FilePath>
@@ -1287,11 +1282,6 @@
         <Group>
           <GroupName>User</GroupName>
           <Files>
-            <File>
-              <FileName>best_bless.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Application\UserLayer\best_bless.h</FilePath>
-            </File>
             <File>
               <FileName>backup.txt</FileName>
               <FileType>5</FileType>

@@ -1,4 +1,4 @@
-/* led.c - LED 椹卞姩 */
+/* led.c - LED 妞瑰崬濮� */
 
 #include "led.h"
 
@@ -10,7 +10,7 @@ led_t led={
 	.colour =LED_colour_red,
 	.blink_fre=5,
 };
-/* LED 鐘舵€佸埛鏂� */
+/* LED 鐘舵€佹洿鏂� */
 void led_work(led_t *led)
 {
 	if(led->blink_fre==0)

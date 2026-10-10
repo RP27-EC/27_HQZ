@@ -41,7 +41,7 @@ float  all_pid_calc (pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,
 		
 		out->target=target;
 		out->measure=mea_out;
-		out->err=out->target-out->measure;  // 璇樊
+		out->err=out->target-out->measure;  // 外环误差
 		switch(err_cal_mode)
 		{
 			
@@ -75,7 +75,7 @@ float  all_pid_calc (pid_ctrl_t *out,pid_ctrl_t *inn,float target,float mea_out,
 		single_pid_ctrl(out);  // 杈撳嚭
 		inn->target=out->out;  // 鐩爣
 		inn->measure=mea_in*inner_kp;
-		inn->err=inn->target+inn->measure;  // 璇樊
+		inn->err=inn->target+inn->measure;  // 内环误差
 		single_pid_ctrl(inn);
 		return inn->out;  // 杈撳嚭
 	}

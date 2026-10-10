@@ -1,4 +1,4 @@
-/* KT_motor.c - KT 鐢垫満椹卞姩 */
+/* KT motor CAN driver */
 
 #include "KT_motor.h"
 extern CAN_HandleTypeDef hcan1;
@@ -13,40 +13,30 @@ void tx_kt_motor_R_command(KT_motor_t *motor, uint8_t command);
 static void KT_Encoder_Sum_Cal(KT_motor_t *motor);
 
 
-// 鍐� PID 鍙傛暟
 void write_kt_motor_pid_param(KT_motor_t *motor, uint8_t* buff);
 
-// 鍐欏姞閫熷害鍙傛暟
 void write_kt_motor_accel_param(KT_motor_t *motor, int32_t accel);
 
-// 鍐欑紪鐮佸櫒闆跺亸
 void write_kt_motor_encoderOffset_param(KT_motor_t *motor, uint16_t encoderOffset);
 
-// 鍐欏姛鐜囨帶鍒跺弬鏁�
 void write_kt_motor_powerControl_param(KT_motor_t *motor, int16_t powerControl);
 
-// 鍐欑數娴佹帶鍒跺弬鏁�
 void write_kt_motor_iqControl_param(KT_motor_t *motor, int16_t iqControl);
 
-// 鍐欓€熷害鎺у埗鍙傛暟
 void write_kt_motor_speedControl_param(KT_motor_t *motor, int32_t speedControl);
 
-// 鍐欑疮璁¤搴︽帶鍒跺弬鏁�
 void write_kt_motor_angle_sum_Control_param(KT_motor_t    *motor, 
 																						int32_t       angle_sum_Control,
 	                                          uint16_t      angle_sum_Control_maxSpeed);
 
-// 鍐欏崟鍦堣搴︽帶鍒跺弬鏁�
 void write_kt_motor_angle_single_Control_param(KT_motor_t   *motor, 
 																	 uint16_t     angle_single_Control,
 																	 uint8_t   	  angle_single_Control_spinDirection,
 																	 uint16_t			angle_single_Control_maxSpeed);
 
-// 鍐欒搴﹀閲忔帶鍒跺弬鏁�
 void write_kt_motor_angle_add_Control_param(KT_motor_t   *motor, 
 																						int32_t      angle_add_Control,
 																			      uint16_t     angle_add_Control_maxSpeed);
-/* 缁戝畾鎺ュ彛骞跺浣嶇姸鎬� */
 void KT_motor_class_init(KT_motor_t *motor)
 {
 	
@@ -83,7 +73,6 @@ void KT_motor_class_init(KT_motor_t *motor)
 	
 }
 
-/* 绂荤嚎妫€娴� */
 void KT_motor_class_heartbeat(KT_motor_t *motor)
 {	
 	static int16_t current_last; /* last current feedback */
@@ -99,7 +88,7 @@ void KT_motor_class_heartbeat(KT_motor_t *motor)
 	}
 		
 	state_info->offline_cnt++; /* heartbeat counter */
-	// 鐢垫祦闀挎椂闂翠笉鍙樺垽瀹氫负鍫佃浆, 瑙﹀彂鑷繚鎶�
+	// 电流反馈不变时累计保护计数
 	if(motor->KT_motor_info.rx_info.current==current_last)
 	{
 		state_info->selfprotect_cnt++; /* current stuck count */
@@ -121,7 +110,6 @@ void KT_motor_class_heartbeat(KT_motor_t *motor)
 	{
 		state_info->selfprotect_cnt = state_info->selfprotect_cnt_max;
 		state_info->selfprotect_flag = M_PROTECT_ON; /* protect latched */
-	//	motor->tx_W_cmd(motor,MOTOR_RUN_ID);
 	}
 	else 
 	{
@@ -135,7 +123,6 @@ void KT_motor_class_heartbeat(KT_motor_t *motor)
 }
 
 
-/* 鍒濆鍖� PID */
 void kt_motor_class_pid_init(KT_motor_t *motor)
 {
 	if(motor == NULL)	
@@ -163,13 +150,10 @@ void kt_motor_class_pid_init(KT_motor_t *motor)
 }	
 
 
-/* 澶氱數鏈烘帶鍒� */
 
 
-/* 澶氱數鏈虹粺涓€鎺у埗: 鎸� ID 椤哄簭鍙戦€� 4 涓數鏈虹殑鐢垫祦 */
 void kt_motor_multi_control(int16_t* iqControl, char kt_motor_num, motor_drive_e drive_type)
 {
-	// 鍙傛暟妫€鏌�
 	for(int i = 0; i < kt_motor_num; i ++)
 	{
 		if( within_or_not(iqControl[i], -KT_TX_IQ_CONTROL_MAX, KT_TX_IQ_CONTROL_MAX) == Flase )
@@ -207,7 +191,6 @@ void kt_motor_multi_control(int16_t* iqControl, char kt_motor_num, motor_drive_e
 }
 
 
-/* 鍐欏弬鏁版寚浠ゅ抚 */
 HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 {
 	
@@ -222,7 +205,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 	
 	switch(command)
 	{
-		case PID_TX_RAM_ID:  // 鍐� PID 鍙傛暟鍒� RAM
+		case PID_TX_RAM_ID:
 			motor->tx_buff[0] = PID_TX_RAM_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = pid->tx.angleKp;
@@ -233,7 +216,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = pid->tx.iqKi;
 		break;
 		
-		case PID_TX_ROM_ID:  // 鍐� PID 鍙傛暟鍒� ROM
+		case PID_TX_ROM_ID:
 			motor->tx_buff[0] = PID_TX_RAM_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = pid->tx.angleKp;
@@ -244,7 +227,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = pid->tx.iqKi;
 		break;
 		
-		case ACCEL_TX_ID:  // 鍐欏姞閫熷害鍒� RAM
+		case ACCEL_TX_ID:
 			motor->tx_buff[0] = ACCEL_TX_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -255,7 +238,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->accel >> 24);
 		break;
 		
-		case ZERO_ENCODER_TX_ID:  // 鍐欑紪鐮佸櫒闆朵綅鍒� ROM
+		case ZERO_ENCODER_TX_ID:
 			motor->tx_buff[0] = ZERO_ENCODER_TX_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -266,7 +249,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->encoderOffset >> 8);
 		break;
 		
-		case ZERO_POSNOW_TX_ID:  // 鍐欏綋鍓嶄綅缃负闆剁偣
+		case ZERO_POSNOW_TX_ID:
 			motor->tx_buff[0] = ZERO_POSNOW_TX_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -277,19 +260,19 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->encoderOffset >> 8);
 		break;
 		
-		case MOTOR_CLOSE_ID:  // 鐢垫満澶辫兘
+		case MOTOR_CLOSE_ID:
 			motor->tx_buff[0] = MOTOR_CLOSE_ID;
 		break;
 		
-		case MOTOR_STOP_ID:  // 鐢垫満鍋滄
+		case MOTOR_STOP_ID:
 			motor->tx_buff[0] = MOTOR_STOP_ID;
 		break;
 		
-		case MOTOR_RUN_ID:  // 鐢垫満鎭㈠杩愯
+		case MOTOR_RUN_ID:
 			motor->tx_buff[0] = MOTOR_RUN_ID;
 		break;
 		
-		case TORQUE_OPEN_LOOP_ID:  // 寮€鐜姏鐭╂帶鍒�
+		case TORQUE_OPEN_LOOP_ID:
 			motor->tx_buff[0] = TORQUE_OPEN_LOOP_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -300,7 +283,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = 0x00;
 		break;
 		
-		case TORQUE_CLOSE_LOOP_ID:  // 闂幆鍔涚煩鎺у埗
+		case TORQUE_CLOSE_LOOP_ID:
 			motor->tx_buff[0] = TORQUE_CLOSE_LOOP_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -311,7 +294,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = 0x00;
 		break;
 		
-		case SPEED_CLOSE_LOOP_ID:  // 閫熷害闂幆鎺у埗
+		case SPEED_CLOSE_LOOP_ID:
 			motor->tx_buff[0] = SPEED_CLOSE_LOOP_ID;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -322,7 +305,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->speedControl >> 24);
 		break;
 		
-		case POSI_CLOSE_LOOP_ID1:  // 瑙掑害绱闂幆, 閫熷害涓嶉檺
+		case POSI_CLOSE_LOOP_ID1:
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID1;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -333,7 +316,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->angle_sum_Control >> 24);
 		break;
 		
-		case POSI_CLOSE_LOOP_ID2:  // 瑙掑害绱闂幆, 閫熷害闄愬埗
+		case POSI_CLOSE_LOOP_ID2:
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID2;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = (uint8_t) tx_info->angle_sum_Control_maxSpeed; /* max speed low */
@@ -344,7 +327,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->angle_sum_Control >> 24);
 		break;
 		
-		case POSI_CLOSE_LOOP_ID3:  // 鍗曞湀瑙掑害鎺у埗
+		case POSI_CLOSE_LOOP_ID3:
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID3;
 			motor->tx_buff[1] = (uint8_t) tx_info->angle_single_Control_spinDirection; /* spin direction */
 		  motor->tx_buff[2] = 0x00;
@@ -355,7 +338,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = 0x00;
 		break;
 		
-		case POSI_CLOSE_LOOP_ID4:  // 鍗曞湀瑙掑害鎺у埗, 闄愰€�
+		case POSI_CLOSE_LOOP_ID4:
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID4;
 			motor->tx_buff[1] = (uint8_t) tx_info->angle_single_Control_spinDirection;
 		  motor->tx_buff[2] = (uint8_t) tx_info->angle_single_Control_maxSpeed;
@@ -366,7 +349,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = 0x00;
 		break;
 		
-		case POSI_CLOSE_LOOP_ID5:  // 瑙掑害澧為噺鎺у埗, 閫熷害涓嶉檺
+		case POSI_CLOSE_LOOP_ID5:
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID5;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
@@ -377,7 +360,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[7] = (uint8_t) (tx_info->angle_add_Control >> 24);
 		break;
 				
-		case POSI_CLOSE_LOOP_ID6:  // 瑙掑害澧為噺鎺у埗, 閫熷害闄愬埗
+		case POSI_CLOSE_LOOP_ID6:
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID6;
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = (uint8_t) tx_info->angle_add_Control_maxSpeed; /* max speed low */
@@ -408,7 +391,6 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 
 
 
-/* 璇诲弬鏁版寚浠ゅ抚 */
 void tx_kt_motor_R_command(KT_motor_t *motor, uint8_t command)
 {
 	if( motor == NULL )
@@ -418,35 +400,35 @@ void tx_kt_motor_R_command(KT_motor_t *motor, uint8_t command)
 	
 	switch(command)
 	{
-		case PID_RX_ID:  // 璇诲彇 PID 鍙傛暟
+		case PID_RX_ID:
 			motor->tx_buff[0] = PID_RX_ID;
 		break;
 		
-		case ACCEL_RX_ID:  // 璇诲彇鍔犻€熷害鍙傛暟
+		case ACCEL_RX_ID:
 			motor->tx_buff[0] = ACCEL_RX_ID;
 		break;
 		
-		case ENCODER_RX_ID:  // 璇诲彇缂栫爜鍣ㄩ浂浣�
+		case ENCODER_RX_ID:
 			motor->tx_buff[0] = ENCODER_RX_ID;
 		break;
 		
-		case MOTOR_ANGLE_ID:  // 璇诲彇澶氬湀缁濆瑙掑害
+		case MOTOR_ANGLE_ID:
 		 motor->tx_buff[0] = MOTOR_ANGLE_ID;
 		break;
 		
-		case CIRCLE_ANGLE_ID:  // 璇诲彇鍗曞湀瑙掑害
+		case CIRCLE_ANGLE_ID:
 			motor->tx_buff[0] = CIRCLE_ANGLE_ID;
 		break;
 		
-		case STATE1_ID:  // 璇诲彇鐘舵€�1涓庨敊璇爣蹇�
+		case STATE1_ID:
 			motor->tx_buff[0] = STATE1_ID;
 		break;
 		
-		case STATE2_ID:  // 璇诲彇鐘舵€�2
+		case STATE2_ID:
 			motor->tx_buff[0] = STATE2_ID;
 		break;
 		
-		case STATE3_ID:  // 璇诲彇鐘舵€�3
+		case STATE3_ID:
 			motor->tx_buff[0] = STATE3_ID;
 		break;
 		
@@ -468,7 +450,6 @@ void tx_kt_motor_R_command(KT_motor_t *motor, uint8_t command)
 
 
 
-/* 瑙ｆ瀽鐢垫満鍙嶉甯� */
 static void KT_Encoder_Sum_Cal(KT_motor_t *motor)
 {
     int32_t err;
@@ -522,7 +503,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 	
 	switch (ID)
 	{
-		case PID_RX_ID:  // 璇诲彇 PID 鍙傛暟
+		case PID_RX_ID:
 			pid_rx_info->angleKp = rxBuf[2];
 			pid_rx_info->angleKi = rxBuf[3];
 			pid_rx_info->speedKp = rxBuf[4];
@@ -531,7 +512,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			pid_rx_info->iqKi	   = rxBuf[7];
 		break;
 		
-		case PID_TX_RAM_ID:  // 鍐� PID 鍙傛暟鍒� RAM
+		case PID_TX_RAM_ID:
 			pid_rx_info->angleKp = rxBuf[2];
 			pid_rx_info->angleKi = rxBuf[3];
 			pid_rx_info->speedKp = rxBuf[4];
@@ -540,7 +521,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			pid_rx_info->iqKi	   = rxBuf[7];
 		break;
 		
-		case PID_TX_ROM_ID:  // 鍐� PID 鍙傛暟鍒� ROM
+		case PID_TX_ROM_ID:
 			pid_rx_info->angleKp = rxBuf[2];
 			pid_rx_info->angleKi = rxBuf[3];
 			pid_rx_info->speedKp = rxBuf[4];
@@ -549,7 +530,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			pid_rx_info->iqKi	   = rxBuf[7];
 		break;
 		
-		case ACCEL_RX_ID:  // 璇诲彇鍔犻€熷害鍙傛暟
+		case ACCEL_RX_ID:
 			rx_info->accel  = (int32_t)rxBuf[7]; /* big-endian accel */
 			rx_info->accel <<= 8;
 			rx_info->accel |= (int32_t)rxBuf[6];
@@ -560,7 +541,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->accel <<= 8;
 		break;
 		
-		case ACCEL_TX_ID:  // 鍐欏姞閫熷害鍒� RAM
+		case ACCEL_TX_ID:
 			rx_info->accel  = (int32_t)rxBuf[7];
 			rx_info->accel <<= 8;
 			rx_info->accel |= (int32_t)rxBuf[6];
@@ -571,7 +552,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->accel <<= 8;
 		break;	
 		
-		case ENCODER_RX_ID:  // 璇诲彇缂栫爜鍣ㄩ浂浣�
+		case ENCODER_RX_ID:
 			rx_info->encoder = (uint16_t)rxBuf[3]; /* encoder high byte */
 			rx_info->encoder <<= 8;
 			rx_info->encoder |= (uint16_t)rxBuf[2];
@@ -583,20 +564,20 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->encoderOffset |= (uint16_t)rxBuf[6];
 		break;
 		
-		case ZERO_ENCODER_TX_ID:  // 鍐欑紪鐮佸櫒闆朵綅鍒� ROM
+		case ZERO_ENCODER_TX_ID:
 			rx_info->encoderOffset = (uint16_t)rxBuf[7];
 			rx_info->encoderOffset <<= 8;
 			rx_info->encoderOffset |= (uint16_t)rxBuf[6];
 		break;
 		
-		case ZERO_POSNOW_TX_ID:  // 鍐欏綋鍓嶄綅缃负闆剁偣
+		case ZERO_POSNOW_TX_ID:
 			rx_info->encoderOffset = (uint16_t)rxBuf[7];
 			rx_info->encoderOffset <<= 8;
 			rx_info->encoderOffset |= (uint16_t)rxBuf[6];
 		break;
 		
 		
-		case MOTOR_ANGLE_ID:  // 璇诲彇澶氬湀缁濆瑙掑害
+		case MOTOR_ANGLE_ID:
 			rx_info->motorAngle  = (int64_t)rxBuf[7];
 			rx_info->motorAngle <<= 8;
 			rx_info->motorAngle |= (int64_t)rxBuf[6];
@@ -612,7 +593,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->motorAngle |= (int64_t)rxBuf[1];
 		break;
 		
-		case CIRCLE_ANGLE_ID:  // 璇诲彇鍗曞湀瑙掑害
+		case CIRCLE_ANGLE_ID:
 			rx_info->circleAngle  = (uint32_t)rxBuf[7];
 			rx_info->circleAngle <<= 8;
 			rx_info->circleAngle |= (uint32_t)rxBuf[6];
@@ -622,7 +603,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->circleAngle |= (uint32_t)rxBuf[4];
 		break;
 		
-		case STATE1_ID:  // 璇诲彇鐘舵€�1涓庨敊璇爣蹇�
+		case STATE1_ID:
 			rx_info->temperature = (int8_t)rxBuf[1]; 
 			rx_info->voltage = (uint16_t)rxBuf[4]; /* voltage high byte */
 			rx_info->voltage <<= 8;
@@ -630,7 +611,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->errorState = rxBuf[7];
 		break;
 		
-		case STATE2_ID:  // 璇诲彇鐘舵€�2
+		case STATE2_ID:
 			rx_info->temperature = (int8_t)rxBuf[1];
 			rx_info->current = (int16_t)rxBuf[3]; /* current high byte */
 			rx_info->current <<= 8;
@@ -643,7 +624,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->encoder |= (uint16_t)rxBuf[6];
 		break;
 		
-		case STATE3_ID:  // 璇诲彇鐘舵€�3
+		case STATE3_ID:
 			rx_info->temperature = (int8_t)rxBuf[1];
 			rx_info->current_A = (int16_t)rxBuf[3]; /* phase A current */
 			rx_info->current_A <<= 8;
@@ -656,7 +637,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->current_C |= (int16_t)rxBuf[6];
 		break;
 		
-		case TORQUE_OPEN_LOOP_ID:  // 寮€鐜姏鐭╂帶鍒�
+		case TORQUE_OPEN_LOOP_ID:
 			rx_info->temperature = (int8_t)rxBuf[1]; 
 			rx_info->powerControl = (int16_t)rxBuf[3];
 			rx_info->powerControl <<= 8;	
@@ -669,7 +650,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			rx_info->encoder |= (uint16_t)rxBuf[6];
 		break;
 		
-		case  TORQUE_CLOSE_LOOP_ID:  // 闂幆鍔涚煩鎺у埗
+		case  TORQUE_CLOSE_LOOP_ID:
 		case  SPEED_CLOSE_LOOP_ID :
 		case  POSI_CLOSE_LOOP_ID1 :
 		case  POSI_CLOSE_LOOP_ID2 :
@@ -699,7 +680,6 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 	
 }
 
-/* 鍐� PID 鍙傛暟 */
 /* write PID parameters to tx cache */
 void write_kt_motor_pid_param(KT_motor_t *motor, uint8_t* buff)
 {
@@ -717,7 +697,6 @@ void write_kt_motor_pid_param(KT_motor_t *motor, uint8_t* buff)
 }
 
 
-/* 鍐欏姞閫熷害鍙傛暟 */
 /* write acceleration parameter */
 void write_kt_motor_accel_param(KT_motor_t *motor, int32_t accel)
 {
@@ -728,21 +707,18 @@ void write_kt_motor_accel_param(KT_motor_t *motor, int32_t accel)
 }
 
 
-/* 鍐欑紪鐮佸櫒闆跺亸 */
 /* write encoder offset with range check */
 void write_kt_motor_encoderOffset_param(KT_motor_t *motor, uint16_t encoderOffset)
 {
 	if(motor == NULL)
 		return;
 	
-	// 鍙傛暟瓒婄晫鐩存帴杩斿洖
 	if( encoderOffset > KT_TX_ENCODER_OFFSET_MAX )
 	  return;
 	
 	motor->KT_motor_info.tx_info.encoderOffset = encoderOffset;
 }
 
-/* 鍐欏姛鐜囨帶鍒跺弬鏁� */
 /* write open-loop torque command */
 void write_kt_motor_powerControl_param(KT_motor_t *motor, int16_t powerControl)
 {
@@ -755,7 +731,6 @@ void write_kt_motor_powerControl_param(KT_motor_t *motor, int16_t powerControl)
 	motor->KT_motor_info.tx_info.powerControl = powerControl;
 }
 
-/* 鍐欑數娴佹帶鍒跺弬鏁� */
 /* write current-loop command */
 void write_kt_motor_iqControl_param(KT_motor_t *motor, int16_t iqControl)
 {
@@ -768,7 +743,6 @@ void write_kt_motor_iqControl_param(KT_motor_t *motor, int16_t iqControl)
 }
 
 
-/* 鍐欓€熷害鎺у埗鍙傛暟 */
 /* write speed-loop command */
 void write_kt_motor_speedControl_param(KT_motor_t *motor, int32_t speedControl)
 {
@@ -778,7 +752,6 @@ void write_kt_motor_speedControl_param(KT_motor_t *motor, int32_t speedControl)
 	motor->KT_motor_info.tx_info.speedControl = speedControl;
 }
 
-/* 鍐欑疮璁¤搴︽帶鍒跺弬鏁� */
 /* write multi-turn angle target and max speed */
 void write_kt_motor_angle_sum_Control_param(KT_motor_t    *motor, 
 																						int32_t       angle_sum_Control,
@@ -793,23 +766,12 @@ void write_kt_motor_angle_sum_Control_param(KT_motor_t    *motor,
 }
 
 
-/* 鍐欏崟鍦堣搴︽帶鍒跺弬鏁� */
 /* write single-turn angle target and direction */
 void write_kt_motor_angle_single_Control_param(KT_motor_t   *motor, 
 											 uint16_t     angle_single_Control,
 											 uint8_t   	  angle_single_Control_spinDirection,
 										     uint16_t			angle_single_Control_maxSpeed)
 {
-//	if(motor == NULL)
-//		return;
-//	
-//	//锟睫凤拷锟脚碉拷锟斤拷within_or_not锟结报锟斤拷锟斤拷
-//	if( angle_single_Control > KT_TX_ANGLE_SIGNLE_MAX )
-//		return;
-//	
-//	if( angle_single_Control_spinDirection != CLOCK_WISE ||
-//	   	angle_single_Control_spinDirection != N_CLOCK_WISE )
-//		return;
 	
 	
 	motor->KT_motor_info.tx_info.angle_single_Control = angle_single_Control;
@@ -819,7 +781,6 @@ void write_kt_motor_angle_single_Control_param(KT_motor_t   *motor,
 	motor->KT_motor_info.tx_info.angle_single_Control_maxSpeed = angle_single_Control_maxSpeed;
 }
 
-/* 鍐欒搴﹀閲忔帶鍒跺弬鏁� */
 /* write angle delta target and max speed */
 void write_kt_motor_angle_add_Control_param(KT_motor_t   *motor, 
 																						int32_t      angle_add_Control,

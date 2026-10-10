@@ -170,11 +170,7 @@ float front_speed,left_speed,cycle_speed;
 
 static void Chassis_Target_Update(Chassis_t* chassis)
 {
-	#ifdef test_cycle
-	float yaw_angle_err_rad = -gimbal.info.yaw_mec_err_raw;
-	#else
 	float yaw_angle_err_rad = gimbal.info.yaw_mec_err_act;
-	#endif
 	 
 	
 	
@@ -352,18 +348,9 @@ static void Chassis_Positive_Calculate(Chassis_t* chassis)
 	float speed_lf = chassis->wheel->motor[WHEEL_LF]->rx_info->speed;
 	float speed_lb = chassis->wheel->motor[WHEEL_LB]->rx_info->speed;
 	
-	float yaw_angle_err_rad = gimbal.info.yaw_mec_err_act;
-	
 	chassis->measure.front_speed = (- speed_lf - speed_lb + speed_rb + speed_rf)/4.f;
 	chassis->measure.left_speed = (speed_lf - speed_lb - speed_rb + speed_rf)/4.f;
 	chassis->measure.cycle_speed = (speed_lf + speed_lb + speed_rb + speed_rf)/4.f;
-	
- //视觉所需车速度，x向前y向左
-  board.tx_pkt->car_pkt.v_x = chassis->measure.front_speed * cos(yaw_angle_err_rad) 
-            + chassis->measure.left_speed  * sin(yaw_angle_err_rad);
-
-  board.tx_pkt->car_pkt.v_y  = chassis->measure.left_speed  * cos(yaw_angle_err_rad) 
-            - chassis->measure.front_speed * sin(yaw_angle_err_rad);
 	
 }
 
@@ -897,37 +884,6 @@ float Power_Estimate_Advanced(void)
 }
 
 
-///* 接口说明 */
-//static void Caluculate_All_Predicted_Power(Chassis_t *chassis,float *each_power,float *power_all,float *power_error)
-//{
-//	int16_t limit_output_current[4];
-//	float motor_speed[4];
-//	float power_fit = 0;
-//	
-//	limit_output_current[WHEEL_RF] = chassis->out.wheel_end_out[WHEEL_RF];
-//	limit_output_current[WHEEL_RB] = chassis->out.wheel_end_out[WHEEL_RB];
-//	limit_output_current[WHEEL_LF] = chassis->out.wheel_end_out[WHEEL_LF];
-//	limit_output_current[WHEEL_LB] = chassis->out.wheel_end_out[WHEEL_LB];
-
-//	motor_speed[WHEEL_RF] = chassis->wheel->motor[WHEEL_RF]->rx_info->speed;
-//	motor_speed[WHEEL_RB] = chassis->wheel->motor[WHEEL_RB]->rx_info->speed;
-//	motor_speed[WHEEL_LF] = chassis->wheel->motor[WHEEL_LF]->rx_info->speed;
-//	motor_speed[WHEEL_LB] = chassis->wheel->motor[WHEEL_LB]->rx_info->speed;
-
-//	for(uint8_t i = 0; i < 4; i++)
-//	{
-//		each_power[i] = Calculate_Predicted_Power(chassis->power_coefficient[i],limit_output_current[i], motor_speed[i]);
-//		if(each_power[i] > 0)
-//		{
-//			power_fit += each_power[i];
-//		}
-//	}
-//	*power_all = power_fit;
-//	*power_error = power_fit - Power_Estimate_Advanced();
-//}
-	
-
-
 int test_count;
 /* 下发底盘控制量 */
 static void Chassis_Cmd_Transmit(Chassis_t* chassis)
@@ -966,7 +922,7 @@ static void Chassis_Cmd_Transmit(Chassis_t* chassis)
 				   chassis->wheel->motor[WHEEL_LF]->state->status == DEV_ONLINE &&
 				   chassis->wheel->motor[WHEEL_LB]->state->status == DEV_ONLINE );
 
-	//底盘全掉阵亡重启时不控
+	// 底盘离线恢复期间保持零输出
 	if (count >= 5000 || triggle)
 	{
 		count = 0;
@@ -990,9 +946,6 @@ static void Chassis_Cmd_Transmit(Chassis_t* chassis)
 	
 }
 
-float each_power[4];
-float power_all;
-float power_error;
 /* 底盘主循环 */
 static void Chassis_Work(Chassis_t* chassis)
 {
@@ -1003,7 +956,6 @@ static void Chassis_Work(Chassis_t* chassis)
 	Chassis_Inverse_Calculate(chassis);
 	Chassis_Feedforward_Calculate(chassis);
 	Chassis_Pid_Calculate(chassis);
-//	Chassis_Power_Limit(chassis);
 	New_Chassis_Power_Limit(chassis);
 	result= 
 	 Calculate_Predicted_Power(chassis->power_coefficient[0],(float)chassis->wheel->motor[0]->rx_info->torque_current_raw, (float)chassis->wheel->motor[0]->rx_info->encoder_speed)
@@ -1019,8 +971,6 @@ static void Chassis_Work(Chassis_t* chassis)
 	
 
 	Chassis_Cmd_Transmit(chassis);
-//	Caluculate_All_Predicted_Power(chassis,each_power,&power_all,&power_error);
-	
 }
 
 

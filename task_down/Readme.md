@@ -31,7 +31,7 @@ flowchart LR
   SUPERCAP[超电 FDCAN1 收发/观察] --> LIMIT
 ```
 
-`main()` 初始化时钟、GPIO、DMA、SPI、FDCAN1/2/3、串口和定时器，再调用 `DEVICE_Init()`、`DRIVER_Init()` 并启动 FreeRTOS。当前 `BOARD_COMM_DEBUG=1` 且 `CHASSIS_BRINGUP_ENABLE=1`，选择调试底盘控制路径；该路径跳过常规 IMU/infantry/UI 初始化，但仍初始化裁判对象、遥控、板间协议、底盘和超电通信。
+`main()` 初始化时钟、GPIO、DMA、SPI、FDCAN1/2/3、串口和定时器，再调用 `DEVICE_Init()`、`DRIVER_Init()` 并启动 FreeRTOS。当前 `BOARD_COMM_DEBUG=1` 且 `CHASSIS_BRINGUP_ENABLE=1`，选择调试底盘控制路径；该路径跳过常规 IMU/infantry 初始化，但仍初始化裁判对象、遥控、板间协议、底盘和超电通信。
 
 ## 工程结构与源码入口
 
@@ -83,7 +83,6 @@ FreeRTOS tick 为 1 kHz；当前任务使用 `osDelay(1)`，周期包含代码�
 | MonitorTask | AboveNormal / 2048 B | 1 tick 循环；遥控、底盘电机、发射、板间、裁判和超电心跳 |
 | ConnectTask | High / 2048 B | 当前每 1 tick 尝试 D1/D2/D5；D3 每 10 ms 独立排期；D4 默认关闭 |
 | UpdataTask | BelowNormal / 1024 B | `BOARD_COMM_DEBUG=1` 时不创建；非调试分支才更新 IMU |
-| UITask | AboveNormal / 2048 B | `BOARD_UI_ENABLE=0` 时不创建 |
 
 任务栈值来自 `osThreadAttr_t.stack_size` 字节配置。ConnectTask 发送控制组前检查 FIFO 空位；空间不足时本轮延后，不拆开发送 D1/D2/D5。
 
@@ -148,7 +147,7 @@ USART1 使用 DMA 接收后由空闲线处理函数调用 `judge_receive()`；�
 
 | 本板帧 | Byte 字段概要 |
 | --- | --- |
-| D1 `0xD1` | b0 状态位域；b1–4 速度映射；b5 bit0–3 发射许可/模式/触发/过洞 |
+| D1 `0xD1` | b0 状态位域（bit3–5 保留）；b1–4 保留；b5 bit0–4 发射许可/模式/触发/过洞/R掉头 |
 | D2 `0xD2` | b0–7 Pitch/Yaw IMU 角和 Pitch/Yaw 机械角，均为高字节在前的线性定点 |
 | D3 `0xD3` | b0–5 裁判热量/冷却；b6 源序号；b7 有效 flags |
 | D4 `0xD4` | 8 字节血量转发，默认 `BOARD_COMM_D4_ENABLE=0` |
@@ -161,7 +160,7 @@ USART1 使用 DMA 接收后由空闲线处理函数调用 `judge_receive()`；�
 | `Application/ConfigLayer/chassis_config.h` | 底盘 bring-up/遥控/键鼠/跟随/小陀螺开关；速度环 kp=0.8；测试力矩 2 N·m；跟随/小陀螺力矩 4 N·m |
 | `Application/ConfigLayer/power_limit_config.h` | 开关 1；回退 45 W；裁判上限 margin 5 W；buffer 目标 59 J、guard 45 J；时间步长上限 200 ms |
 | `Application/ConfigLayer/supercap_config.h` | bring-up 通信开、离线超时 100 ms；功率输出/预充/Turbo/缓冲开关均为 0 |
-| `Application/ConfigLayer/board_comm_config.h` | `BOARD_UI_ENABLE=0`、`BOARD_CAP_ENABLE=0`；旧 judge enable 宏为 0 但未守护 UART1 接收实现 |
+| `Application/ConfigLayer/board_comm_config.h` | `BOARD_CAP_ENABLE=0`；裁判数据接收仍供热量、弹速等链路使用 |
 
 ### 功率目标与实际输出的关系
 

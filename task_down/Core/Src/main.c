@@ -31,7 +31,6 @@
 /* USER CODE BEGIN Includes */
 #include "device.h"
 #include "driver.h"
-#include "ui.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/

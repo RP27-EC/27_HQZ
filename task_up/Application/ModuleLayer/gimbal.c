@@ -882,7 +882,6 @@ static float gimbal_init_pid_calc(pid_ctrl_t *outer,
  * 机械 Yaw 双环专用的 PID 状态。
  *
  * 不复用 pid_info 里的任何 PID 对象：G_INIT 归中和掉头段依赖
- * yaw_mec_inner 的饱和特性打满力矩，写它会连带改到归中。
  * 这两个对象只被 gimbal_mec_yaw_calc 使用。
  */
 static pid_ctrl_t gimbal_mec_yaw_pos_pid;
@@ -892,11 +891,9 @@ static float gimbal_mec_yaw_chassis_rate_lpf;
 static uint8_t gimbal_mec_yaw_hard_hold;
 
 /*
- * 位置式 PID，逐行照搬参考工程 algorithms_library/PID.c 的 PID_Calc()。
+ * 位置式 PID
  *
- * 与工程自带 single_pid_ctrl 的区别（这就是为什么要单独一份）：
  *   1. 抗积分饱和：输出已饱和且误差还会加剧饱和时，本拍不累加积分
- *      （参考 PID.c:100-110）。single_pid_ctrl 只有积分限幅，没有这一层。
  *   2. 微分是 Kd * d(Error)/dt（除以控制周期），不是 Kd * ΔError。
  *   3. 没有死区、没有微分低通：死区由调用方用连续软死区实现。
  *
@@ -975,27 +972,6 @@ static void gimbal_mec_yaw_pid_reset(pid_ctrl_t *pid)
 
 /*
  * 机械模式 Yaw 双环定位：位置外环（编码器相对角）+ 速度内环（IMU 角速度）。
- *
- * 结构照搬参考工程 infantry_up/user/cloud_terrace.c 的
- * cloud_control_yaw_mechanical()，它是实车上验证过不超调的版本：
- *
- *   1. 位置外环读【编码器累计机械角】（相对底盘），连续软死区：
- *      死区外只纠正超出的部分，死区内把控制目标设成当前角度
- *      —— 位置项为零，但速度内环照常运行继续制动。
- *      这和原来的硬死区（把 err 清零、整个环一起停手）有本质区别。
- *   2. 位置环输出是【目标角速度 deg/s】，上限被 sqrt 制动曲线钳住，
- *      接近目标自动减速（就是"提前减速"）。
- *   3. 速度内环的反馈用【IMU 陀螺仪 yaw_imu_speed】，单位 deg/s，
- *      与外环输出同量纲 —— 这是参考能稳、原来不能稳的根本原因。
- *      原来内环 measure 用 yaw_mec_speed(rad/s)，与外环输出差 57.3 倍，
- *      轴一动就顶到 out_max，退化成"超过约 38 deg/s 就满力刹车"的开关，
- *      增益因此完全失效（kd 从 0.5 调到 1000 都没反应就是这个原因）。
- *   4. 两个环都用参考 PID_Calc 那套（含抗积分饱和 + Kd*dError/dt），
- *      见上面的 gimbal_pid_calc。
- *
- * PID 状态用本文件内的 gimbal_mec_yaw_pos_pid / gimbal_mec_yaw_rate_pid，
- * 【不复用】pid_info 里的任何 PID 对象：G_INIT 归中和掉头段依赖
- * yaw_mec_inner 的饱和特性打满力矩，写它会连带改到归中。
  */
 static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
 {

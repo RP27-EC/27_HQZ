@@ -23,7 +23,6 @@ typedef struct
 {
     uint8_t car_state;   /* 车辆状态，0~3 */
     uint8_t gimbal_mode; /* 机械/速控，0/1 */
-    uint8_t vision_mode; /* 视觉模式，0~7 */
     uint8_t game_start;  /* 比赛开始，0/1 */
     uint8_t my_color;    /* 己方颜色，0/1 */
     uint8_t r_turn_active; /* R掉头进行中，0/1 */
@@ -113,7 +112,6 @@ typedef struct
     uint8_t r_fric_state;      /* 右摩擦轮在线 */
     uint8_t l_fric_state;      /* 左摩擦轮在线 */
     uint8_t dial_motor_state;  /* 拨盘在线 */
-    uint8_t vision_state;      /* 视觉在线 */
     uint8_t lift_state;        /* 抬升机构状态 */
 } Board_State_Meg_t;
 

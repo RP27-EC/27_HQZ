@@ -567,11 +567,6 @@
               <FilePath>..\Application\TaskLayer\monitor_task.c</FilePath>
             </File>
             <File>
-              <FileName>UI_Task.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\TaskLayer\UI_Task.c</FilePath>
-            </File>
-            <File>
               <FileName>observe_task.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\TaskLayer\observe_task.c</FilePath>
@@ -631,16 +626,6 @@
               <FileType>1</FileType>
               <FilePath>..\Application\ModuleLayer\launch.c</FilePath>
             </File>
-            <File>
-              <FileName>ui.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\ModuleLayer\ui.c</FilePath>
-            </File>
-            <File>
-              <FileName>vision.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\ModuleLayer\vision.c</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>
@@ -655,11 +640,6 @@
         <Group>
           <GroupName>Algorithm</GroupName>
           <Files>
-            <File>
-              <FileName>algo.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\AlgorithmLayer\algo.c</FilePath>
-            </File>
             <File>
               <FileName>ave_filter.c</FileName>
               <FileType>1</FileType>
@@ -694,11 +674,6 @@
               <FileName>crc.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Application\AlgorithmLayer\crc.h</FilePath>
-            </File>
-            <File>
-              <FileName>priority_ui.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\AlgorithmLayer\priority_ui.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -791,11 +766,6 @@
               <FilePath>..\Application\ProtocolLayer\supercap_protocol.c</FilePath>
             </File>
             <File>
-              <FileName>ui_protocol.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\ProtocolLayer\ui_protocol.c</FilePath>
-            </File>
-            <File>
               <FileName>judge_protocol.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\ProtocolLayer\judge_protocol.c</FilePath>
@@ -874,11 +844,6 @@
               <FileName>rp_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Application\ConfigLayer\rp_config.h</FilePath>
-            </File>
-            <File>
-              <FileName>config.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Application\ConfigLayer\config.h</FilePath>
             </File>
             <File>
               <FileName>config_chassis.h</FileName>
@@ -1745,21 +1710,6 @@
         <Group>
           <GroupName>User</GroupName>
           <Files>
-            <File>
-              <FileName>best_bless.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Application\UserLayer\best_bless.h</FilePath>
-            </File>
-            <File>
-              <FileName>diary.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Application\UserLayer\diary.h</FilePath>
-            </File>
-            <File>
-              <FileName>manual.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Application\UserLayer\manual.h</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>

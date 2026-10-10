@@ -8,8 +8,6 @@
 #include "chassis.h"
 #include "gimbal.h"
 #include "launch.h"
-#include "vision.h"
-#include "ui.h"
 #include "board_comm_config.h"
 #include "chassis_config.h"
 #include "chassis_control.h"
@@ -49,8 +47,6 @@ void DEVICE_Init(void)
     chassis.init(&chassis);
     gimbal.init(&gimbal);
     launch.init(&launch);
-    vision.init(&vision);
-    My_Ui_Init();
     infantry.init(&infantry);
 #endif
 }
