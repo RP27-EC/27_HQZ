@@ -6,6 +6,7 @@
 #include <stddef.h>
 
 #include "board_protocol.h"
+#include "board_comm_config.h"
 #include "chassis_input.h"
 #include "main.h"
 #include "rc_sensor.h"
@@ -14,11 +15,10 @@
 chassis_spin_state_t chassis_spin; /* 小陀螺状态 */
 
 static float spin_ramp_wz; /* 旋转斜坡输出，rad/s */
-static uint8_t spin_last_selected; /* 上次小陀螺选中状态 */
+static uint8_t spin_last_selected; /* 上拍小陀螺选中状态 */
 
-/* 将遥控通道映射到 [-1, 1] */
+/* 将遥控通道映射到 [-1, 1]，含死区 */
 
-/* 遥控通道归一化 */
 static float Chassis_Spin_AxisValue(int16_t axis)
 {
     float value = (float)axis; /* 去死区并归一化 */
@@ -52,7 +52,7 @@ static float Chassis_Spin_Ramp(float current, float target, float step)
     return target;
 }
 
-/* 云台数据有效性检查 */
+/* 云台反馈未超时且有效才允许系变换 */
 static uint8_t Chassis_Spin_GimbalValid(void)
 {
     uint32_t age; /* 云台反馈 ms */
@@ -66,7 +66,7 @@ static uint8_t Chassis_Spin_GimbalValid(void)
     return (age <= CHASSIS_SPIN_GIMBAL_TIMEOUT_MS) ? 1u : 0u;
 }
 
-/* 小陀螺下平移按云台方向旋转 */
+/* 小陀螺平移按云台朝向旋转 */
 static void Chassis_Spin_UpdateTranslation(chassis_cmd_t *cmd)
 {
     float vx_gimbal; /* 旋转前纵向速度 */
@@ -82,7 +82,7 @@ static void Chassis_Spin_UpdateTranslation(chassis_cmd_t *cmd)
 #if !CHASSIS_SPIN_TRANSLATION_ENABLE
     cmd->vx = 0.0f;
     cmd->vy = 0.0f;
-    /* 云台数据缺失时只保留自转 */
+    /* 云台数据缺失时零平移，只保留自转 */
 #elif CHASSIS_SPIN_TRANSLATION_FRAME_GIMBAL
     if (Chassis_Spin_GimbalValid() == 0u)
     {
@@ -115,7 +115,7 @@ static void Chassis_Spin_UpdateTranslation(chassis_cmd_t *cmd)
 #endif
 }
 
-/* 初始化 */
+/* 初始化小陀螺状态 */
 void Chassis_Spin_Init(void)
 {
     chassis_spin.target_wz = 0.0f; /* 清目标 */
@@ -149,11 +149,24 @@ void Chassis_Spin_UpdateMode(void)
     }
 #endif
 
+#if BOARD_LIFT_ENABLE
+    /* 仅底部停机状态禁转 */
+    if ((board.status->status == DEV_ONLINE) &&
+        (board.rx_meg->state_meg.is_down == 0u))
+    {
+        selected = 0u;
+        spin_ramp_wz = 0.0f;
+        spin_last_selected = 0u;
+        chassis_spin.target_wz = 0.0f;
+        chassis_spin.output_wz = 0.0f;
+    }
+#endif
+
     chassis_spin.selected = selected; /* 本拍选择 */
     chassis_spin.active = selected;   /* 小陀螺生效 */
 }
 
-/* 小陀螺输出 */
+/* 根据 ch0 调节旋转速度并接管底盘指令 */
 void Chassis_Spin_Update(chassis_cmd_t *cmd)
 {
     float axis;     /* ch0 归一化输入 */
@@ -164,7 +177,7 @@ void Chassis_Spin_Update(chassis_cmd_t *cmd)
         return;
     }
 
-    /* 退出档位后斜坡归零 */
+    /* 退出档位后斜坡归零，不瞬间切断旋转 */
     if (chassis_spin.selected == 0u)
     {
         if (spin_last_selected != 0u)
@@ -188,10 +201,10 @@ void Chassis_Spin_Update(chassis_cmd_t *cmd)
         return;
     }
 
-    /* 进入档位时承接当前角速度 */
+    /* 进入档位时承接当前角速度，避免跳变 */
     if (spin_last_selected == 0u)
     {
-        spin_ramp_wz = cmd->wz; 
+        spin_ramp_wz = cmd->wz; /* 承接当前角速度 */
         spin_last_selected = 1u;
     }
 

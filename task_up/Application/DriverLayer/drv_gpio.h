@@ -31,7 +31,7 @@
 #define GPIOI_IDR_Addr    (GPIOI_BASE+16) //0x40022010 
  
 // IO 位带地址定义
-//ȷ��n��ֵС��16!
+// n取值范围为0~15
 #define PAout(n)   BIT_ADDR(GPIOA_ODR_Addr,n)  // 输出
 #define PAin(n)    BIT_ADDR(GPIOA_IDR_Addr,n)  // 输入
 

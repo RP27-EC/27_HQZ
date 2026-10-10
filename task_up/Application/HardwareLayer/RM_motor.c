@@ -140,6 +140,8 @@ static void rm_motor_update(rm_motor_t *rm_motor, uint8_t *rxBuf)
 		motor_info->torque_current_raw = CAN_45_GetMotorCurrent(rxBuf);
 		Raw_Current_to_Torque(rm_motor);
     motor_info->temperature = CAN_6_GetMotorTemperature(rxBuf);
+    motor_info->feedback_tick = HAL_GetTick();
+    motor_info->feedback_seq++;
     rm_motor->state->offline_cnt = 0;
 }
 

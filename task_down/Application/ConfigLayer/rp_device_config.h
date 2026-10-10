@@ -8,18 +8,28 @@
 /* 设备层 --------------------------------------------------------------------*/
 /* enum */
 typedef enum {
-    DEV_ID_RC = 2,  // 遥控器设备 ID
-    DEV_ID_CNT = 4,  // 设备数量
+	DEV_ID_IMU = 0, // IMU编号0
+  DEV_ID_IMU_EX, // 副IMU编号1
+	DEV_ID_RC, // 遥控器编号2
+	DEV_ID_CNT, // 设备数3
 } dev_id_t;
 
 /* enum */
 typedef enum {
-	DEV_OFFLINE,  // 离线
-	DEV_ONLINE,  // 在线
+	DEV_OFFLINE,
+	DEV_ONLINE,
 	
 } dev_work_state_t;
 
 
+/* enum */
+typedef enum DEV_RESET_STATE
+{
+	DEV_RESET_NO,
+	DEV_RESET_OK,
+}Dev_Reset_State_e;
+
+/* enum */
 typedef enum {
 	NONE_ERR,		// 正常(无错误)
 	DEV_ID_ERR,		// 设备ID错误

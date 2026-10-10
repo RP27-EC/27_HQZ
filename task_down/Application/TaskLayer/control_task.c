@@ -1,6 +1,8 @@
 /* control_task.c - 控制任务 */
 
 #include "control_task.h"
+#include "cap.h"
+#include "infantry.h"
 #include "board_protocol.h"
 #include "rc_sensor.h"
 #include "board_comm_config.h"
@@ -12,35 +14,55 @@
 #include "launch.h"
 #include "rp_math.h"
 #include "supercap.h"
+#include <math.h>
 
 typedef struct
 {
-    volatile uint8_t rc_state;  //在线否
-    volatile uint8_t s1;       // 遥控器 S1 
-    volatile uint8_t s2;        // 遥控器 S2
-    volatile uint8_t b_value;   // B键值
-    volatile uint8_t button_event;  // B键按下事件
-    volatile uint8_t is_hole;     // 狗洞模式
+    volatile uint8_t rc_state;
+    volatile uint8_t s1;
+    volatile uint8_t s2;
+    volatile uint8_t b_value;
+    volatile uint8_t button_event;
+    volatile uint8_t is_hole;
     volatile uint8_t exit_pending;
+    volatile uint8_t hole_rear_blocked; /* 反向时按 B 被拒绝 */
 } board_lift_debug_t;
 
-volatile board_lift_debug_t board_lift_dbg;  //debug
-volatile uint8_t board_hole_request;     // 狗洞请求
-volatile uint8_t board_hole_exit_pending;  // 狗洞退出等待中
+volatile board_lift_debug_t board_lift_dbg;
+volatile uint8_t board_hole_request;
+volatile uint8_t board_hole_exit_pending;
 
-//过洞函数
+/* 云台机械模式前后方向状态：0 前，1 后。
+ * 放在文件级是因为过洞命令也要判它（反向不允许进狗洞），而且 R 键现在在
+ * 任何 S1 位置都要能切换，只有遥控离线才复位。 */
+static uint8_t board_gimbal_yaw_rear = 0u;
+
+#if BOARD_COMM_DEBUG
+/* 生效中的"前后方向"：键鼠模式看掉头基准，遥控模式看上面那套状态。
+ * 过洞的反向拦截必须用生效值，否则键鼠掉头后判断会失效。 */
+static uint8_t Board_Debug_YawRear(void)
+{
+    if (Chassis_Input_IsKeyboardMode() != 0u)
+    {
+        return Chassis_Input_IsKeyboardYawRear();
+    }
+
+    return board_gimbal_yaw_rear;
+}
+
+
 static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
 {
     static uint8_t last_b_value = 0u;
-    static uint32_t hole_exit_tick = 0u;  // 退出狗洞等待起始时间
+    static uint32_t hole_exit_tick = 0u;
     uint32_t now = HAL_GetTick();
     uint8_t b_now;
     uint8_t button_event;
-  //调试参数
+
     board_lift_dbg.rc_state = (uint8_t)rc_dev.work_state;
     board_lift_dbg.s1 = (uint8_t)rc_info->s1.value;
     board_lift_dbg.s2 = (uint8_t)rc_info->s2.value;
-  //关控
+
     if (rc_dev.work_state != DEV_ONLINE)
     {
         last_b_value = 0u;
@@ -48,10 +70,11 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
         board_hole_exit_pending = 0u;
         board_lift_dbg.is_hole = 0u;
         board_lift_dbg.exit_pending = 0u;
+        board_lift_dbg.hole_rear_blocked = 0u;
         board.tx_pkt->gimbal_target_pkt.is_hole = 0u;
         return 0u;
     }
-    //处理B键按下事件
+
     b_now = (rc_info->B.value != 0u) ? 1u : 0u;
     button_event = ((b_now != 0u) && (last_b_value == 0u)) ? 1u : 0u;
     last_b_value = b_now;
@@ -60,15 +83,26 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
         (rc_info->s2.value == RC_SW_MID) &&
         (button_event != 0u))
     {
-        // B 键翻转狗洞请求
-        board_hole_request ^= 1u;
-        if (board_hole_request != 0u)
+        if (board_hole_request == 0u)
         {
-            board_hole_exit_pending = 0u;
+            /*
+             * 狗洞只允许云台正对前方时进入。反向时忽略这次按键、不置位请求，
+             * 上板升降因此不会进入对位/下压流程。
+             */
+            if (Board_Debug_YawRear() == 0u)
+            {
+                board_hole_request = 1u;
+                board_hole_exit_pending = 0u;
+                board_lift_dbg.hole_rear_blocked = 0u;
+            }
+            else
+            {
+                board_lift_dbg.hole_rear_blocked = 1u;
+            }
         }
         else
         {
-            // 退出狗洞, 等云台回中
+            board_hole_request = 0u;
             board_hole_exit_pending = 1u;
             hole_exit_tick = now;
         }
@@ -81,7 +115,6 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
 
     if (board_hole_exit_pending != 0u)
     {
-        // 云台回中或超时即结束退出等待
         if ((board.rx_meg->state_meg.is_down == 2u) ||
             ((now - hole_exit_tick) >= BOARD_HOLE_EXIT_TIMEOUT_MS))
         {
@@ -92,8 +125,12 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     board_lift_dbg.exit_pending = (uint8_t)board_hole_exit_pending;
     if ((board_hole_request != 0u) || (board_hole_exit_pending != 0u))
     {
-        // 狗洞期间锁机械模式
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
+        /*
+         * 过洞强制云台回前方零位，掉头基准也要跟着回前方：否则跟随中心还停在
+         * 180deg，云台被拉回前方时跟随环会用 180deg 误差把底盘转过去。
+         */
+        Chassis_Input_ResetYawReference();
         board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = BOARD_MEC_YAW_FRONT_RAD;
         board.tx_pkt->gimbal_target_pkt.pitch_mec_tar =
             BOARD_HOLE_PITCH_TARGET_RAD;
@@ -103,15 +140,103 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     return 0u;
 }
 
+static void Board_R_Turn_Update(uint8_t start, uint8_t cancel)
+{
+    static uint8_t active;
+    static uint8_t source;
+    static uint8_t stable;
+    static uint32_t start_tick;
+    static uint32_t stable_tick;
+    uint32_t now = HAL_GetTick();
+    uint32_t feedback_tick = board.status->gimbal_rx_time_ms;
+    uint8_t keyboard = Chassis_Input_IsKeyboardMode();
+    float error;
+    float yaw = board.rx_meg->gimbal_meg.yaw_mec;
+
+    board.tx_pkt->car_pkt.r_turn_active = 0u;
+    if ((cancel != 0u) || (board.tx_pkt->car_pkt.gimbal_mode != 0u))
+    {
+        active = 0u;
+        stable = 0u;
+        return;
+    }
+
+    /* 跟随掉头沿用原到位判据。 */
+    if (Chassis_Input_IsUturnActive() != 0u)
+    {
+        active = 0u;
+        stable = 0u;
+        board.tx_pkt->car_pkt.r_turn_active =
+            (Chassis_Input_GetUturnState() == CHASSIS_UTURN_POSITION) ? 1u : 0u;
+        return;
+    }
+
+    if (source != keyboard)
+    {
+        active = 0u;
+        stable = 0u;
+    }
+    source = keyboard;
+    if (start != 0u)
+    {
+        active = 1u;
+        stable = 0u;
+        start_tick = now;
+    }
+
+    if ((board.status->gimbal_data_valid == 0u) ||
+        ((now - feedback_tick) > CHASSIS_KEY_UTURN_FEEDBACK_TIMEOUT_MS) ||
+        (yaw != yaw) || (fabsf(yaw) > 3.1515927f) ||
+        ((now - start_tick) >= CHASSIS_KEY_UTURN_TIMEOUT_MS))
+    {
+        active = 0u;
+        stable = 0u;
+    }
+    if (active == 0u)
+    {
+        return;
+    }
+
+    error = board.tx_pkt->gimbal_target_pkt.yaw_mec_tar - yaw;
+    if (error > 3.1415927f) { error -= 6.2831853f; }
+    else if (error < -3.1415927f) { error += 6.2831853f; }
+    if (fabsf(error) <= CHASSIS_KEY_UTURN_TOL_DEG * 0.0174532925f)
+    {
+        if (stable == 0u)
+        {
+            stable = 1u;
+            stable_tick = feedback_tick;
+        }
+        if ((feedback_tick - stable_tick) >= CHASSIS_KEY_UTURN_STABLE_MS)
+        {
+            active = 0u;
+        }
+    }
+    else
+    {
+        stable = 0u;
+    }
+    board.tx_pkt->car_pkt.r_turn_active = active;
+}
+
 /* 调试模式下用遥控右摇杆生成云台机械角目标 */
 static void Board_Debug_Gimbal_Command(void)
 {
     static uint8_t mec_mode_active = 0u; /* 机械角模式已激活 */
+    static uint8_t last_r_pressed = 0u;   /* R 键上次状态 */
     static float pitch_mec_target = 0.0f;/* Pitch 机械目标角，rad */
     rc_data_t *rc_info = rc_dev.info;     /* 遥控数据源 */
-    //关控
+    uint8_t r_pressed;
+    uint8_t keyboard_active; /* 键鼠模式生效 */
+    uint8_t keyboard_mech;   /* 键鼠 X 机械档生效 */
+    uint8_t uturn_mech;
+    uint8_t r_edge;
+    float previous_yaw_target = board.tx_pkt->gimbal_target_pkt.yaw_mec_tar;
+
     if (rc_dev.work_state != DEV_ONLINE)
     {
+        board_gimbal_yaw_rear = 0u;
+        last_r_pressed = 0u;
         mec_mode_active = 0u;
         board.tx_pkt->car_pkt.car_state = 0u;
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
@@ -120,42 +245,81 @@ static void Board_Debug_Gimbal_Command(void)
         board.tx_pkt->gimbal_target_pkt.yaw_imu_tar = 0.0f;
         board.tx_pkt->gimbal_target_pkt.pitch_imu_tar = 0.0f;
         board.tx_pkt->gimbal_target_pkt.is_hole = 0u;
+        Board_R_Turn_Update(0u, 1u);
         return;
     }
 
     board.tx_pkt->car_pkt.car_state = 1u;
+    keyboard_active = Chassis_Input_IsKeyboardMode();
+    keyboard_mech = Chassis_Input_IsKeyboardMechMode();
+    uturn_mech = (Chassis_Input_GetUturnState() == CHASSIS_UTURN_POSITION) ? 1u : 0u;
+    r_pressed = ((rc_info->key_v & KEY_PRESSED_OFFSET_R) != 0u) ? 1u : 0u;
+    r_edge = ((r_pressed != 0u) && (last_r_pressed == 0u)) ? 1u : 0u;
 #if BOARD_LIFT_ENABLE
     if (Board_Debug_Hole_Command(rc_info) != 0u)
     {
+        /* 过洞期间云台被强制正前方，不响应 R；方向状态留到退出后再改 */
         mec_mode_active = 0u;
+        last_r_pressed = r_pressed;
+        Board_R_Turn_Update(0u, 1u);
         return;
     }
 #endif
-    /* S1 下拨：切换云台机械环，底盘仍由底盘分支控制 */
-    if (rc_info->s1.value == RC_SW_DOWN)
+
+    /*
+     * R 键分工：
+     *   键鼠模式：R 归 chassis_input.c 管（机械档翻掉头基准、跟随档起掉头动作），
+     *             这里不再动 S1 下位那套前后零位预置，两套状态互不干扰。
+     *   遥控模式：保持原行为，R 在任何 S1 位置都生效，切到 S1 下位时立刻用上。
+     */
+    if (keyboard_active == 0u)
+    {
+        if ((r_pressed != 0u) && (last_r_pressed == 0u))
+        {
+            board_gimbal_yaw_rear ^= 1u;
+        }
+    }
+    last_r_pressed = r_pressed;
+
+    /* 预发送与定位共用固定终点。 */
+    if (keyboard_active != 0u)
+    {
+        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = Chassis_Input_GetKeyboardYawTargetRad();
+    }
+    else
+    {
+        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar =
+            (board_gimbal_yaw_rear != 0u) ?
+            BOARD_MEC_YAW_REAR_RAD : BOARD_MEC_YAW_FRONT_RAD;
+    }
+
+    /* 机械模式：S1 下位（遥控）或 键鼠 X 档（云台锁机械零位，看着跟底盘走） */
+    if ((rc_info->s1.value == RC_SW_DOWN) || (keyboard_mech != 0u) || (uturn_mech != 0u))
     {
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
-        /* 进入机械模式时从当前角度起调 */
+        /* 进入机械模式时从当前角度起调，避免跳变 */
         if (mec_mode_active == 0u)
         {
             pitch_mec_target = board.rx_meg->gimbal_meg.pitch_mec;
             mec_mode_active = 1u;
         }
 
-        /* Yaw 固定前方零位，ch0 留给底盘转向 */
-        board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = BOARD_MEC_YAW_FRONT_RAD;
+        /* 只有遥控才用右摇杆积分 Pitch。键鼠的 Pitch 走上板 D5 鼠标角速度通路，
+         * 机械模式里 D2 的 Pitch 机械目标并不参与运算。 */
+        if (keyboard_active == 0u)
+        {
+            pitch_mec_target += (float)rc_info->ch1 / BOARD_RC_AXIS_MAX *
+                                BOARD_MEC_PITCH_STEP_RAD;
+            if (pitch_mec_target > BOARD_MEC_PITCH_MAX_RAD)
+            {
+                pitch_mec_target = BOARD_MEC_PITCH_MAX_RAD;
+            }
+            else if (pitch_mec_target < BOARD_MEC_PITCH_MIN_RAD)
+            {
+                pitch_mec_target = BOARD_MEC_PITCH_MIN_RAD;
+            }
+        }
 
-        // Pitch 机械角目标由遥控器 ch1 控制，积分式
-        pitch_mec_target += (float)rc_info->ch1 / BOARD_RC_AXIS_MAX *
-                            BOARD_MEC_PITCH_STEP_RAD;
-        if (pitch_mec_target > BOARD_MEC_PITCH_MAX_RAD)
-        {
-            pitch_mec_target = BOARD_MEC_PITCH_MAX_RAD;
-        }
-        else if (pitch_mec_target < BOARD_MEC_PITCH_MIN_RAD)
-        {
-            pitch_mec_target = BOARD_MEC_PITCH_MIN_RAD;
-        }
         board.tx_pkt->gimbal_target_pkt.pitch_mec_tar = pitch_mec_target;
     }
     /* 机械模式退出后交回 IMU 角度环 */
@@ -164,7 +328,13 @@ static void Board_Debug_Gimbal_Command(void)
         board.tx_pkt->car_pkt.gimbal_mode = 1u;
         mec_mode_active = 0u;
     }
+    Board_R_Turn_Update(
+        ((r_edge != 0u) &&
+         (board.tx_pkt->gimbal_target_pkt.yaw_mec_tar != previous_yaw_target)) ? 1u : 0u,
+        ((keyboard_active != 0u) && (keyboard_mech == 0u) && (uturn_mech == 0u)) ? 1u : 0u);
 }
+#endif
+
 /* 下板 1 kHz 控制任务，按调试阶段切换控制链路 */
 
 void StartCtrlTask(void const *argument)
@@ -173,15 +343,34 @@ void StartCtrlTask(void const *argument)
 
     for (;;)
     {
-        Board_Debug_Gimbal_Command();
+#if CHASSIS_BRINGUP_ENABLE
         Chassis_Input_Update();
+#endif
+
+#if BOARD_COMM_DEBUG
+        Board_Debug_Gimbal_Command();
+#endif
+
+    /* 第一阶段底盘调试链路 */
+#if CHASSIS_BRINGUP_ENABLE
         Chassis_Follow_UpdateMode();
         Chassis_Spin_UpdateMode();
         Chassis_Follow_Update(&chassis_input_cmd);
         Chassis_Spin_Update(&chassis_input_cmd);
         Chassis_Control_Update(&chassis_input_cmd);
         launch.work(&launch);
+#elif !BOARD_COMM_DEBUG
+        infantry.work(&infantry);
+
+#if BOARD_CAP_ENABLE
+        cap.tx();
+#endif
+
+#endif
+
+#if SUPERCAP_BRINGUP_ENABLE
         SuperCap_Tx();
+#endif
         osDelay(1);
     }
 }

@@ -5,10 +5,12 @@
 #include "imu_sensor.h"
 #include "module.h"
 #include "motor.h"
+#include "rc_protocol.h"
 #include "rp_device_config.h"
+#include "board_remote_config.h"
 #include "launcher.h"
 
-volatile imu_debug_t imu_dbg; /* IMU 调试 */
+volatile imu_debug_t imu_dbg; /* IMU 在线调试快照 */
 
 /* 将 IMU 内部数据同步到调试结构体 */
 
@@ -46,7 +48,7 @@ static void imu_debug_update(void)
     imu_dbg.err_code = (uint8_t)imu_dev.work_state.err_code;
 }
 
-/* 底盘失能时电机卸力 */
+/* 底盘失能时让云台电机卸力，保证安全 */
 static void gimbal_can_send(void)
 {
     if ((Board_HeartBeat.status == DEV_ONLINE) &&
@@ -61,7 +63,7 @@ static void gimbal_can_send(void)
     }
 }
 
-/* 上板控制任务，IMU -> 模块 -> CAN -> 发射 -> 通信 */
+/* 上板 1 kHz 控制任务，顺序：IMU -> 模块 -> CAN -> 发射 -> 通信 */
 void StartControlTask(void const *argument)
 {
     (void)argument;
@@ -69,7 +71,7 @@ void StartControlTask(void const *argument)
 
     for (;;)
     {
-        /* 更新 IMU 数据 */
+        /* 仅错误以外的状态允许惯导更新 */
         if ((imu_dev.work_state.err_code == IMU_E_NONE) ||
             (imu_dev.work_state.err_code == IMU_E_CALI))
         {
@@ -77,6 +79,9 @@ void StartControlTask(void const *argument)
         }
 
         imu_debug_update();
+#if GIMBAL_LOCAL_RC_ENABLE
+        rc_interrupt_update(&rc_dev);
+#endif
         Module_Work();
         gimbal_can_send();
         Launcher_Work();

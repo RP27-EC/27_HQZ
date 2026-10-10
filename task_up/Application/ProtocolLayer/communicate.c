@@ -6,6 +6,7 @@
 #include "lift.h"
 #include "imu_sensor.h"
 #include "motor.h"
+#include "board_remote_config.h"
 
 #include <string.h>
 
@@ -20,11 +21,15 @@ Board_HeartBeat_t Board_HeartBeat = /* 板间链路状态 */
     .offline_cnt_max = 100,
     .offline_cnt_1 = 100,
     .offline_cnt_2 = 100,
+    .offline_cnt_3 = 100,
+    .offline_cnt_4 = 100,
     .offline_cnt_5 = 100,
 };
 
 static uint8_t board_tx_buf1[8]; /* C1 发送缓存 */
 static uint8_t board_tx_buf2[8]; /* C2 发送缓存 */
+volatile Board_Feedback_Debug_t board_feedback_debug;
+static uint8_t board_feedback_next; /* 下一反馈类型，0/1 */
 
 /* 浮点按线性量程压入 16 位协议字段 */
 
@@ -58,12 +63,15 @@ static void Board_Rx_Pkt_01(uint8_t *rxbuf)
 {
     Board_Rx_Info.state_pkt.car_state = rxbuf[0] & 0x03;          /* 车辆状态 */
     Board_Rx_Info.state_pkt.gimbal_mode = (rxbuf[0] >> 2) & 0x01; /* 云台模式 */
+    Board_Rx_Info.state_pkt.game_start = (rxbuf[0] >> 6) & 0x01;  /* 比赛开始 */
+    Board_Rx_Info.state_pkt.my_color = (rxbuf[0] >> 7) & 0x01;    /* 己方颜色 */
 
     Board_Rx_Shoot_Flags = rxbuf[5] & 0x0Fu;
     Board_Rx_Info.shoot_pkt.launch_state = rxbuf[5] & 0x01;       /* 发射许可 */
     Board_Rx_Info.shoot_pkt.shoot_mode = (rxbuf[5] >> 1) & 0x01;  /* 发射模式 */
     Board_Rx_Info.shoot_pkt.shoot_level = (rxbuf[5] >> 2) & 0x01; /* 触发电平 */
     Board_Rx_Info.shoot_pkt.is_hole = (rxbuf[5] >> 3) & 0x01;     /* 过洞标志 */
+    Board_Rx_Info.state_pkt.r_turn_active = (rxbuf[5] >> 4) & 0x01; /* R掉头，0/1 */
 }
 
 /* 解析 D2：云台目标角度 */
@@ -135,9 +143,9 @@ static void Board_Tx_Update(void)
 }
 
 /* 打包 C1：设备在线状态 */
-static void Board_Tx_Meg_01(uint8_t *txbuf)
+static HAL_StatusTypeDef Board_Tx_Meg_01(uint8_t *txbuf)
 {
-    memset(txbuf, 0, 8);
+    memset(txbuf, 0, 8); /* 未用字段清零 */
     txbuf[0] = (Board_Tx_Info.state_meg.yaw_motor_state & 0x01) |
                ((Board_Tx_Info.state_meg.pitch_motor_state & 0x01) << 1) |
                ((Board_Tx_Info.state_meg.lift_motor_state & 0x01) << 2) |
@@ -145,12 +153,11 @@ static void Board_Tx_Meg_01(uint8_t *txbuf)
                ((Board_Tx_Info.state_meg.l_fric_state & 0x01) << 4) |
                ((Board_Tx_Info.state_meg.dial_motor_state & 0x01) << 5);
     txbuf[1] = Board_Tx_Info.state_meg.lift_state;
-
-    CAN_SendData(&hcan2, ID_BOARD_TX1, txbuf);
+    return CAN_SendData(&hcan2, ID_BOARD_TX1, txbuf);
 }
 
 /* 打包 C2：云台机械角与 IMU 角 */
-static void Board_Tx_Meg_02(uint8_t *txbuf)
+static HAL_StatusTypeDef Board_Tx_Meg_02(uint8_t *txbuf)
 {
     uint16_t yaw_mec = board_float_to_uint(Board_Tx_Info.gimbal_meg.yaw_mec, -4.0f, 4.0f);       /* Yaw 机械角 */
     uint16_t pitch_mec = board_float_to_uint(Board_Tx_Info.gimbal_meg.pitch_mec, -4.0f, 4.0f);   /* Pitch 机械角 */
@@ -166,7 +173,7 @@ static void Board_Tx_Meg_02(uint8_t *txbuf)
     txbuf[6] = (uint8_t)(pitch_imu >> 8);
     txbuf[7] = (uint8_t)pitch_imu;
 
-    CAN_SendData(&hcan2, ID_BOARD_TX2, txbuf);
+    return CAN_SendData(&hcan2, ID_BOARD_TX2, txbuf);
 }
 
 /* 收到 D1，清零对应心跳计数 */
@@ -183,6 +190,73 @@ void Board_Rx_02(uint8_t *rxbuf)
     Board_HeartBeat.offline_cnt_2 = 0;
 }
 
+/* D3只更新时间，不代替源有效性 */
+void Board_Rx_03(uint8_t *rxbuf)
+{
+    Board_Rx_Info.heat_pkt.heat_limit = (uint16_t)(((uint16_t)rxbuf[0] << 8) | rxbuf[1]);
+    Board_Rx_Info.heat_pkt.barrel_heat = (uint16_t)(((uint16_t)rxbuf[2] << 8) | rxbuf[3]);
+    Board_Rx_Info.heat_pkt.cooling_rate = (uint16_t)(((uint16_t)rxbuf[4] << 8) | rxbuf[5]);
+    Board_Rx_Info.heat_pkt.heat_seq = rxbuf[6];
+    Board_Rx_Info.heat_pkt.flags = rxbuf[7] & 0x03u;
+    Board_Rx_Info.heat_pkt.rx_tick = HAL_GetTick();
+    Board_Rx_Info.heat_pkt.seen = 1u;
+    Board_HeartBeat.offline_cnt_3 = 0;
+}
+
+void Board_GetHeatSnapshot(Board_Heat_Pkt_t *snapshot)
+{
+    uint32_t irq_state;
+    if (snapshot == NULL)
+    {
+        return;
+    }
+    /* 防止接收中断撕裂快照 */
+    irq_state = __get_PRIMASK();
+    __disable_irq();
+    *snapshot = Board_Rx_Info.heat_pkt;
+    __set_PRIMASK(irq_state);
+}
+
+void Board_Rx_06(uint8_t *rxbuf)
+{
+    uint16_t seq = ((uint16_t)rxbuf[2] << 8) | rxbuf[3];
+    uint16_t age = ((uint16_t)rxbuf[4] << 8) | rxbuf[5];
+    uint32_t now = HAL_GetTick();
+    if ((Board_Rx_Info.speed_pkt.seen == 0u) ||
+        (seq != Board_Rx_Info.speed_pkt.event_seq))
+    {
+        Board_Rx_Info.speed_pkt.event_rx_tick = now;
+        Board_Rx_Info.speed_pkt.event_age_ms = age;
+    }
+    Board_Rx_Info.speed_pkt.speed_cms = ((uint16_t)rxbuf[0] << 8) | rxbuf[1];
+    Board_Rx_Info.speed_pkt.event_seq = seq;
+    Board_Rx_Info.speed_pkt.age_ms = age;
+    Board_Rx_Info.speed_pkt.bullet_type = rxbuf[6];
+    Board_Rx_Info.speed_pkt.shooter_number = rxbuf[7];
+    Board_Rx_Info.speed_pkt.rx_tick = now;
+    Board_Rx_Info.speed_pkt.seen = 1u;
+}
+
+void Board_GetSpeedSnapshot(Board_Speed_Pkt_t *snapshot)
+{
+    uint32_t irq_state;
+    if (snapshot == NULL)
+    {
+        return;
+    }
+    irq_state = __get_PRIMASK();
+    __disable_irq();
+    *snapshot = Board_Rx_Info.speed_pkt;
+    __set_PRIMASK(irq_state);
+}
+
+/* D4 暂无数据字段，仅维持心跳 */
+void Board_Rx_04(uint8_t *rxbuf)
+{
+    (void)rxbuf;
+    Board_HeartBeat.offline_cnt_4 = 0;
+}
+
 /* 收到 D5，刷新遥控/键鼠控制量 */
 void Board_Rx_05(uint8_t *rxbuf)
 {
@@ -190,12 +264,56 @@ void Board_Rx_05(uint8_t *rxbuf)
     Board_HeartBeat.offline_cnt_5 = 0;
 }
 
-/* 上板周期发送 C1/C2 到通信 CAN */
+/* 每轮最多一帧，失败保留到期状态 */
 void Send_To_Down_Board(void)
 {
+    uint32_t now = HAL_GetTick();
+    uint32_t c1_age = now - board_feedback_debug.c1_tx_tick;
+    uint32_t c2_age = now - board_feedback_debug.c2_tx_tick;
+    uint8_t selected = board_feedback_next;
+    HAL_StatusTypeDef result;
+
+    if (((selected == 0u) ? c1_age : c2_age) < BOARD_FEEDBACK_PERIOD_MS)
+    {
+        selected ^= 1u;
+    }
+    if (((selected == 0u) ? c1_age : c2_age) < BOARD_FEEDBACK_PERIOD_MS)
+    {
+        return;
+    }
+    if (HAL_CAN_GetTxMailboxesFreeLevel(&hcan2) == 0u)
+    {
+        board_feedback_debug.defer_count++;
+        return;
+    }
+    board_feedback_next = selected ^ 1u;
     Board_Tx_Update();
-    Board_Tx_Meg_01(board_tx_buf1);
-    Board_Tx_Meg_02(board_tx_buf2);
+    if (selected == 0u)
+    {
+        result = Board_Tx_Meg_01(board_tx_buf1);
+        if (result == HAL_OK)
+        {
+            board_feedback_debug.c1_tx_tick = HAL_GetTick();
+            board_feedback_debug.c1_ok_count++;
+        }
+        else
+        {
+            board_feedback_debug.c1_fail_count++;
+        }
+    }
+    else
+    {
+        result = Board_Tx_Meg_02(board_tx_buf2);
+        if (result == HAL_OK)
+        {
+            board_feedback_debug.c2_tx_tick = HAL_GetTick();
+            board_feedback_debug.c2_ok_count++;
+        }
+        else
+        {
+            board_feedback_debug.c2_fail_count++;
+        }
+    }
 }
 
 /* 板间心跳：D1/D2 任一超时即判离线 */
@@ -208,6 +326,14 @@ void C_Board_Communicate_HeartBeat(void)
     if (Board_HeartBeat.offline_cnt_2 < Board_HeartBeat.offline_cnt_max)
     {
         Board_HeartBeat.offline_cnt_2++;
+    }
+    if (Board_HeartBeat.offline_cnt_3 < Board_HeartBeat.offline_cnt_max)
+    {
+        Board_HeartBeat.offline_cnt_3++;
+    }
+    if (Board_HeartBeat.offline_cnt_4 < Board_HeartBeat.offline_cnt_max)
+    {
+        Board_HeartBeat.offline_cnt_4++;
     }
 
     if (Board_HeartBeat.offline_cnt_5 < Board_HeartBeat.offline_cnt_max)

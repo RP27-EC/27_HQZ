@@ -9,6 +9,9 @@
 
 void StartControlTask(void const * argument);
 
+extern volatile uint8_t board_hole_request;
+extern volatile uint8_t board_hole_exit_pending;
+
 
 #endif
 

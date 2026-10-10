@@ -33,7 +33,13 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   {
 		HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &hcan2RxFrame.header, hcan2RxFrame.data);
 		
-		CAN2_rxDataHandler(hcan2RxFrame.header.StdId, hcan2RxFrame.data);
+        if ((hcan2RxFrame.header.StdId != 0xD6u) ||
+            ((hcan2RxFrame.header.IDE == CAN_ID_STD) &&
+             (hcan2RxFrame.header.RTR == CAN_RTR_DATA) &&
+             (hcan2RxFrame.header.DLC == 8u)))
+        {
+            CAN2_rxDataHandler(hcan2RxFrame.header.StdId, hcan2RxFrame.data);
+        }
   }
   else 
   {

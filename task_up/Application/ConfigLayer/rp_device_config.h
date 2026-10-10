@@ -2,23 +2,86 @@
 
 #ifndef __RP_DEVICE_CONFIG_H
 #define __RP_DEVICE_CONFIG_H
-
 #include "stm32f4xx_hal.h"
 #include "stdbool.h"
 #include "rp_driver_config.h"
-
+/* 设备层 --------------------------------------------------------------------*/
+/**
+ *	@brief	设备id列表
+ *	@class	device
+ */
 typedef enum {
-    DEV_ID_IMU = 0,  // IMU 设备 ID
-    DEV_ID_CNT = 4,  // 设备数量
+	DEV_ID_IMU = 0, // IMU编号0
+  DEV_ID_IMU_EX, // 副IMU编号1
+	DEV_ID_RC, // 遥控器编号2
+	DEV_ID_CNT, // 设备数3
 } dev_id_t;
 
+/**
+ *	@brief	设备工作状态(通用)
+ *	@class	device
+ */
 typedef enum {
-    GIMB_P = 0,  // 云台 Pitch 电机
-} dev_rm_motor_list_e;
-
-typedef enum {
-    DEV_ONLINE = 0,  // 在线
-    DEV_OFFLINE = 1,  // 离线
+	DEV_ONLINE,
+	DEV_OFFLINE,
 } dev_work_state_t;
 
+
+/**
+ * @brief 未初始化：DEV_RESET_NO 初始化完成:DEV_RESET_OK
+ * 
+ */
+typedef enum DEV_RESET_STATE
+{
+	DEV_RESET_NO,
+	DEV_RESET_OK,
+}Dev_Reset_State_e;
+
+/**
+ *	@brief	错误代码(通用)
+ *  @note   可自定义设备错误代码类型并替换变量errno的变量类型，如
+ *          typedef enum {
+ *              IMU_E_NONE,
+ *              IMU_E_ID,
+ *              IMU_COM_FAILED,
+ *              IMU_DEV_NOT_FOUND,
+ *              ...
+ *          } imu_errno_t;
+ *          
+ *          typedef struct imu_sensor_struct {
+ *              ...
+ *	            imu_errno_t errno;
+ *              ...	
+ *          } imu_dev_t;
+ *	@class	device
+ */
+typedef enum {
+	NONE_ERR,		// 正常(无错误)
+	DEV_ID_ERR,		// 设备ID错误
+	DEV_INIT_ERR,	// 设备初始化错误
+	DEV_DATA_ERR,	// 设备数据错误
+} dev_errno_t;
+
+typedef enum {
+	DAIL,		  //	CAN1     0x207	
+	IMAGE,        //	CAN1	 0x206
+	TELESCOPE,    //	CAN1	 0x205
+	
+	FRIC_B_UP,	//		CAN2	 0x201
+	FRIC_F_UP, 	//		CAN2	 0x202
+	FRIC_B_R, 	//  	CAN2	 0x203
+	FRIC_B_L,	//		CAN2	 0x204
+	FRIC_F_R, 	//		CAN2	 0x205
+	GIMB_P, 	//		CAN2	 0x206
+	FRIC_F_L,   //		CAN2	 0x207
+	
+	
+	RM_MOTOR_LIST,
+} dev_rm_motor_list_e;			  //  Yaw轴kt电机CAN1  0x142 2个包  
+
+
+
 #endif
+
+
+

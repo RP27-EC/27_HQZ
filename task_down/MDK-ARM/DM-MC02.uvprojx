@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H723xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Application/AlgorithmLayer;../Application/ConfigLayer;../Application/DriverLayer;../Application/DeviceLayer/Imu;../Application/DeviceLayer/Sensor;../Application/DeviceLayer;../Application/HardwareLayer;../Application/ModuleLayer;../Application/ProtocolLayer;../Application/TaskLayer;../Application/ControlLayer</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Application/AlgorithmLayer;../Application/ConfigLayer;../Application/DriverLayer;../Application/DeviceLayer/Imu;../Application/DeviceLayer/Sensor;../Application/DeviceLayer;../Application/HardwareLayer;../Application/ModuleLayer;../Application/ProtocolLayer;../Application/SolvingLayer;../Application/TaskLayer;../Application/UserLayer;../Application/ServiceLayer;../Application/ParameterLayer;../Application/ControlLayer</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -461,6 +461,72 @@
               <FilePath>../Core/Src/fdcan.c</FilePath>
             </File>
             <File>
+              <FileName>iwdg.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/iwdg.c</FilePath>
+              <FileOption>
+                <CommonProperty>
+                  <UseCPPCompiler>2</UseCPPCompiler>
+                  <RVCTCodeConst>0</RVCTCodeConst>
+                  <RVCTZI>0</RVCTZI>
+                  <RVCTOtherData>0</RVCTOtherData>
+                  <ModuleSelection>0</ModuleSelection>
+                  <IncludeInBuild>1</IncludeInBuild>
+                  <AlwaysBuild>2</AlwaysBuild>
+                  <GenerateAssemblyFile>2</GenerateAssemblyFile>
+                  <AssembleAssemblyFile>2</AssembleAssemblyFile>
+                  <PublicsOnly>2</PublicsOnly>
+                  <StopOnExitCode>11</StopOnExitCode>
+                  <CustomArgument></CustomArgument>
+                  <IncludeLibraryModules></IncludeLibraryModules>
+                  <ComprImg>1</ComprImg>
+                </CommonProperty>
+                <FileArmAds>
+                  <Cads>
+                    <interw>2</interw>
+                    <Optim>0</Optim>
+                    <oTime>2</oTime>
+                    <SplitLS>2</SplitLS>
+                    <OneElfS>2</OneElfS>
+                    <Strict>2</Strict>
+                    <EnumInt>2</EnumInt>
+                    <PlainCh>2</PlainCh>
+                    <Ropi>2</Ropi>
+                    <Rwpi>2</Rwpi>
+                    <wLevel>0</wLevel>
+                    <uThumb>2</uThumb>
+                    <uSurpInc>2</uSurpInc>
+                    <uC99>2</uC99>
+                    <uGnu>2</uGnu>
+                    <useXO>2</useXO>
+                    <v6Lang>0</v6Lang>
+                    <v6LangP>0</v6LangP>
+                    <vShortEn>2</vShortEn>
+                    <vShortWch>2</vShortWch>
+                    <v6Lto>2</v6Lto>
+                    <v6WtE>2</v6WtE>
+                    <v6Rtti>2</v6Rtti>
+                    <VariousControls>
+                      <MiscControls></MiscControls>
+                      <Define></Define>
+                      <Undefine></Undefine>
+                      <IncludePath></IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+            <File>
+              <FileName>spi.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/spi.c</FilePath>
+            </File>
+            <File>
+              <FileName>tim.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/tim.c</FilePath>
+            </File>
+            <File>
               <FileName>usart.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/usart.c</FilePath>
@@ -501,6 +567,11 @@
               <FilePath>..\Application\TaskLayer\monitor_task.c</FilePath>
             </File>
             <File>
+              <FileName>observe_task.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\TaskLayer\observe_task.c</FilePath>
+            </File>
+            <File>
               <FileName>connect_task.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\TaskLayer\connect_task.c</FilePath>
@@ -508,8 +579,23 @@
           </Files>
         </Group>
         <Group>
+          <GroupName>Control</GroupName>
+          <Files>
+            <File>
+              <FileName>infantry.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ControlLayer\infantry.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
           <GroupName>Module</GroupName>
           <Files>
+            <File>
+              <FileName>chassis.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ModuleLayer\chassis.c</FilePath>
+            </File>
             <File>
               <FileName>chassis_control.c</FileName>
               <FileType>1</FileType>
@@ -531,6 +617,11 @@
               <FilePath>..\Application\ModuleLayer\chassis_spin.c</FilePath>
             </File>
             <File>
+              <FileName>gimbal.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ModuleLayer\gimbal.c</FilePath>
+            </File>
+            <File>
               <FileName>launch.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\ModuleLayer\launch.c</FilePath>
@@ -550,6 +641,16 @@
           <GroupName>Algorithm</GroupName>
           <Files>
             <File>
+              <FileName>ave_filter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\AlgorithmLayer\ave_filter.c</FilePath>
+            </File>
+            <File>
+              <FileName>kalman_filter.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\AlgorithmLayer\kalman_filter.c</FilePath>
+            </File>
+            <File>
               <FileName>PID.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\AlgorithmLayer\PID.c</FilePath>
@@ -558,6 +659,46 @@
               <FileName>rp_math.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\AlgorithmLayer\rp_math.c</FilePath>
+            </File>
+            <File>
+              <FileName>power_limit.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\AlgorithmLayer\power_limit.c</FilePath>
+            </File>
+            <File>
+              <FileName>crc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\AlgorithmLayer\crc.c</FilePath>
+            </File>
+            <File>
+              <FileName>crc.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Application\AlgorithmLayer\crc.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>Imu</GroupName>
+          <Files>
+            <File>
+              <FileName>bmi.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DeviceLayer\Imu\bmi.c</FilePath>
+            </File>
+            <File>
+              <FileName>bmi_EKF.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DeviceLayer\Imu\bmi_EKF.c</FilePath>
+            </File>
+            <File>
+              <FileName>BMI088driver.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DeviceLayer\Imu\BMI088driver.c</FilePath>
+            </File>
+            <File>
+              <FileName>BMI088Middleware.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DeviceLayer\Imu\BMI088Middleware.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -570,14 +711,29 @@
               <FilePath>..\Application\DeviceLayer\device.c</FilePath>
             </File>
             <File>
+              <FileName>imu_sensor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DeviceLayer\Sensor\imu_sensor.c</FilePath>
+            </File>
+            <File>
               <FileName>rc_sensor.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\DeviceLayer\Sensor\rc_sensor.c</FilePath>
             </File>
             <File>
+              <FileName>cap.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DeviceLayer\cap.c</FilePath>
+            </File>
+            <File>
               <FileName>supercap.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\DeviceLayer\supercap.c</FilePath>
+            </File>
+            <File>
+              <FileName>judge.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DeviceLayer\judge.c</FilePath>
             </File>
             <File>
               <FileName>motor.c</FileName>
@@ -600,9 +756,19 @@
               <FilePath>..\Application\ProtocolLayer\rc_protocol.c</FilePath>
             </File>
             <File>
+              <FileName>cap_protocol.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ProtocolLayer\cap_protocol.c</FilePath>
+            </File>
+            <File>
               <FileName>supercap_protocol.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\ProtocolLayer\supercap_protocol.c</FilePath>
+            </File>
+            <File>
+              <FileName>judge_protocol.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ProtocolLayer\judge_protocol.c</FilePath>
             </File>
             <File>
               <FileName>board_protocol.c</FileName>
@@ -630,9 +796,24 @@
               <FilePath>..\Application\DriverLayer\drv_tick.c</FilePath>
             </File>
             <File>
+              <FileName>drv_tim.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DriverLayer\drv_tim.c</FilePath>
+            </File>
+            <File>
               <FileName>drv_uart.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\DriverLayer\drv_uart.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DriverLayer\drv_flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_flash.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Application\DriverLayer\drv_flash.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -663,6 +844,11 @@
               <FileName>rp_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Application\ConfigLayer\rp_config.h</FilePath>
+            </File>
+            <File>
+              <FileName>config_chassis.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Application\ConfigLayer\config_chassis.h</FilePath>
             </File>
             <File>
               <FileName>chassis_config.h</FileName>
@@ -1519,6 +1705,11 @@
               <FileType>1</FileType>
               <FilePath>../Core/Src/system_stm32h7xx.c</FilePath>
             </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User</GroupName>
+          <Files>
           </Files>
         </Group>
         <Group>

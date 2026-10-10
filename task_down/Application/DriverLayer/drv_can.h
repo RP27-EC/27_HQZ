@@ -19,6 +19,7 @@ extern uint8_t CAN2_1FF_DATA[8];
 #define CAN_HandleTypeDef 		FDCAN_HandleTypeDef
 extern FDCAN_HandleTypeDef hfdcan1;
 extern FDCAN_HandleTypeDef hfdcan2;
+extern FDCAN_HandleTypeDef hfdcan3;
 /* struct */
 typedef struct {
 	FDCAN_RxHeaderTypeDef header;
@@ -26,6 +27,7 @@ typedef struct {
 } CAN_RxFrameTypeDef;
 void CAN1_Filter_Init(void);
 void CAN2_Filter_Init(void);
+void CAN3_Filter_Init(void);
 void CAN1_CMD_200(void);
 void CAN1_CMD_1FF(void);
 void CAN2_CMD_200(void);

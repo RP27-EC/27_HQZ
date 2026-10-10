@@ -46,7 +46,7 @@
 #define    KEY_PRESSED_OFFSET_B        ((uint16_t)0x01<<15)
 
 
-#define MOUSE_BTN_L_CNT_MAX     500  // MOUSEBTNL计数最大
+#define MOUSE_BTN_L_CNT_MAX     300  // 左键长按门限，更新次数
 #define MOUSE_BTN_R_CNT_MAX     500  // MOUSEBTN半径计数最大
 #define KEY_Q_CNT_MAX           500  // KEYQ计数最大
 #define KEY_W_CNT_MAX           400  // KEYW计数最大

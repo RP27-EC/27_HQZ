@@ -10,6 +10,11 @@ drv_can_t rm_motor_driver[] = {
 		.rx_id = ID_GIMB_P, 
 	}
 };
+drv_can_t ht_motor_drive={
+		.rx_id = 0x0B,
+		.tx_id =0x09,
+		.can_id = DRV_CAN1,
+};
 
 
 
@@ -29,6 +34,34 @@ motor_pid_t GIMB_P_mec = {
 
 extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
+/*HT_start*/
+#if 0 /* Legacy HT motor: not used by the current gimbal board. */
+extern CAN_HandleTypeDef hcan1;
+extern CAN_HandleTypeDef hcan2;
+
+ht_cfg_t L_Wheel_Born_Info = 
+{	
+	.stdId = 0x009,
+	.hcan = &hcan1,
+	.order_correction = 0,
+};
+ht_rx_t L_Wheel_Rx_Info_t;
+ht_tx_t L_Wheel_Tx_Info_t;
+ht_state_t L_Wheel_State_t;
+ht_motor_t L_Wheel = 
+{
+	.born_info = &L_Wheel_Born_Info,
+	
+	.rx_info = &L_Wheel_Rx_Info_t,
+	
+	.tx_info = &L_Wheel_Tx_Info_t,
+	
+	.state = &L_Wheel_State_t,
+	
+	.single_init = &ht_motor_init,
+};
+/*HT_end*/
+#endif
 
 /*DM_start*/
 /* Yaw DM 电机配置 */
@@ -277,6 +310,13 @@ void dm_motor_list_heart_beat()
     DM_Group.group_heartbeat(&DM_Group);
 }
 
+#if 0 /* Legacy HT motor initialization disabled. */
+void ht_motor_list_init()
+{
+	L_Wheel.single_init(&L_Wheel);
+	
+}
+#endif
 
 /* 摩擦轮电机组心跳 */
 void rm_motor_list_heart_beat(void)

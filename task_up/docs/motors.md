@@ -1,0 +1,73 @@
+# 上板执行器与电机总线
+
+[返回上板模块索引](README.md) · [云台控制](gimbal.md) · [升降机构](lift.md) · [发射机构](launcher.md)
+
+## 电机实例分布
+
+| 机构 | 电机/驱动 | 总线与帧配置 | 上层用途 |
+| --- | --- | --- | --- |
+| Yaw 云台 | DM 电机 | CAN2，标准 ID `0x02` | `Gimbal` 机械位置/速率控制，输出力矩 N·m |
+| Pitch 云台 | DM 电机 | CAN1，标准 ID `0x01` | 云台速率闭环、Pitch 重力补偿 |
+| 升降 | RM2006 | CAN1；反馈 `0x204`；命令组 `0x200` 第 4 槽（索引 3） | `lift.c` 位置/速度双环，原始电流反馈参与找顶/堵转判据 |
+| 左摩擦轮 | RM3508 | CAN1；反馈 `0x201`；命令组 `0x200` 第 1 槽（索引 0） | 发射摩擦轮速度控制 |
+| 右摩擦轮 | RM3508 | CAN1；反馈 `0x202`；命令组 `0x200` 第 2 槽（索引 1） | 发射摩擦轮速度控制 |
+| 拨盘 | KT4005 | CAN1，标准 ID `ID_DIAL=0x141` | 发射单发/连发位置与速度控制 |
+
+实例装配位于 `task_up/Application/DeviceLayer/motor.c`；驱动实现分布在 `HardwareLayer/DM_Motor.c`、`RM_motor.c`、`KT_motor.c`。HT 驱动代码存在，但当前云台板 HT 旧实例处于 `#if 0`，不能当作本配置正在控制的电机。
+
+## RM/DM 帧数据要点
+
+RM 单电机反馈帧解析为 encoder angle、encoder speed、current、temperature；驱动按型号分支换算速度与反馈。当前上板摩擦轮使用 `_3508_Single`，升降使用 `_2006_Single`：两类实例的 `tx_info->torque` 实际按原始电流控制量裁剪并直接转整型，不是 N·m。RM `0x200` 组帧按槽位写入大端16-bit原始电流；不能将下板 `_3508_Reduction` 的 N·m 换算直接套到这些上板实例。
+
+DM 使用 MIT 风格 8-byte 压缩控制帧；目标位置、目标速度、Kp、Kd、力矩映射到定长整数，反馈包含状态位、位置、速度和力矩。Yaw/Pitch 分属 CAN2/CAN1，配置里还包含角度/速度/力矩可表示范围，控制层输出会先裁剪再打包。KT4005 使用独立 KT 协议，不属于 RM `0x200` 组。
+
+## 数据从反馈到输出
+
+RM/DM/KT 驱动解析帧并刷新电机反馈和在线状态；MonitorTask 检查心跳。上层模块读取反馈计算控制量，写入各电机 `tx_info` 后按驱动协议发送。CAN 组 ID、内部反馈 ID 与物理电机标签是不同概念：RM 0x200 是组帧标识，槽位区分同一组的目标；不要把槽号误当作单独 CAN 标准 ID。
+
+| 单位/量 | 代码中的用途 |
+| --- | --- |
+| RM 速度 rpm | 电机反馈/目标接口；上层部分环路换算为 rad/s 后计算 |
+| RM 电流/堵转阈值 raw | 设备返回或输出原始量；没有通用 A 换算就不能标成安培 |
+| DM 力矩 N·m | 云台控制器输出与最终限矩单位 |
+| KT 累计角 count、速度 dps | 拨盘动作目标/状态；换算依赖 KT 协议及机械传动 |
+| `DEV_ONLINE` | 心跳判据状态，不代表输出链路、供电和机械负载均正常 |
+
+RM 反馈帧可按 byte 0–1 编码器角、2–3 RPM、4–5 电流原始值、byte 6 温度解码；字段定义应以 `RM_motor.c` 当前接收函数和电机型号为准。此布局不是 KT/DM 帧格式。
+
+## CAN 总线与排查
+
+- **CAN1** 承载 Pitch DM、RM2006 升降、左右摩擦轮；逐一核实滤波、标准 ID、终端电阻、波特率和电机反馈计数。
+- **CAN2** 承载 Yaw DM，并连接下板 FDCAN2 的 D/C 板间报文；电机与板间共用总线时应结合总线负载和发送邮箱延后计数判断。
+- **RM 组帧**：看 `rm_motor_list_init()` 后的实例槽位、收到的反馈 ID 和 `group_set_*` 命令；确认槽位与物理左右/机构方向一致。
+- **DM 电机**：确认 `hcan` 和标准 ID 对应，检查使能/反馈状态以及力矩反馈；Yaw/Pitch 分别落在 CAN2/CAN1。
+- **拨盘**：查看 KT 电机工作状态和累计角变化；KT4005 的实际帧格式与槽位不同于 RM 0x200。
+
+观察实例：`dm_motor[YAW/PITCH]`、`lift_motor`、`rm_motor[SHOOT_FRIC_L/SHOOT_FRIC_R]`、`dail_motor` 及对应状态结构。任何电机方向变更都应在卸载/低输出条件下逐个确认；上层离线保护与驱动器硬件过温/过流保护是不同层次。
+
+### 组帧字段速查
+
+| 驱动类型 | 接收内容 | 输出内容 | 不应混淆 |
+| --- | --- | --- | --- |
+| RM3508/RM2006 | encoder angle、转子 rpm、电流 raw、温度 | `0x200` 四槽；每槽 16-bit raw current，高字节在前 | feedback ID `0x201`–`0x204` 与 command group ID `0x200` 不同 |
+| DM Yaw/Pitch | MIT 反馈状态、位置/速度/力矩及错误状态 | 单电机 8-byte MIT 风格目标 | CAN 总线分别为 Yaw CAN2、Pitch CAN1；上层力矩要按 DM 范围压缩 |
+| KT4005 | KT 专用位置/速度/电流反馈 | `ID_DIAL=0x141` 独立协议帧 | 不属于 RM `0x200` 组帧，也不能套用 RM 字段字节解释 |
+
+电机在线由反馈心跳刷新；命令发送、反馈在线和机构实际运动应分别观测。若反馈值不变，先确认对应 CAN RX 帧确实递增，再检查设备在线计时，最后才判断控制输出或机械卡滞。
+
+## 按源码追一次命令与反馈
+
+| 阶段 | 文件/函数 | 需要讲清的职责 |
+| --- | --- | --- |
+| 实例装配 | [motor.c](../Application/DeviceLayer/motor.c) | 机构对应哪个电机对象、型号分支、CAN总线和组槽位 |
+| 协议分发 | [can_protocol.c](../Application/ProtocolLayer/can_protocol.c) `CAN1_rxDataHandler()` / `CAN2_rxDataHandler()` | 根据总线/ID把反馈交给DM、RM、KT或板间模块 |
+| DM输出/反馈 | [DM_Motor.c](../Application/HardwareLayer/DM_Motor.c) `DM_Single_Motor_Set_Torque()` / `Motor_ReceiveData()` | 将N·m压缩到MIT协议；反馈解码与错误状态 |
+| RM输出/反馈 | [RM_motor.c](../Application/HardwareLayer/RM_motor.c) `Group_Motor_Set_Torque()` / `rm_motor_update()` | 型号分支换算、槽位合帧、rpm/count/current反馈 |
+| KT输出/反馈 | [KT_motor.c](../Application/HardwareLayer/KT_motor.c) `tx_kt_motor_W_command()` / `get_kt_motor_info()` | 拨盘专用命令、累计编码器基准与反馈 |
+| HAL发送 | [drv_can.c](../Application/DriverLayer/drv_can.c) `CAN_SendData()` | 经典8字节标准帧本地入队，不确认机构执行 |
+
+### 为什么同一个字段名不能统一解释为力矩
+
+下板减速RM3508使用N·m换算电流；上板单电机型号分支直接发送原始电流控制量；DM使用MIT力矩字段；KT由拨盘输出原始电流。阅读 `tx_info->torque` 时必须同时核对实例型号和打包函数。摩擦轮与升降共用RM组帧，不代表共用闭环或PID参数。
+
+CAN1还承载KT拨盘，CAN2还承载板间D/C帧。1 ms控制周期不能保证每个设备命令都在1 ms内被对端接收；应分别解释计算周期、入队周期和反馈周期。

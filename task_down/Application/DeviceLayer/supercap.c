@@ -5,16 +5,13 @@
 
 SuperCap_t supercap;
 
-/* 原始值线性映射到物理量 */
 static float SuperCap_Scale(int16_t value, float min_value, float max_value)
 {
-    // 超电原始值域 -32000~32000
     float ratio = ((float)value + 32000.0f) / 64000.0f;
 
     return ratio * (max_value - min_value) + min_value;
 }
 
-/* 初始化 */
 void SuperCap_Init(void)
 {
     supercap.state = SUPERCAP_STATE_OFFLINE;
@@ -29,11 +26,9 @@ void SuperCap_Init(void)
     supercap.tx_count = 0u;
     supercap.rx_count = 0u;
     supercap.last_rx_ms = 0u;
-    // 上电即视为离线
     supercap.offline_count = SUPERCAP_OFFLINE_TIMEOUT_MS;
 }
 
-/* 下发控制帧 */
 void SuperCap_Tx(void)
 {
     SuperCap_Control_t control = {0};
@@ -52,7 +47,6 @@ void SuperCap_Tx(void)
     supercap.tx_count++;
 }
 
-/* 解析反馈并刷新状态 */
 void SuperCap_Rx(const uint8_t *rx_buf)
 {
     SuperCap_Protocol_Decode(rx_buf, &supercap.feedback);
@@ -63,11 +57,9 @@ void SuperCap_Rx(const uint8_t *rx_buf)
     supercap.rx_count++;
     supercap.last_rx_ms = HAL_GetTick();
     supercap.offline_count = 0u;
-    // 收到任意帧即置在线
     supercap.state = SUPERCAP_STATE_ONLINE;
 }
 
-/* 离线检测 */
 void SuperCap_Heartbeat(void)
 {
     if (supercap.state == SUPERCAP_STATE_OFFLINE)
@@ -77,7 +69,6 @@ void SuperCap_Heartbeat(void)
 
     if ((HAL_GetTick() - supercap.last_rx_ms) >= SUPERCAP_OFFLINE_TIMEOUT_MS)
     {
-    // 上电即视为离线
         supercap.offline_count = SUPERCAP_OFFLINE_TIMEOUT_MS;
         supercap.state = SUPERCAP_STATE_OFFLINE;
     }

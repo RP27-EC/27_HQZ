@@ -6,6 +6,7 @@
 #include "BMI088driver.h"
 #include "BMI088reg.h"
 #include "BMI088Middleware.h"
+#include "drv_tim.h"
 #include "PID.h"
 #include "rp_math.h"
 #include "ave_filter.h"

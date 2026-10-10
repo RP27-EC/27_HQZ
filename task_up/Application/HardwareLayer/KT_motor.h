@@ -7,10 +7,11 @@
 #include "driver.h"
 #include "motor_def.h"
 #include "PID.h"
+#include "algo.h"
 
 #define OFFLINE_LINE_CNT_MAX 100
 #define SELFPROTECT_CNT_MAX  255
-//KT电机多电机发送ID指令，应注意：如果是单电机发送ID指令，已经保存在了电机的id结构体中
+// 多电机共用发送 ID；单电机 ID 取自 id 结构体
 #define KT_MULTI_TX_ID   0x280
 //KT允许发送的最大值 
 #define KT_TX_ENCODER_OFFSET_MAX    16383*4         //0~16383*4
@@ -203,7 +204,7 @@ typedef struct KT_motor_class_t
 	void (*tx_R_cmd)(struct KT_motor_class_t *motor, uint8_t command);		//发送主动读取信息命令
 	
 	
-	//下面是基本功能函数，负责写电机的发送结构体中的参数，内部有逻辑限制范围操作
+	// 写接口会更新发送字段并执行范围限幅
 	
 	void (*W_pid)(struct KT_motor_class_t *motor, uint8_t *buff);
 	void (*W_accel)(struct KT_motor_class_t *motor, int32_t accel);

@@ -46,29 +46,20 @@ typedef struct rm_cfg_struct_t
 
 typedef struct rm_rx_struct_t
 {
-		float torque;
-	
-	  float torque_current;
-	
-	  int16_t torque_current_raw;
-	
-		int16_t encoder_speed;//rpm(r/min)
-	
-		float speed;//rad/s
-	
-    uint16_t encoder;//0~8191
-	
-		int32_t encoder_sum;
-	
-		uint16_t encoder_last;
-
-    float motor_angle_sum;
-
-    float motor_angle;//电机弧度制绝对角度，0~2PI
-	
-	  float motor_angle_last;
-
-    int8_t temperature;
+    float torque; // 电机反馈力矩，N·m
+    float torque_current; // 反馈扭矩电流，A
+    int16_t torque_current_raw; // 反馈电流原始值，int16
+    int16_t encoder_speed; // 编码器反馈转速，rpm
+    float speed; // 换算角速度，rad/s
+    uint16_t encoder; // 单圈编码器，0~8191
+    int32_t encoder_sum; // 累计编码器，count
+    uint16_t encoder_last; // 上帧编码器，0~8191
+    float motor_angle_sum; // 累计电机角，rad
+    float motor_angle; // 单圈电机角，rad
+    float motor_angle_last; // 上帧电机角，rad
+    int8_t temperature; // 电机反馈温度，℃
+    uint32_t feedback_tick; // 反馈接收时刻，ms
+    uint32_t feedback_seq; // 反馈序号，uint32循环
 }rm_rx_t;
 
 

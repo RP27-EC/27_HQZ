@@ -13,13 +13,19 @@
 /* 下板发给上板的报文 ID */
 #define ID_BOARD_RX1 0xD1  /* 整车状态与发射状态 */
 #define ID_BOARD_RX2 0xD2  /* 云台目标角度 */
+#define ID_BOARD_RX3 0xD3  /* 裁判系统射击信息 */
+#define ID_BOARD_RX4 0xD4  /* 血量数据 */
 #define ID_BOARD_RX5 0xD5  /* 遥控/键鼠控制量 */
+#define ID_BOARD_RX6 0xD6  /* 逐发弹速及源年龄 */
 
 /* 整车状态报文 */
 typedef struct
 {
-    uint8_t car_state;   /* 底盘状态 */
-    uint8_t gimbal_mode; /* 云台控制模式 */
+    uint8_t car_state;   /* 车辆状态，0~3 */
+    uint8_t gimbal_mode; /* 机械/速控，0/1 */
+    uint8_t game_start;  /* 比赛开始，0/1 */
+    uint8_t my_color;    /* 己方颜色，0/1 */
+    uint8_t r_turn_active; /* R掉头进行中，0/1 */
 } Board_State_Pkt_t;
 
 /* 云台目标报文，机械角单位 rad，IMU 角单位 deg */
@@ -53,13 +59,39 @@ typedef struct
     uint8_t is_hole;      /* 1 = 进入狗洞并压低 */
 } Board_Shoot_Pkt_t;
 
+typedef struct
+{
+    uint16_t heat_limit; /* 热量上限，热量单位 */
+    uint16_t barrel_heat; /* 第一枪管热量，热量单位 */
+    uint16_t cooling_rate; /* 冷却速率，热量单位/s */
+    uint8_t heat_seq; /* 源热量序号，0~255循环 */
+    uint8_t flags; /* bit0参数有效，bit1热量有效 */
+    uint8_t seen; /* D3已接收，0/1 */
+    uint32_t rx_tick; /* D3接收时刻，ms */
+} Board_Heat_Pkt_t;
+
+typedef struct
+{
+    uint16_t speed_cms; // 实测弹速，0.01m/s
+    uint16_t event_seq; // 逐发序号，uint16循环
+    uint16_t age_ms; // 源年龄，65535为离线
+    uint8_t bullet_type; // 弹丸类型，1~2
+    uint8_t shooter_number; // 发射机构编号，1~3
+    uint8_t seen; // D6已接收，0/1
+    uint32_t rx_tick; // 最近D6接收时刻，ms
+    uint32_t event_rx_tick; // 本事件首收时刻，ms
+    uint16_t event_age_ms; // 本事件首收源年龄，ms
+} Board_Speed_Pkt_t;
+
 /* 上板接收缓存 */
 typedef struct
 {
-    Board_State_Pkt_t state_pkt;               /* 整车状态 */
-    Board_Gimbal_Target_Pkt_t gimbal_target_pkt; /* 云台目标 */
-    Board_Shoot_Pkt_t shoot_pkt;               /* 发射控制 */
-    Board_Remote_Cmd_Pkt_t remote_cmd_pkt;     /* 键鼠控制 */
+    Board_State_Pkt_t state_pkt; /* 整车位域，范围见类型 */
+    Board_Gimbal_Target_Pkt_t gimbal_target_pkt; /* 云台目标，rad/deg */
+    Board_Shoot_Pkt_t shoot_pkt; /* 发射控制，各位0/1 */
+    Board_Remote_Cmd_Pkt_t remote_cmd_pkt; /* 键鼠命令，单位见类型 */
+    Board_Heat_Pkt_t heat_pkt; /* 热量快照，见成员单位 */
+    Board_Speed_Pkt_t speed_pkt; // 弹速快照，见成员单位
 } Board_Rx_Info_t;
 
 /* 云台姿态反馈，机械角单位 rad，IMU 角单位 deg */
@@ -96,6 +128,8 @@ typedef struct
     dev_work_state_t status;   /* 板间综合在线状态 */
     uint16_t offline_cnt_1;    /* D1 离线计数 */
     uint16_t offline_cnt_2;    /* D2 离线计数 */
+    uint16_t offline_cnt_3;    /* D3 离线计数 */
+    uint16_t offline_cnt_4;    /* D4 离线计数 */
     uint16_t offline_cnt_5;    /* D5 离线计数 */
     uint16_t offline_cnt_max;  /* 离线判定阈值 */
 } Board_HeartBeat_t;
@@ -105,8 +139,26 @@ extern volatile uint8_t Board_Rx_Shoot_Flags;
 extern Board_Tx_Info_t Board_Tx_Info;
 extern Board_HeartBeat_t Board_HeartBeat;
 
+typedef struct
+{
+    uint32_t c1_tx_tick; /* 最近C1入队成功时刻，ms */
+    uint32_t c2_tx_tick; /* 最近C2入队成功时刻，ms */
+    uint32_t c1_ok_count; /* C1成功次数，uint32循环 */
+    uint32_t c2_ok_count; /* C2成功次数，uint32循环 */
+    uint32_t c1_fail_count; /* C1失败次数，uint32循环 */
+    uint32_t c2_fail_count; /* C2失败次数，uint32循环 */
+    uint32_t defer_count; /* 无邮箱延后次数，uint32循环 */
+} Board_Feedback_Debug_t;
+
+extern volatile Board_Feedback_Debug_t board_feedback_debug;
+
 void Board_Rx_01(uint8_t *rxbuf);
 void Board_Rx_02(uint8_t *rxbuf);
+void Board_Rx_03(uint8_t *rxbuf);
+void Board_GetHeatSnapshot(Board_Heat_Pkt_t *snapshot);
+void Board_Rx_06(uint8_t *rxbuf);
+void Board_GetSpeedSnapshot(Board_Speed_Pkt_t *snapshot);
+void Board_Rx_04(uint8_t *rxbuf);
 void Board_Rx_05(uint8_t *rxbuf);
 void Send_To_Down_Board(void);
 void C_Board_Communicate_HeartBeat(void);

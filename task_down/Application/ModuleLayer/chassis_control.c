@@ -6,10 +6,10 @@
 #include <stddef.h>
 
 #include "rp_math.h"
+#include "power_limit.h"
+#include "supercap.h"
 
-//目前纯P的控制器，目前响应速度还可以，跟随得也还行
-//但可以牺牲了一些操作手感，后续再看看
-//后续可以根据情况去加速度规划器和前馈力控方案等
+/* 四轮速度环当前使用纯 P 控制。 */
 
 chassis_control_t chassis_ctrl; /* 底盘控制对象 */
 
@@ -19,7 +19,7 @@ static uint8_t Chassis_Control_ValueValid(float value)
     return (value == value) && (value < 1000000.0f) && (value > -1000000.0f);
 }
 
-/* 四轮在线检查 */
+/* 检查四轮对象和在线状态 */
 static uint8_t Chassis_Control_CheckOnline(void)
 {
     if (chassis_ctrl.wheel == NULL)
@@ -30,7 +30,6 @@ static uint8_t Chassis_Control_CheckOnline(void)
 
     uint8_t online = 1u; /* 四轮组合在线标志 */
 
-    // 离线保护
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
         chassis_ctrl.state.wheel_online[i] =
@@ -87,24 +86,25 @@ static void Chassis_Control_KinematicsInverse(const chassis_cmd_t *cmd)
     chassis_ctrl.state.wheel_target[WHEEL_RB] =  front - left + cycle; /* 右后 */
 }
 
-/* 四轮速度环，按控制源限制力矩 */
+/* 四轮速度环计算，按控制源限制力矩 */
 static uint8_t Chassis_Control_PidUpdate(void)
 {
-    float torque_limit = CHASSIS_TEST_TORQUE_LIMIT_NM; /* 限矩 */
+    float torque_limit = CHASSIS_TEST_TORQUE_LIMIT_NM; /* 默认调试限矩 */
+    uint8_t i;
 
-    //跟随模式
     if (chassis_ctrl.state.cmd.source == CHASSIS_SRC_RC_FOLLOW)
     {
         torque_limit = CHASSIS_FOLLOW_TORQUE_LIMIT_NM;
     }
-    //小陀螺
     else if (chassis_ctrl.state.cmd.source == CHASSIS_SRC_SPIN)
     {
         torque_limit = CHASSIS_SPIN_TORQUE_LIMIT_NM;
     }
-    //检查指针
-    for (uint8_t i = 0u; i < WHEEL_CNT; i++)
+
+    for (i = 0u; i < WHEEL_CNT; i++)
     {
+        pid_ctrl_t *pid;
+
         if (chassis_ctrl.wheel == NULL ||
             chassis_ctrl.wheel->motor[i] == NULL ||
             chassis_ctrl.wheel->motor[i]->ctrl == NULL ||
@@ -115,9 +115,8 @@ static uint8_t Chassis_Control_PidUpdate(void)
             return 0u;
         }
 
-        pid_ctrl_t *pid = chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl; /* 当前速度环 */
-        
-        // 获取电机编码器测速反馈并设置 PID 参数
+        pid = chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl; /* 当前速度环 */
+
         chassis_ctrl.state.wheel_speed[i] =
             chassis_ctrl.wheel->motor[i]->rx_info->speed;
         pid->target = chassis_ctrl.state.wheel_target[i]; /* 轮速目标 */
@@ -147,10 +146,13 @@ static uint8_t Chassis_Control_PidUpdate(void)
                       torque_limit);
     }
 
+    /* 公共比例不增大候选力矩 */
+    Power_Limit_Apply(chassis_ctrl.state.wheel_torque_out, chassis_ctrl.wheel->motor);
+
     return 1u;
 }
 
-/* 四轮力矩下发 */
+/* 将四轮力矩写入电机并整组发送 */
 static uint8_t Chassis_Control_Output(void)
 {
     if (chassis_ctrl.wheel == NULL || chassis_ctrl.wheel->group_set_torque == NULL)
@@ -171,20 +173,19 @@ static uint8_t Chassis_Control_Output(void)
         chassis_ctrl.wheel->motor[i]->tx_info->torque = /* 写入组帧缓存 */
             chassis_ctrl.state.wheel_torque_out[i];
     }
-    // 硬件底层组包发送
+
     chassis_ctrl.wheel->group_set_torque(chassis_ctrl.wheel);
 
     return 1u;
 }
 
-/* 初始化 */
+/* 初始化底盘对象、四轮 PID 与安全状态 */
 void Chassis_Control_Init(void)
 {
-    uint8_t init_ok = 1u; /* 四轮对象完整 */
+    uint8_t init_ok = 1u; /* 四轮对象完整性 */
 
-    chassis_ctrl.wheel = &wheel_group;//绑定指针
+    chassis_ctrl.wheel = &wheel_group;
 
-    //检查
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
         chassis_ctrl.state.wheel_target[i] = 0.0f;
@@ -202,7 +203,6 @@ void Chassis_Control_Init(void)
             continue;
         }
 
-        // 初始化 PID 参数
         pid_ctrl_t *pid = chassis_ctrl.wheel->motor[i]->ctrl->speed_ctrl;
 
         pid->kp = CHASSIS_SPEED_KP;
@@ -219,7 +219,6 @@ void Chassis_Control_Init(void)
         chassis_ctrl.wheel->motor[i]->tx_info->torque = 0.0f;
     }
 
-    // 初始化控制命令
     chassis_ctrl.state.cmd.vx = 0.0f;
     chassis_ctrl.state.cmd.vy = 0.0f;
     chassis_ctrl.state.cmd.wz = 0.0f;
@@ -228,9 +227,11 @@ void Chassis_Control_Init(void)
     chassis_ctrl.state.all_online = 0u;
     chassis_ctrl.state.enabled = init_ok;
     chassis_ctrl.state.fault = (init_ok == 0u) ? 1u : 0u;
+
+    Power_Limit_Init(); /* 功率限制运行时状态清零 */
 }
 
-/* 使能/失能底盘 */
+/* 使能或关闭底盘，关闭时立即卸力 */
 void Chassis_Control_SetEnable(uint8_t enable)
 {
     chassis_ctrl.state.enabled = enable;
@@ -241,25 +242,29 @@ void Chassis_Control_SetEnable(uint8_t enable)
     }
 }
 
-/* 停机并清状态 */
+/* 四轮输出清零 */
 void Chassis_Control_Stop(void)
 {
     if (chassis_ctrl.wheel == NULL)
     {
+        Power_Limit_Apply(chassis_ctrl.state.wheel_torque_out, NULL);
         return;
     }
 
     for (uint8_t i = 0u; i < WHEEL_CNT; i++)
     {
+        chassis_ctrl.state.wheel_torque_out[i] = 0.0f;
         if (chassis_ctrl.wheel->motor[i] == NULL ||
             chassis_ctrl.wheel->motor[i]->tx_info == NULL)
         {
             continue;
         }
 
-        chassis_ctrl.state.wheel_torque_out[i] = 0.0f;
         chassis_ctrl.wheel->motor[i]->tx_info->torque = 0.0f;
     }
+
+    /* 停机观测对应零输出 */
+    Power_Limit_Apply(chassis_ctrl.state.wheel_torque_out, chassis_ctrl.wheel->motor);
 
     if (chassis_ctrl.wheel->group_set_torque != NULL)
     {
@@ -267,10 +272,35 @@ void Chassis_Control_Stop(void)
     }
 }
 
-/* 控制主入口, 1ms */
+/* 底盘周期更新，任何异常均回到停机 */
 void Chassis_Control_Update(const chassis_cmd_t *cmd)
 {
-    //空指针检查
+    judge_power_snapshot_t power_snapshot;
+    uint8_t all_online = Chassis_Control_CheckOnline();
+    uint8_t active = 0u;
+
+    if ((cmd != NULL) && (cmd->valid != 0u) &&
+        (chassis_ctrl.state.enabled != 0u) && (all_online != 0u) &&
+        Chassis_Control_ValueValid(cmd->vx) &&
+        Chassis_Control_ValueValid(cmd->vy) &&
+        Chassis_Control_ValueValid(cmd->wz))
+    {
+        active = ((fabsf(cmd->vx) > CHASSIS_POWER_ACTIVE_V_M_S) ||
+                  (fabsf(cmd->vy) > CHASSIS_POWER_ACTIVE_V_M_S) ||
+                  (fabsf(cmd->wz) > CHASSIS_POWER_ACTIVE_W_RAD_S)) ? 1u : 0u;
+    }
+
+    /* 预算先于力矩限幅刷新 */
+    Judge_GetPowerSnapshot(&power_snapshot);
+    Power_Limit_GetTarget(&power_snapshot, active);
+
+    /* 超电反馈仅作观测，不参与限功闭环 */
+    Power_Limit_SetCapFeedback(supercap.chassis_power,
+                               supercap.cap_voltage,
+                               supercap.cap_current,
+                               supercap.feedback.ability,
+                               (supercap.state == SUPERCAP_STATE_ONLINE) ? 1u : 0u);
+
     if (cmd == NULL)
     {
         chassis_ctrl.state.fault = 1u;
@@ -280,7 +310,6 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
 
     chassis_ctrl.state.cmd = *cmd;
 
-    // 使能检查
     if (chassis_ctrl.state.enabled == 0u || cmd->valid == 0u)
     {
         chassis_ctrl.state.fault = 1u;
@@ -288,7 +317,6 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
         return;
     }
 
-    // 浮点数检查
     if (!Chassis_Control_ValueValid(cmd->vx) ||
         !Chassis_Control_ValueValid(cmd->vy) ||
         !Chassis_Control_ValueValid(cmd->wz))
@@ -297,15 +325,16 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
         Chassis_Control_Stop();
         return;
     }
-    //在线检查
-    if (Chassis_Control_CheckOnline() == 0u)
+
+    if (all_online == 0u)
     {
         chassis_ctrl.state.fault = 1u;
         Chassis_Control_Stop();
         return;
     }
-    /*  逆解 -> PID 闭环 -> CAN 发送 */
+
     Chassis_Control_KinematicsInverse(cmd);
+
     if (Chassis_Control_PidUpdate() == 0u)
     {
         Chassis_Control_Stop();
@@ -317,7 +346,7 @@ void Chassis_Control_Update(const chassis_cmd_t *cmd)
         Chassis_Control_Stop();
         return;
     }
-    /* 清除故障标志 */
+
     chassis_ctrl.state.fault = 0u;
 }
 

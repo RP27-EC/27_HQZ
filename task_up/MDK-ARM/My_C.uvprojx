@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F407xx,__CC_ARM,__TARGET_FPU_VFP,ARM_MATH_CM</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../Application/AlgorithmLayer;../Application/ConfigLayer;../Application/DeviceLayer;../Application/DriverLayer;../Application/DeviceLayer/Imu;../Application/DeviceLayer/Sensor;../Application/ModuleLayer;../Application/HardwareLayer;../Application/ProtocolLayer;../Application/TaskLayer;../Drivers/CMSIS/DSP;../USB_DEVICE/App;../USB_DEVICE/Target;../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;../Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc;../Drivers/CMSIS/DSP/Include</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../Application/AlgorithmLayer;../Application/ConfigLayer;../Application/DeviceLayer;../Application/DriverLayer;../Application/DeviceLayer/Imu;../Application/DeviceLayer/Sensor;../Application/ModuleLayer;../Application/HardwareLayer;../Application/ProtocolLayer;../Application/TaskLayer;../Application/UserLayer;../Application/Support;../Application/ControlLayer;../Application/ServiceLayer;../Drivers/CMSIS/DSP;../USB_DEVICE/App;../USB_DEVICE/Target;../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;../Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc;../Drivers/CMSIS/DSP/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -400,6 +400,62 @@
               <FilePath>../Core/Src/freertos.c</FilePath>
             </File>
             <File>
+              <FileName>adc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/adc.c</FilePath>
+              <FileOption>
+                <CommonProperty>
+                  <UseCPPCompiler>2</UseCPPCompiler>
+                  <RVCTCodeConst>0</RVCTCodeConst>
+                  <RVCTZI>0</RVCTZI>
+                  <RVCTOtherData>0</RVCTOtherData>
+                  <ModuleSelection>0</ModuleSelection>
+                  <IncludeInBuild>1</IncludeInBuild>
+                  <AlwaysBuild>2</AlwaysBuild>
+                  <GenerateAssemblyFile>2</GenerateAssemblyFile>
+                  <AssembleAssemblyFile>2</AssembleAssemblyFile>
+                  <PublicsOnly>2</PublicsOnly>
+                  <StopOnExitCode>11</StopOnExitCode>
+                  <CustomArgument></CustomArgument>
+                  <IncludeLibraryModules></IncludeLibraryModules>
+                  <ComprImg>1</ComprImg>
+                </CommonProperty>
+                <FileArmAds>
+                  <Cads>
+                    <interw>2</interw>
+                    <Optim>0</Optim>
+                    <oTime>2</oTime>
+                    <SplitLS>2</SplitLS>
+                    <OneElfS>2</OneElfS>
+                    <Strict>2</Strict>
+                    <EnumInt>2</EnumInt>
+                    <PlainCh>2</PlainCh>
+                    <Ropi>2</Ropi>
+                    <Rwpi>2</Rwpi>
+                    <wLevel>0</wLevel>
+                    <uThumb>2</uThumb>
+                    <uSurpInc>2</uSurpInc>
+                    <uC99>2</uC99>
+                    <uGnu>2</uGnu>
+                    <useXO>2</useXO>
+                    <v6Lang>0</v6Lang>
+                    <v6LangP>0</v6LangP>
+                    <vShortEn>2</vShortEn>
+                    <vShortWch>2</vShortWch>
+                    <v6Lto>2</v6Lto>
+                    <v6WtE>2</v6WtE>
+                    <v6Rtti>2</v6Rtti>
+                    <VariousControls>
+                      <MiscControls></MiscControls>
+                      <Define></Define>
+                      <Undefine></Undefine>
+                      <IncludePath></IncludePath>
+                    </VariousControls>
+                  </Cads>
+                </FileArmAds>
+              </FileOption>
+            </File>
+            <File>
               <FileName>can.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/can.c</FilePath>
@@ -418,6 +474,16 @@
               <FileName>spi.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Core/Src/spi.c</FilePath>
+            </File>
+            <File>
+              <FileName>tim.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/tim.c</FilePath>
+            </File>
+            <File>
+              <FileName>usart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>../Core/Src/usart.c</FilePath>
             </File>
             <File>
               <FileName>stm32f4xx_it.c</FileName>
@@ -439,6 +505,11 @@
         <Group>
           <GroupName>Task</GroupName>
           <Files>
+            <File>
+              <FileName>community_task.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\TaskLayer\community_task.c</FilePath>
+            </File>
             <File>
               <FileName>control_task.c</FileName>
               <FileType>1</FileType>
@@ -506,9 +577,19 @@
               <FilePath>..\Application\DeviceLayer\motor.c</FilePath>
             </File>
             <File>
+              <FileName>rc_sensor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DeviceLayer\Sensor\rc_sensor.c</FilePath>
+            </File>
+            <File>
               <FileName>imu_sensor.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\DeviceLayer\Sensor\imu_sensor.c</FilePath>
+            </File>
+            <File>
+              <FileName>imu_xrobot.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DeviceLayer\imu_xrobot.c</FilePath>
             </File>
           </Files>
         </Group>
@@ -546,6 +627,11 @@
               <FilePath>..\Application\HardwareLayer\RM_motor.c</FilePath>
             </File>
             <File>
+              <FileName>HT_motor.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\HardwareLayer\HT_motor.c</FilePath>
+            </File>
+            <File>
               <FileName>DM_Motor.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\HardwareLayer\DM_Motor.c</FilePath>
@@ -575,11 +661,21 @@
               <FileType>1</FileType>
               <FilePath>..\Application\ProtocolLayer\can_protocol.c</FilePath>
             </File>
+            <File>
+              <FileName>rc_protocol.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ProtocolLayer\rc_protocol.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
           <GroupName>Algorithm</GroupName>
           <Files>
+            <File>
+              <FileName>crc.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\AlgorithmLayer\crc.c</FilePath>
+            </File>
             <File>
               <FileName>PID.c</FileName>
               <FileType>1</FileType>
@@ -596,6 +692,11 @@
               <FilePath>..\Application\AlgorithmLayer\ave_filter.c</FilePath>
             </File>
             <File>
+              <FileName>algo.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Application\AlgorithmLayer\algo.h</FilePath>
+            </File>
+            <File>
               <FileName>kalman_filter.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\AlgorithmLayer\kalman_filter.c</FilePath>
@@ -606,9 +707,24 @@
           <GroupName>Driver</GroupName>
           <Files>
             <File>
+              <FileName>drv_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DriverLayer\drv_flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_uart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DriverLayer\drv_uart.c</FilePath>
+            </File>
+            <File>
               <FileName>drv_can.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\DriverLayer\drv_can.c</FilePath>
+            </File>
+            <File>
+              <FileName>drv_tim.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\DriverLayer\drv_tim.c</FilePath>
             </File>
             <File>
               <FileName>driver.c</FileName>
@@ -629,6 +745,11 @@
               <FileName>rp_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Application\ConfigLayer\rp_config.h</FilePath>
+            </File>
+            <File>
+              <FileName>config_uart.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Application\ConfigLayer\config_uart.c</FilePath>
             </File>
             <File>
               <FileName>rp_user_config.h</FileName>
@@ -1155,6 +1276,16 @@
               <FileName>port.c</FileName>
               <FileType>1</FileType>
               <FilePath>../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F/port.c</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>User</GroupName>
+          <Files>
+            <File>
+              <FileName>backup.txt</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\Application\UserLayer\backup.txt</FilePath>
             </File>
           </Files>
         </Group>

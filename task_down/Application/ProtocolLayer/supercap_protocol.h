@@ -5,27 +5,29 @@
 
 #include <stdint.h>
 
-#define SUPERCAP_CAN_TX_ID    0x222u
-#define SUPERCAP_CAN_RX_ID    0x211u
+#define SUPERCAP_CAN_TX_ID    0x222u // 控制帧ID，11位
+#define SUPERCAP_CAN_RX_ID    0x211u // 反馈帧ID，11位
+
+/* 16位字段按低字节在前 */
 
 typedef struct
 {
-    int16_t chassis_power;  // 底盘功率
-    int16_t voltage_raw;  // 电容电压原始值
-    int16_t current_raw;  // 电容电流原始值
-    uint8_t ability;  // 超电就绪标志
-    uint8_t pre_charge_mode;  // 预充电状态
+    int16_t chassis_power; // 底盘功率计数，量纲待确认
+    int16_t voltage_raw; // 电压映射计数，±32000
+    int16_t current_raw; // 电流映射计数，±32000
+    uint8_t ability; // 放电能力标志，0/1
+    uint8_t pre_charge_mode; // 预充状态，0/1
 } SuperCap_Feedback_t;
 
 typedef struct
 {
-    uint8_t power_buffer;  // 缓冲能量
-    uint16_t power_limit;  // 功率上限
-    int16_t power_out_limit;  // 输出功率上限
-    uint16_t power_in_limit;  // 输入功率上限
-    uint8_t cap_switch;  // 放电开关
-    uint8_t turbo_mode;  // 涡轮模式
-    uint8_t pre_charge_enable;  // 预充电使能
+    uint8_t power_buffer; // 裁判缓冲，J，0~255
+    uint16_t power_limit; // 裁判功率上限，W
+    int16_t power_out_limit; // 超电输出限制，int16计数
+    uint16_t power_in_limit; // 超电输入限制，uint16计数
+    uint8_t cap_switch; // 超电开关，0/1
+    uint8_t turbo_mode; // 增强模式开关，0/1
+    uint8_t pre_charge_enable; // 预充开关，0/1
 } SuperCap_Control_t;
 
 void SuperCap_Protocol_Decode(const uint8_t *data, SuperCap_Feedback_t *feedback);

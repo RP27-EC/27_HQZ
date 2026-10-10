@@ -6,38 +6,32 @@
 #include "gimbal.h"
 #include "lift_config.h"
 
-/* 全局: 运行状态 / 调参 / 调试 */
 lift_t lift;
 lift_tune_t lift_tune;
 volatile lift_debug_t lift_debug;
 
-/* 故障码 */
 #define LIFT_FAULT_HOME_TIMEOUT   1u
 #define LIFT_FAULT_MOVE_TIMEOUT   2u
 #define LIFT_FAULT_OVERTRAVEL     3u
 #define LIFT_FAULT_STALL_CURRENT  4u
 #define LIFT_FAULT_STALL_PROGRESS 5u
 
-/* 取绝对值 */
 static float lift_abs(float value)
 {
     return (value >= 0.0f) ? value : -value;
 }
 
-/* 编码器计数换算成位置单位 */
 static float lift_encoder_units(void)
 {
     return (float)lift.motor->rx_info->encoder_sum /
            LIFT_POSITION_COUNTS_PER_UNIT;
 }
 
-/* rpm 转 rad/s */
 static float lift_rpm_to_rad_s(float rpm)
 {
     return rpm * 0.1047197551f;
 }
 
-/* 限幅 */
 static float lift_clamp(float value, float min_value, float max_value)
 {
     if (value > max_value) return max_value;
@@ -45,7 +39,6 @@ static float lift_clamp(float value, float min_value, float max_value)
     return value;
 }
 
-/* 角度归一化到正负180 */
 static float lift_wrap_deg(float angle)
 {
     while (angle >= 180.0f) angle -= 360.0f;
@@ -53,14 +46,12 @@ static float lift_wrap_deg(float angle)
     return angle;
 }
 
-/* 时间差, 处理 tick 溢出 */
 static uint32_t lift_delta_ms(uint32_t now, uint32_t last)
 {
     uint32_t delta = now - last;
     return (delta > 100u) ? 100u : delta;
 }
 
-/* 清 PID 状态 */
 static void lift_pid_clear(pid_ctrl_t *pid)
 {
     integral_to_zero(pid);
@@ -73,7 +64,6 @@ static void lift_pid_clear(pid_ctrl_t *pid)
     pid->last_err = 0.0f;
 }
 
-/* 切换状态并记录时刻 */
 static void lift_enter_state(lift_state_e state, uint32_t now)
 {
     lift.state = state;
@@ -86,7 +76,6 @@ static void lift_enter_state(lift_state_e state, uint32_t now)
     lift_pid_clear(&lift.position_pid);
     lift_pid_clear(&lift.speed_pid);
 
-    /* 找顶需重置找顶判据 */
     if (state == LIFT_HOMING_UP)
     {
         lift.home_start_count = lift.motor->rx_info->encoder_sum;
@@ -98,7 +87,6 @@ static void lift_enter_state(lift_state_e state, uint32_t now)
     }
 }
 
-/* 速度模式输出 */
 static void lift_output_speed(float target_rpm, float output_limit)
 {
     float output;
@@ -115,7 +103,6 @@ static void lift_output_speed(float target_rpm, float output_limit)
         lift_clamp(output, -output_limit, output_limit);
 }
 
-/* 位置模式: 位置环出速度目标, 速度环输出扭矩 */
 static void lift_output_position_limited(int32_t target_count,
                                          float speed_limit,
                                          float output_limit)
@@ -124,7 +111,6 @@ static void lift_output_position_limited(int32_t target_count,
     float output;
     float limit = lift_abs(output_limit);
 
-    /* 位置环 -> 速度目标 */
     lift.position_pid.target = (float)target_count;
     lift.position_pid.measure = lift_encoder_units();
     lift.position_pid.err = lift.position_pid.target - lift.position_pid.measure;
@@ -133,7 +119,6 @@ static void lift_output_position_limited(int32_t target_count,
     speed_target = lift_clamp(lift.position_pid.out,
                               -lift_abs(speed_limit),
                               lift_abs(speed_limit));
-    /* 给最小速度, 克服静摩擦死区 */
     if ((speed_target > 0.0f) &&
         (speed_target < lift_tune.pos_min_speed_rpm))
     {
@@ -144,7 +129,6 @@ static void lift_output_position_limited(int32_t target_count,
     {
         speed_target = -lift_tune.pos_min_speed_rpm;
     }
-    /* 速度环 -> 扭矩输出 */
     lift.speed_pid.target = lift_rpm_to_rad_s(speed_target);
     lift.speed_pid.measure = lift_rpm_to_rad_s(
         (float)lift.motor->rx_info->encoder_speed *
@@ -156,7 +140,6 @@ static void lift_output_position_limited(int32_t target_count,
     lift.motor->tx_info->torque = lift_clamp(output, -limit, limit);
 }
 
-/* 位置模式输出, 用默认限速限流 */
 static void lift_output_position(int32_t target_count)
 {
     lift_output_position_limited(target_count,
@@ -164,30 +147,34 @@ static void lift_output_position(int32_t target_count)
                                  lift_tune.speed_out_max_raw);
 }
 
-/* 云台对齐到位检查 */
 static uint8_t lift_alignment_ok(void)
 {
     float yaw_error;
-    float pitch_error;
-    //切为机械且初始化
+
     if ((Gimbal.gimbal_mode != G_MEC) || (Gimbal.init_info.init_flag == 0u))
     {
         return 0u;
     }
-    //计算误差
-    yaw_error = lift_abs(lift_wrap_deg(Gimbal.base_info.yaw_mec_angle -
-                                       Gimbal.pid_info.yaw_target));
-    pitch_error = lift_abs(Gimbal.base_info.pitch_mec_angle -
-                           Gimbal.pid_info.pitch_target);
-    //误差过大不算到位
-    if ((yaw_error > LIFT_ALIGN_TOL_DEG) ||
-        (pitch_error > LIFT_ALIGN_TOL_DEG))
+
+    /*
+     * 狗洞升降只允许云台正对前方。下板已经在反向时拒绝过洞请求，这里是
+     * 独立于命令状态的一道兜底：判据直接看实际机械角，前方为 0°。
+     * LIFT_ALIGN_DOWN 没有超时，不满足时只是停在上面等，不会报故障。
+     */
+    if (lift_abs(lift_wrap_deg(Gimbal.base_info.yaw_mec_angle)) >
+        LIFT_FRONT_TOL_DEG)
     {
         return 0u;
     }
-    //云台晃动过大不算到位
-    if ((lift_abs(Gimbal.base_info.yaw_mec_speed) > LIFT_ALIGN_SPEED_RAD_S) ||
-        (lift_abs(Gimbal.base_info.pitch_mec_speed) > LIFT_ALIGN_SPEED_RAD_S))
+
+    yaw_error = lift_abs(lift_wrap_deg(Gimbal.base_info.yaw_mec_angle -
+                                       Gimbal.pid_info.yaw_target));
+    if (yaw_error > LIFT_ALIGN_TOL_DEG)
+    {
+        return 0u;
+    }
+
+    if (lift_abs(Gimbal.base_info.yaw_mec_speed) > LIFT_ALIGN_SPEED_RAD_S)
     {
         return 0u;
     }
@@ -195,7 +182,6 @@ static uint8_t lift_alignment_ok(void)
     return 1u;
 }
 
-/* 进入故障并断输出 */
 static void lift_fault(uint8_t code)
 {
     lift.motor->tx_info->torque = 0.0f;
@@ -203,7 +189,6 @@ static void lift_fault(uint8_t code)
     lift_enter_state(LIFT_FAULT, HAL_GetTick());
 }
 
-/* 堵转与无进展判定 */
 static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
 {
     uint8_t high_current;
@@ -212,7 +197,6 @@ static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
     uint32_t confirm_ms;
     float over_current;
 
-    // 上/下行堵转电流阈值不同
     over_current = (moving_up != 0u) ?
                    lift_tune.over_current_up_raw :
                    lift_tune.over_current_down_raw;
@@ -220,10 +204,8 @@ static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
                  (uint32_t)lift_tune.up_over_current_confirm_ms :
                  (uint32_t)lift_tune.down_over_current_confirm_ms;
 
-    // 电流超限
     high_current = (lift_abs((float)lift.motor->rx_info->torque_current_raw) >=
                     over_current) ? 1u : 0u;
-    // 转速接近零
     low_speed = (lift_abs((float)lift.motor->rx_info->encoder_speed) <=
                  LIFT_SPEED_TOL_RPM) ? 1u : 0u;
 
@@ -236,7 +218,6 @@ static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
         lift.overcurrent_confirm_ms = 0u;
     }
 
-    // 位置长时间不动也判堵转
     no_progress = ((now - lift.stall_progress_tick) >= confirm_ms) &&
                   (lift_abs((float)(lift.motor->rx_info->encoder_sum -
                            lift.stall_progress_count)) <
@@ -245,11 +226,9 @@ static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
     if ((lift.overcurrent_confirm_ms >= confirm_ms) ||
         (no_progress != 0u))
     {
-        /* 1: 电流堵转, 2: 无进展 */
         return (lift.overcurrent_confirm_ms >= confirm_ms) ? 1u : 2u;
     }
 
-    // 定期刷新基准, 避免累计误差
     if ((now - lift.stall_progress_tick) >= confirm_ms)
     {
         lift.stall_progress_tick = now;
@@ -259,12 +238,10 @@ static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
     return 0u;
 }
 
-/* 上行找顶 */
 static void lift_homing_up_update(uint32_t now, uint32_t dt)
 {
     int32_t count = lift.motor->rx_info->encoder_sum;
     int32_t count_units = (int32_t)lift_encoder_units();
-    /* 找顶转速, 带上行方向 */
     float target_speed = LIFT_UP_DIRECTION * lift_tune.home_speed_rpm;
 
     if ((now - lift.state_enter_tick) >= LIFT_HOME_TIMEOUT_MS)
@@ -273,11 +250,9 @@ static void lift_homing_up_update(uint32_t now, uint32_t dt)
         return;
     }
 
-    // 电流是找顶主判据
     lift.home_current_ok =
         (lift_abs((float)lift.motor->rx_info->torque_current_raw) >=
          lift_tune.home_current_raw) ? 1u : 0u;
-    // 低速作为辅助判据
     lift.home_speed_ok =
         (lift_abs((float)lift.motor->rx_info->encoder_speed) <=
          lift_tune.home_stall_speed_rpm) ? 1u : 0u;
@@ -288,7 +263,6 @@ static void lift_homing_up_update(uint32_t now, uint32_t dt)
         if ((now - lift.home_window_tick) >=
             LIFT_HOME_STATIONARY_WINDOW_MS)
         {
-            // 窗口内位移很小 -> 到顶
             lift.home_stationary_ok =
                 (lift_abs((float)(count - lift.home_window_count)) <=
                  LIFT_HOME_STATIONARY_COUNTS) ? 1u : 0u;
@@ -309,7 +283,6 @@ static void lift_homing_up_update(uint32_t now, uint32_t dt)
         ((lift.home_stationary_ok != 0u) ||
          (lift.home_speed_ok != 0u)))
     {
-        // 条件需持续成立
         lift.homing_confirm_ms += dt;
     }
     else
@@ -319,7 +292,6 @@ static void lift_homing_up_update(uint32_t now, uint32_t dt)
 
     if (lift.homing_confirm_ms >= (uint32_t)lift_tune.home_confirm_ms)
     {
-        // 记为顶部零点, 反推上下目标
         lift.top_zero = count_units;
         lift.top_target = lift.top_zero -
                           (int32_t)(LIFT_UP_DIRECTION *
@@ -336,7 +308,6 @@ static void lift_homing_up_update(uint32_t now, uint32_t dt)
     lift_output_speed(target_speed, lift_tune.home_output_limit_raw);
 }
 
-/* 到顶后回转 */
 static void lift_retract_update(uint32_t now, uint32_t dt)
 {
     float position_error = (float)lift.top_target - lift_encoder_units();
@@ -351,7 +322,6 @@ static void lift_retract_update(uint32_t now, uint32_t dt)
     if ((lift_abs(position_error) <= LIFT_POS_TOL_COUNTS) &&
         (lift_abs(speed) <= LIFT_SPEED_TOL_RPM))
     {
-        /* 到位且停稳才计时 */
         lift.stable_confirm_ms += dt;
     }
     else
@@ -370,7 +340,6 @@ static void lift_retract_update(uint32_t now, uint32_t dt)
     }
 }
 
-/* 移动中: 超程 -> 超时 -> 到位 -> 堵转 */
 static void lift_move_update(uint32_t now, uint32_t dt, int32_t target,
                             uint8_t moving_up)
 {
@@ -381,7 +350,6 @@ static void lift_move_update(uint32_t now, uint32_t dt, int32_t target,
     position_error = (float)target - lift_encoder_units();
     speed = (float)lift.motor->rx_info->encoder_speed;
 
-    /* 相对顶部的行程, 用于超程保护 */
     travel = (int32_t)(((float)lift.top_zero - lift_encoder_units()) *
                        LIFT_UP_DIRECTION);
     if ((travel < -(int32_t)LIFT_OVERTRAVEL_COUNTS) ||
@@ -399,7 +367,6 @@ static void lift_move_update(uint32_t now, uint32_t dt, int32_t target,
 
     if (lift_abs(position_error) <= LIFT_POS_TOL_COUNTS)
     {
-        /* 位置到位后再等速度稳定 */
         if (lift_abs(speed) <= LIFT_SPEED_TOL_RPM)
         {
             lift.stable_confirm_ms += dt;
@@ -422,7 +389,6 @@ static void lift_move_update(uint32_t now, uint32_t dt, int32_t target,
     stall = lift_move_stalled(now, dt, moving_up);
     if (stall != 0u)
     {
-        /* 下行堵转只停机, 上行堵转报故障 */
         if (moving_up == 0u)
         {
             lift.motor->tx_info->torque = 0.0f;
@@ -437,12 +403,10 @@ static void lift_move_update(uint32_t now, uint32_t dt, int32_t target,
     lift_output_position(target);
 } 
 
-/* 记录行程极值 */
 static void lift_debug_record(int32_t count)
 {
     if (lift_debug.stats_valid == 0u)
     {
-        /* 首次记录, 初始化极值 */
         lift_debug.min_count = count;
         lift_debug.max_count = count;
         lift_debug.stats_valid = 1u;
@@ -455,7 +419,6 @@ static void lift_debug_record(int32_t count)
     lift_debug.travel_counts = lift_debug.max_count - lift_debug.min_count;
 }
 
-/* 刷新调试数据 */
 static void lift_debug_update(uint32_t now, uint32_t dt)
 {
     int32_t count;
@@ -463,7 +426,6 @@ static void lift_debug_update(uint32_t now, uint32_t dt)
     float over_current;
     float over_current_confirm;
 
-    /* mode 3: 清统计并退出 */
     if (lift_debug.mode == 3u)
     {
         lift_debug.stats_valid = 0u;
@@ -476,7 +438,6 @@ static void lift_debug_update(uint32_t now, uint32_t dt)
         return;
     }
 
-    /* 电机或板级离线则断开输出 */
     if ((lift.motor->state->status != DEV_ONLINE) ||
         (Board_HeartBeat.status != DEV_ONLINE))
     {
@@ -487,21 +448,18 @@ static void lift_debug_update(uint32_t now, uint32_t dt)
 
     output = lift_clamp(lift_debug.output_raw, 0.0f,
                         LIFT_DEBUG_OUTPUT_MAX_RAW);
-    /* mode 4: 只记录行程极值, 不输出 */
     if (lift_debug.mode == 4u)
     {
         lift.motor->tx_info->torque = 0.0f;
         lift_debug_record(lift.motor->rx_info->encoder_sum);
         return;
     }
-    /* mode 1: 向下定输出测试 */
     if (lift_debug.mode == 1u)
     {
         lift.motor->tx_info->torque = -output * LIFT_OUTPUT_DIRECTION;
         over_current = lift_tune.over_current_down_raw;
         over_current_confirm = lift_tune.down_over_current_confirm_ms;
     }
-    /* mode 2: 向上定输出测试 */
     else if (lift_debug.mode == 2u)
     {
         lift.motor->tx_info->torque = output * LIFT_OUTPUT_DIRECTION;
@@ -521,7 +479,6 @@ static void lift_debug_update(uint32_t now, uint32_t dt)
     if (lift_abs((float)lift.motor->rx_info->torque_current_raw) >= over_current)
     {
         lift_debug.overcurrent_ms += dt;
-        /* 超流持续够久则结束测试 */
         if (lift_debug.overcurrent_ms >=
             (uint32_t)over_current_confirm)
         {
@@ -535,10 +492,8 @@ static void lift_debug_update(uint32_t now, uint32_t dt)
     }
 }
 
-/* 初始化 */
 void Lift_Init(void)
 {
-    /* 状态清零 */
     lift.motor = &lift_motor;
     lift.state = LIFT_WAIT;
     lift.top_zero = 0;
@@ -550,6 +505,7 @@ void Lift_Init(void)
     lift.pending_is_hole = 0u;
     lift.pending_valid = 0u;
     lift.control_is_hole = 0u;
+    lift.pitch_zero_hold = 0u;
     lift.fault_code = 0u;
     lift.state_enter_tick = HAL_GetTick();
     lift.init_tick = lift.state_enter_tick;
@@ -558,7 +514,6 @@ void Lift_Init(void)
     lift.stall_progress_count = 0;
     lift.last_tick = lift.state_enter_tick;
 
-    /* 调试数据清零 */
     lift_debug.mode = 0u;
     lift_debug.stats_valid = 0u;
     lift_debug.output_raw = 500.0f;
@@ -567,7 +522,6 @@ void Lift_Init(void)
     lift_debug.travel_counts = 0;
     lift_debug.overcurrent_ms = 0u;
 
-    /* 参数取宏默认值 */
     lift_tune.home_speed_rpm = LIFT_HOME_SPEED_RPM;
     lift_tune.home_output_limit_raw = LIFT_HOME_OUTPUT_LIMIT_RAW;
     lift_tune.home_current_raw = LIFT_HOME_CURRENT_RAW;
@@ -593,7 +547,6 @@ void Lift_Init(void)
         (float)LIFT_UP_OVER_CURRENT_CONFIRM_MS;
     lift_tune.stall_progress_counts = LIFT_STALL_PROGRESS_COUNTS;
 
-    /* PID 参数 */
     lift.position_pid.kp = LIFT_POS_KP;
     lift.position_pid.ki = LIFT_POS_KI;
     lift.position_pid.kd = LIFT_POS_KD;
@@ -614,7 +567,6 @@ void Lift_Init(void)
     lift_pid_clear(&lift.speed_pid);
 }
 
-/* 升降主循环, 1ms */
 void Lift_Work(void)
 {
     uint32_t now = HAL_GetTick();
@@ -625,26 +577,22 @@ void Lift_Work(void)
 
     lift.last_tick = now;
 
-    /* 指针未就绪则直接退出 */
     if ((lift.motor == NULL) || (lift.motor->state == NULL))
     {
         return;
     }
 
-    /* 调试模式优先接管输出 */
     if (lift_debug.mode != 0u)
     {
         lift_debug_update(now, dt);
         return;
     }
 
-    /* 实时刷新的调参 */
     lift.position_pid.kp = lift_tune.pos_kp;
     lift.position_pid.out_max = lift_tune.pos_out_max_rpm;
     lift.speed_pid.kp = lift_tune.speed_kp;
     lift.speed_pid.out_max = lift_tune.speed_out_max_raw;
 
-    /* 电机/板级掉线或车状态无效 -> 断输出回等待 */
     if ((lift.motor->state->status != DEV_ONLINE) ||
         (Board_HeartBeat.status != DEV_ONLINE) ||
         (Board_Rx_Info.state_pkt.car_state == 0u))
@@ -653,16 +601,19 @@ void Lift_Work(void)
         lift.cmd_seen = 0u;
         lift.pending_valid = 0u;
         lift.control_is_hole = 0u;
+        if ((Board_HeartBeat.status != DEV_ONLINE) ||
+            (Board_Rx_Info.state_pkt.car_state == 0u))
+        {
+            lift.pitch_zero_hold = 0u;
+        }
         lift_enter_state(LIFT_WAIT, now);
         return;
     }
 
-    /* 指令边沿检测, 仅跳变时产生新指令 */
     raw_is_hole = (Board_Rx_Info.shoot_pkt.is_hole != 0u) ? 1u : 0u;
     cmd_changed = 0u;
     if (lift.cmd_seen == 0u)
     {
-        /* 首次收到仅记录基准, 不触发动作 */
         lift.cmd_seen = 1u;
         lift.last_is_hole = raw_is_hole;
         lift.pending_valid = 0u;
@@ -676,15 +627,17 @@ void Lift_Work(void)
         lift.pending_valid = 1u;
     }
 
-    /* 新指令立即生效 */
     if (lift.pending_valid != 0u)
     {
         lift.control_is_hole = lift.pending_is_hole;
         lift.pending_valid = 0u;
     }
     is_hole = lift.control_is_hole;
+    if (is_hole != 0u)
+    {
+        lift.pitch_zero_hold = 1u;
+    }
 
-    /* 等待态: 已标定直接动作, 否则先找顶 */
     if (lift.state == LIFT_WAIT)
     {
         if (lift.home_valid != 0u)
@@ -705,17 +658,14 @@ void Lift_Work(void)
 
     switch (lift.state)
     {
-    /* 上行找顶 */
     case LIFT_HOMING_UP:
         lift_homing_up_update(now, dt);
         break;
 
-    /* 到顶回转 */
     case LIFT_RETRACT_DOWN:
         lift_retract_update(now, dt);
         break;
 
-    /* 底部待命 */
     case LIFT_READY_DOWN:
         if (is_hole == 0u)
         {
@@ -727,7 +677,6 @@ void Lift_Work(void)
         }
         break;
 
-    /* 下降前对齐云台 */
     case LIFT_ALIGN_DOWN:
         if (is_hole == 0u)
         {
@@ -743,7 +692,6 @@ void Lift_Work(void)
         }
         break;
 
-    /* 下降中 */
     case LIFT_MOVING_DOWN:
         if (is_hole == 0u)
         {
@@ -755,7 +703,6 @@ void Lift_Work(void)
         }
         break;
 
-    /* 上升中 */
     case LIFT_MOVING_UP:
         if (is_hole != 0u)
         {
@@ -767,7 +714,6 @@ void Lift_Work(void)
         }
         break;
 
-    /* 顶部待命 */
     case LIFT_READY_UP:
         if (is_hole != 0u)
         {
@@ -779,7 +725,6 @@ void Lift_Work(void)
         }
         break;
 
-    /* 堵转停机, 等指令复位 */
     case LIFT_STALL_STOP:
         lift.motor->tx_info->torque = 0.0f;
         if (is_hole == 0u)
@@ -788,7 +733,6 @@ void Lift_Work(void)
         }
         break;
 
-    /* 故障锁定 */
     case LIFT_FAULT:
         lift.motor->tx_info->torque = 0.0f;
         if (cmd_changed == 0u)
@@ -815,9 +759,26 @@ void Lift_Work(void)
         lift.motor->tx_info->torque = 0.0f;
         break;
     }
+
+    if (((lift.state == LIFT_READY_UP) && (is_hole == 0u)) ||
+        (lift.state == LIFT_MOVING_UP) ||
+        (lift.state == LIFT_FAULT) || (lift.state == LIFT_STALL_STOP))
+    {
+        lift.pitch_zero_hold = 0u;
+    }
+    else if ((lift.state == LIFT_ALIGN_DOWN) ||
+             (lift.state == LIFT_MOVING_DOWN))
+    {
+        // NOTE: 重新下行需恢复锁零
+        lift.pitch_zero_hold = 1u;
+    }
 }
 
-/* 电机是否在线 */
+uint8_t Lift_IsPitchZeroHoldActive(void)
+{
+    return lift.pitch_zero_hold;
+}
+
 uint8_t Lift_MotorOnline(void)
 {
     if ((lift.motor == NULL) || (lift.motor->state == NULL))
@@ -828,7 +789,6 @@ uint8_t Lift_MotorOnline(void)
     return (lift.motor->state->status == DEV_ONLINE) ? 1u : 0u;
 }
 
-/* 上报给下板的状态字: 0底 1运动 2顶 3故障 */
 uint8_t Lift_Get_Report_State(void)
 {
     switch (lift.state)
