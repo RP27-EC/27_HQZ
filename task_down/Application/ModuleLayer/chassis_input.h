@@ -9,26 +9,26 @@ extern chassis_cmd_t chassis_input_cmd; /* 统一底盘输入 */
 
 typedef enum
 {
-    CHASSIS_KEY_MODE_FOLLOW = 0, /* Z：跟随 */
-    CHASSIS_KEY_MODE_MECH,       /* X：机械 */
-    CHASSIS_KEY_MODE_SPIN,       /* C：小陀螺 */
+    CHASSIS_KEY_MODE_FOLLOW = 0, // Z跟随模式，值0
+    CHASSIS_KEY_MODE_MECH, // X机械模式，值1
+    CHASSIS_KEY_MODE_SPIN, // C小陀螺模式，值2
 } chassis_key_mode_e;
 
 typedef enum
 {
-    CHASSIS_UTURN_IDLE = 0,
-    CHASSIS_UTURN_PREPARE,
-    CHASSIS_UTURN_POSITION,
-    CHASSIS_UTURN_RESTORE,
+    CHASSIS_UTURN_IDLE = 0, // 空闲阶段，值0
+    CHASSIS_UTURN_PREPARE, // 预发送阶段，值1
+    CHASSIS_UTURN_POSITION, // 定位阶段，值2
+    CHASSIS_UTURN_RESTORE, // 恢复交接阶段，值3
 } chassis_uturn_state_e;
 
 typedef enum
 {
-    CHASSIS_UTURN_NONE = 0,
-    CHASSIS_UTURN_RUNNING,
-    CHASSIS_UTURN_DONE,
-    CHASSIS_UTURN_TIMEOUT,
-    CHASSIS_UTURN_CANCELLED,
+    CHASSIS_UTURN_NONE = 0, // 尚无结果，值0
+    CHASSIS_UTURN_RUNNING, // 掉头进行中，值1
+    CHASSIS_UTURN_DONE, // 掉头到位，值2
+    CHASSIS_UTURN_TIMEOUT, // 掉头超时，值3
+    CHASSIS_UTURN_CANCELLED, // 掉头取消，值4
 } chassis_uturn_result_e;
 
 void Chassis_Input_Init(void);
@@ -46,11 +46,11 @@ float Chassis_Input_GetKeyboardYawTargetRad(void);
 float Chassis_Input_GetYawReferenceRad(void);
 /* 过洞回零必须同步取消掉头 */
 void Chassis_Input_ResetYawReference(void);
-/* 包含预发送及恢复，期间屏蔽 Yaw 和自动跟转 */
+/* 交接期间屏蔽Yaw与跟转 */
 uint8_t Chassis_Input_IsUturnActive(void);
 chassis_uturn_state_e Chassis_Input_GetUturnState(void);
 chassis_uturn_result_e Chassis_Input_GetUturnResult(void);
-/* 只计完整成功发送周期，目标使用 D2 编码值 */
+/* 仅完整成功发送周期计数 */
 void Chassis_Input_NotifyUturnTxCycle(uint8_t gimbal_mode, uint16_t yaw_target_raw);
 
 #endif

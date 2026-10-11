@@ -5,25 +5,25 @@
 #include "rp_config.h"
 #define RC_ONLINE	 (rc_dev.work_state==DEV_ONLINE)
 #define RC_OFFLINE	 (rc_dev.work_state==DEV_OFFLINE)
-/* ----------------------- RC Channel Definition------------------------------*/
+/* 遥控通道编码 */
 
-#define    RC_CH_VALUE_MIN       ((uint16_t)364 )
-#define    RC_CH_VALUE_OFFSET    ((uint16_t)1024)
-#define	   RC_CH_VALUE_MAX       ((uint16_t)1684)
-#define	   RC_CH_VALUE_SIDE_WIDTH	((RC_CH_VALUE_MAX-RC_CH_VALUE_MIN)/2)
+#define    RC_CH_VALUE_MIN       ((uint16_t)364 ) // 通道编码下限，364
+#define    RC_CH_VALUE_OFFSET    ((uint16_t)1024) // 通道中位编码，1024
+#define	   RC_CH_VALUE_MAX       ((uint16_t)1684) // 通道编码上限，1684
+#define	   RC_CH_VALUE_SIDE_WIDTH	((RC_CH_VALUE_MAX-RC_CH_VALUE_MIN)/2) // 中位单侧量程，660
 
-/* ----------------------- RC Switch Definition-------------------------------*/
+/* 拨杆编码 */
 
-#define    RC_SW_UP              ((uint16_t)1)
-#define    RC_SW_MID             ((uint16_t)3)
-#define    RC_SW_DOWN            ((uint16_t)2)
+#define    RC_SW_UP              ((uint16_t)1) // 拨杆上位编码，1
+#define    RC_SW_MID             ((uint16_t)3) // 拨杆中位编码，3
+#define    RC_SW_DOWN            ((uint16_t)2) // 拨杆下位编码，2
 
-/* ----------------------- RC Thumbwheel Definition-------------------------------*/
+/* 拨轮档位索引 */
 
-#define    RC_TB_UP              ((uint16_t)0)
-#define    RC_TB_MU              ((uint16_t)1)
-#define    RC_TB_MD              ((uint16_t)3)
-#define    RC_TB_DN              ((uint16_t)2)
+#define    RC_TB_UP              ((uint16_t)0) // 拨轮上极限档，索引0
+#define    RC_TB_MU              ((uint16_t)1) // 拨轮上中间档，索引1
+#define    RC_TB_MD              ((uint16_t)3) // 拨轮下中间档，索引3
+#define    RC_TB_DN              ((uint16_t)2) // 拨轮下极限档，索引2
 
 
 /* ----------------------- PC Key Definition-------------------------------- */
@@ -46,27 +46,27 @@
 #define    KEY_PRESSED_OFFSET_B        ((uint16_t)0x01<<15)
 
 
-#define MOUSE_BTN_L_CNT_MAX     300  // 左键长按门限，更新次数
-#define MOUSE_BTN_R_CNT_MAX     500  // MOUSEBTN半径计数最大
-#define KEY_Q_CNT_MAX           500  // KEYQ计数最大
-#define KEY_W_CNT_MAX           400  // KEYW计数最大
-#define KEY_E_CNT_MAX           500  // KEYE计数最大
-#define KEY_R_CNT_MAX           500  // KEY半径计数最大
-#define KEY_A_CNT_MAX           400  // KEYA计数最大
-#define KEY_S_CNT_MAX           400  // KEYS计数最大
-#define KEY_D_CNT_MAX           400  // KEYD计数最大
-#define KEY_F_CNT_MAX           500  // KEYF计数最大
-#define KEY_G_CNT_MAX           500  // KEY绿计数最大
-#define KEY_Z_CNT_MAX           500  // KEYz计数最大
-#define KEY_X_CNT_MAX           500  // KEYx计数最大
-#define KEY_C_CNT_MAX           500  // KEYc计数最大
-#define KEY_V_CNT_MAX           500  // KEYV计数最大
-#define KEY_B_CNT_MAX           500  // KEY蓝计数最大
-#define KEY_SHIFT_CNT_MAX       500  // KEYSHIFT计数最大
-#define KEY_CTRL_CNT_MAX        500  // KEYCTRL计数最大
+#define MOUSE_BTN_L_CNT_MAX     300 // 长按门限，接收帧数
+#define MOUSE_BTN_R_CNT_MAX     500 // 长按门限，接收帧数
+#define KEY_Q_CNT_MAX           500 // 长按门限，接收帧数
+#define KEY_W_CNT_MAX           400 // 长按门限，接收帧数
+#define KEY_E_CNT_MAX           500 // 长按门限，接收帧数
+#define KEY_R_CNT_MAX           500 // 长按门限，接收帧数
+#define KEY_A_CNT_MAX           400 // 长按门限，接收帧数
+#define KEY_S_CNT_MAX           400 // 长按门限，接收帧数
+#define KEY_D_CNT_MAX           400 // 长按门限，接收帧数
+#define KEY_F_CNT_MAX           500 // 长按门限，接收帧数
+#define KEY_G_CNT_MAX           500 // 长按门限，接收帧数
+#define KEY_Z_CNT_MAX           500 // 长按门限，接收帧数
+#define KEY_X_CNT_MAX           500 // 长按门限，接收帧数
+#define KEY_C_CNT_MAX           500 // 长按门限，接收帧数
+#define KEY_V_CNT_MAX           500 // 长按门限，接收帧数
+#define KEY_B_CNT_MAX           500 // 长按门限，接收帧数
+#define KEY_SHIFT_CNT_MAX       500 // 长按门限，接收帧数
+#define KEY_CTRL_CNT_MAX        500 // 长按门限，接收帧数
 
 
-#define REMOTE_SMOOTH_TIMES     10
+#define REMOTE_SMOOTH_TIMES     10 // 鼠标滤波窗口，样本数
 
 /* ----------------------- Function Definition-------------------------------- */
 
@@ -119,49 +119,49 @@
 
 typedef enum
 {
-  release,
-  release_to_press,
-  short_press,
-  long_press,
-  press_to_release,
+  release, // 释放保持，状态0
+  release_to_press, // 按下边沿，状态1
+  short_press, // 短按保持，状态2
+  long_press, // 长按保持，状态3
+  press_to_release, // 释放边沿，状态4
 }key_board_status_e;
 
 
 typedef struct key_board_info_struct {
-  uint8_t			  value;  // 值
-  key_board_status_e status;  // 状态
-  key_board_status_e last_status;  // last状态
+  uint8_t			  value; // 按键电平，0/1
+  key_board_status_e status; // 本次按键状态，0~4
+  key_board_status_e last_status; // 上次按键状态，0~4
 	
-  int16_t cnt;  // 计数
-  int16_t cnt_max;  // 计数最大
+  int16_t cnt; // 连续按下帧数，0~cnt_max
+  int16_t cnt_max; // 长按门限，接收帧数
 }kb_key_t;
 
 
 
 typedef enum 
 {
-  keep_R,  // keep半径
-  up_R,  // up半径
-  mid_R,  // 中半径
-  down_R,  // down半径
+  keep_R, // 拨杆保持，状态0
+  up_R, // 进入上位，状态1
+  mid_R, // 进入中位，状态2
+  down_R, // 进入下位，状态3
 }remote_status_e;
 
 
 
 typedef struct
 {
-  uint8_t value_last;  // 值last
-  uint8_t value;  // 值
-  remote_status_e status;  // 状态
+  uint8_t value_last; // 上次拨杆编码，1/2/3
+  uint8_t value; // 当前拨杆编码，1/2/3
+  remote_status_e status; // 拨杆变化状态，0~3
 }sw_state_t;
 
 
 typedef struct
 {
-  int16_t value_last;  // 值last
-  int16_t value;  // 值
-  uint8_t step[4];
-  uint8_t step_rising_trigger[4];
+  int16_t value_last; // 上次拨轮原始量，±660
+  int16_t value; // 当前拨轮原始量，±660
+  uint8_t step[4]; // 四档翻转电平，每项0/1
+  uint8_t step_rising_trigger[4]; // 四档变化事件，每项0/1
 	
 }dial_t;
 
@@ -169,58 +169,58 @@ typedef struct
 
 typedef struct rc_sensor_info_struct {
 
-	int16_t    tw_step_value[4];
+	int16_t    tw_step_value[4]; // 拨轮四档门限，原始量
 	
 
-	int16_t 	ch0;
-	int16_t 	ch1;
-	int16_t 	ch2;
-	int16_t 	ch3;
-	sw_state_t s1;
-	sw_state_t s2;
-	dial_t 			thumbwheel;
+	int16_t 	ch0; // 右杆水平原始量，±660
+	int16_t 	ch1; // 右杆垂直原始量，±660
+	int16_t 	ch2; // 左杆水平原始量，±660
+	int16_t 	ch3; // 左杆垂直原始量，±660
+	sw_state_t s1; // 右拨杆，原始编码1/2/3
+	sw_state_t s2; // 左拨杆，原始编码1/2/3
+	dial_t 			thumbwheel; // 拨轮原始量与四档事件
 
-  int16_t                 mouse_vx;
-  int16_t                 mouse_vy;
-  int16_t                 mouse_vz;
-  float                   mouse_x;  // mousex
-  float                   mouse_y;  // mousey
-  float                   mouse_z;  // mousez
-  kb_key_t        mouse_btn_l;
-  kb_key_t        mouse_btn_r;  // mousebtn半径
-  kb_key_t        Q;
-  kb_key_t        W;
-  kb_key_t        E;
-  kb_key_t        R;  // 半径
-  kb_key_t        A;
-  kb_key_t        S;
-  kb_key_t        D;
-  kb_key_t        F;
-  kb_key_t        G;  // 绿
-  kb_key_t        Z;  // z
-  kb_key_t        X;  // x
-  kb_key_t        C;  // c
-  kb_key_t        V;
-  kb_key_t        B;  // 蓝
-  kb_key_t        Shift;
-  kb_key_t        Ctrl;
-  volatile uint32_t update_seq;
-  uint16_t								key_v;
+  int16_t                 mouse_vx; // 鼠标X帧增量，原始计数
+  int16_t                 mouse_vy; // 鼠标Y帧增量，原始计数
+  int16_t                 mouse_vz; // 鼠标Z帧增量，原始计数
+  float                   mouse_x; // 滤波X帧增量，原始计数
+  float                   mouse_y; // 滤波Y帧增量，原始计数
+  float                   mouse_z; // 滤波Z帧增量，原始计数
+  kb_key_t        mouse_btn_l; // 鼠标左键，状态0~4
+  kb_key_t        mouse_btn_r; // 鼠标右键，状态0~4
+  kb_key_t        Q; // Q键，状态0~4
+  kb_key_t        W; // W键，状态0~4
+  kb_key_t        E; // E键，状态0~4
+  kb_key_t        R; // R键，状态0~4
+  kb_key_t        A; // A键，状态0~4
+  kb_key_t        S; // S键，状态0~4
+  kb_key_t        D; // D键，状态0~4
+  kb_key_t        F; // F键，状态0~4
+  kb_key_t        G; // G键，状态0~4
+  kb_key_t        Z; // Z键，状态0~4
+  kb_key_t        X; // X键，状态0~4
+  kb_key_t        C; // C键，状态0~4
+  kb_key_t        V; // V键，状态0~4
+  kb_key_t        B; // B键，状态0~4
+  kb_key_t        Shift; // Shift键，状态0~4
+  kb_key_t        Ctrl; // Ctrl键，状态0~4
+  volatile uint32_t update_seq; // 已解码帧序号，uint32回绕
+  uint16_t								key_v; // 键盘位图，16位各表示0/1
 	
-	int16_t		offline_cnt;
-	int16_t		offline_max_cnt;
+	int16_t		offline_cnt; // 未收帧心跳累计，调用次数
+	int16_t		offline_max_cnt; // 离线门限，心跳调用次数
 } rc_data_t;
 
 typedef struct rc_dev_struct {
-	rc_data_t	*info;
-	drv_uart_t		  	*driver;
-	void				(*init)(struct rc_dev_struct *self);
-	void				(*update)(struct rc_dev_struct *self, uint8_t *rxBuf);
-	void				(*check)(struct rc_dev_struct *self);	
-	void				(*heart_beat)(struct rc_dev_struct *self);
-	dev_work_state_t	work_state;
-	dev_errno_t			errno;
-	dev_id_t			id;
+	rc_data_t	*info; // 遥控数据对象指针
+	drv_uart_t		  	*driver; // 遥控串口驱动指针
+	void				(*init)(struct rc_dev_struct *self); // 设备初始化接口
+	void				(*update)(struct rc_dev_struct *self, uint8_t *rxBuf); // 单帧解码接口，载荷为字节
+	void				(*check)(struct rc_dev_struct *self); // 通道与事件校验接口
+	void				(*heart_beat)(struct rc_dev_struct *self); // 离线计数接口，按调用累加
+	dev_work_state_t	work_state; // 设备在线状态，见枚举
+	dev_errno_t			errno; // 设备错误码，见枚举
+	dev_id_t			id; // 遥控设备编号，见枚举
 } rc_dev_t;
 
 extern rc_data_t rc_data;

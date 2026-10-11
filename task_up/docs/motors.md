@@ -13,7 +13,7 @@
 | 右摩擦轮 | RM3508 | CAN1；反馈 `0x202`；命令组 `0x200` 第 2 槽（索引 1） | 发射摩擦轮速度控制 |
 | 拨盘 | KT4005 | CAN1，标准 ID `ID_DIAL=0x141` | 发射单发/连发位置与速度控制 |
 
-实例装配位于 `task_up/Application/DeviceLayer/motor.c`；驱动实现分布在 `HardwareLayer/DM_Motor.c`、`RM_motor.c`、`KT_motor.c`。HT 驱动代码存在，但当前云台板 HT 旧实例处于 `#if 0`，不能当作本配置正在控制的电机。
+实例装配位于 `task_up/Application/DeviceLayer/motor.c`；驱动实现分布在 `HardwareLayer/DM_Motor.c`、`RM_motor.c`、`KT_motor.c`。停用 HT 驱动与旧实例已删除；DM 的共享 MIT 命令枚举由 `HardwareLayer/motor_def.h` 提供，编号仍为 0/1/2。
 
 ## RM/DM 帧数据要点
 

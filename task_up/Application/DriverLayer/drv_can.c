@@ -18,7 +18,6 @@ extern CAN_HandleTypeDef hcan2;
 
 CAN_RxFrameTypeDef hcan1RxFrame;
 CAN_RxFrameTypeDef hcan2RxFrame;
-CAN_TxHeaderTypeDef CAN_TxHeadeType;
 /* CAN 接收中断回调 */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
@@ -33,6 +32,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   {
 		HAL_CAN_GetRxMessage(hcan, CAN_RX_FIFO0, &hcan2RxFrame.header, hcan2RxFrame.data);
 		
+        /* D6仅接受8字节标准数据帧 */
         if ((hcan2RxFrame.header.StdId != 0xD6u) ||
             ((hcan2RxFrame.header.IDE == CAN_ID_STD) &&
              (hcan2RxFrame.header.RTR == CAN_RTR_DATA) &&
@@ -103,7 +103,7 @@ void CAN2_CMD_1FF()
 	HAL_CAN_AddTxMessage(&hcan2, &tx_message, CAN2_1FF_DATA, &send_mail_box);
 }
 
-/* int16 拆成两字节 */
+/* 四个int16按高字节在前 */
 void int16_to_uint8(uint8_t *data, int16_t *dat)
 {
 	data[0] = (uint8_t)((int16_t)dat[0] >> 8);
@@ -189,22 +189,14 @@ __WEAK void CAN2_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 {
 }
 
-/* 配置发送报文头 */
-void HAL_CAN_TxHeadeInit(uint16_t ID)
-{
-	CAN_TxHeadeType.StdId = ID;
-	CAN_TxHeadeType.ExtId = 0x0000;
-	CAN_TxHeadeType.DLC = 8;
-	CAN_TxHeadeType.IDE = CAN_ID_STD;
-	CAN_TxHeadeType.RTR = CAN_RTR_DATA;
-}
+
 
 
 /* 配置接收过滤器 */
 void CAN_Filter_Init(void)
 {
-	/* CAN1/CAN2 are already initialized by MX_CAN1_Init/MX_CAN2_Init. */
-	/* Re-initializing here can return HAL_BUSY after CAN has started. */
+	/* 外设初始化已由启动流程完成 */
+	/* 启动后不重复初始化CAN */
 	// HAL_CAN_Init(&hcan1);
 	// HAL_CAN_Init(&hcan2);
 	
@@ -231,6 +223,3 @@ void CAN_Filter_Init(void)
 	/*使能CAN2中断*/
 	HAL_CAN_ActivateNotification(&hcan2, CAN_IT_RX_FIFO0_MSG_PENDING);
 }
-
-
-

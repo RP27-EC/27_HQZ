@@ -2,7 +2,7 @@
 
 讲解项目时先读[项目讲解与源码速查](../README.md#项目讲解与源码速查)：包含底盘跟随/四轮控制、功率预算算法、参数数值和按动作查询源码的入口。
 
-[返回项目总览](../README.md) · [上板工程](../task_up/Readme.md) · [下板模块目录](docs/README.md)
+[清理与来源说明](../docs/code_cleanup_and_provenance.md) · [返回项目总览](../README.md) · [上板工程](../task_up/Readme.md) · [下板模块目录](docs/README.md)
 
 下板处理遥控器/键鼠输入、四轮底盘、裁判系统数据、底盘功率预算及板间 CAN 调度。Keil Target 为 `DM-MC02`。
 
@@ -31,7 +31,7 @@ flowchart LR
   SUPERCAP[超电 FDCAN1 收发/观察] --> LIMIT
 ```
 
-`main()` 初始化时钟、GPIO、DMA、SPI、FDCAN1/2/3、串口和定时器，再调用 `DEVICE_Init()`、`DRIVER_Init()` 并启动 FreeRTOS。当前 `BOARD_COMM_DEBUG=1` 且 `CHASSIS_BRINGUP_ENABLE=1`，选择调试底盘控制路径；该路径跳过常规 IMU/infantry 初始化，但仍初始化裁判对象、遥控、板间协议、底盘和超电通信。
+`main()` 初始化时钟、GPIO、DMA、SPI、FDCAN1/2/3、串口和定时器，再调用 `DEVICE_Init()`、`DRIVER_Init()` 并启动 FreeRTOS。当前固定采用现用底盘链路，依次初始化超电（通信开关允许时）、裁判、遥控、板间、发射、电机及跟随/小陀螺/输入/轮控；旧 IMU/infantry 初始化分支已删除。
 
 ## 工程结构与源码入口
 
@@ -47,10 +47,10 @@ task_down/Application/
 └─ TaskLayer/        Command、Ctrl、Monitor、Connect 任务
 ```
 
-| 源码入口 | 主要职责 | 当前调试分支行为 |
+| 源码入口 | 主要职责 | 当前链路行为 |
 | --- | --- | --- |
 | `Core/Src/main.c` | 外设初始化、设备/驱动初始化、启动 RTOS | 初始化 FDCAN、UART、DMA 等底层外设 |
-| `Application/DeviceLayer/device.c` | 设备对象初始化分支 | 初始化裁判、RC、底盘、发射与超电对象 |
+| `Application/DeviceLayer/device.c` | 现用设备对象初始化 | 初始化裁判、RC、底盘、发射与超电对象 |
 | `Application/TaskLayer/Command_Task.c` | DBUS 解析及键鼠状态 | 解析后延时 1 tick |
 | `Application/TaskLayer/control_task.c` | 输入、跟随/自旋、底盘、发射、超电发送 | 1 tick 控制循环 |
 | `Application/TaskLayer/connect_task.c` | D1/D2/D3/D5/D6 调度、D4条件发送 | 控制组预留FIFO，D3独立排期、D6新事件及100 ms心跳 |
@@ -82,7 +82,6 @@ FreeRTOS tick 为 1 kHz；当前任务使用 `osDelay(1)`，周期包含代码�
 | CtrlTask | AboveNormal / 2048 B | 输入仲裁 → 跟随/小陀螺 → 四轮控制 → 发射状态机 → 超电控制帧，再延时 1 tick |
 | MonitorTask | AboveNormal / 2048 B | 1 tick 循环；遥控、底盘电机、发射、板间、裁判和超电心跳 |
 | ConnectTask | High / 2048 B | 当前每 1 tick 尝试 D1/D2/D5；D3 每 10 ms 独立排期；D4 默认关闭 |
-| UpdataTask | BelowNormal / 1024 B | `BOARD_COMM_DEBUG=1` 时不创建；非调试分支才更新 IMU |
 
 任务栈值来自 `osThreadAttr_t.stack_size` 字节配置。ConnectTask 发送控制组前检查 FIFO 空位；空间不足时本轮延后，不拆开发送 D1/D2/D5。
 
@@ -125,11 +124,11 @@ UART5 DMA/IDLE 数据由 `rc_protocol`/`rc_sensor` 转成 `rc_dev.info`；Comman
 
 输入映射、快捷键生效档位、掉头状态阶段和反馈等待条件见[遥控与键鼠模块](docs/remote.md)。各模式先合成为 `chassis_cmd_t`；模式模块可能修改速度、有效位和 `source`，最终控制以 CtrlTask 本拍指令为准。
 
-`CHASSIS_MAX_VX/VY/WZ` 当前是 25/25/20 的控制域限幅值，并非文档定义的 m/s 或 rad/s。轮速反馈转换到 rad/s；通用 RM 电机协议含原始 rpm/count 数据。跟随依赖 C2 新鲜度，50 ms 超时或单次跳变超过 30 deg 会进入异常处理。
+`CHASSIS_MAX_VX/VY/WZ` 当前为 15/15/17 rad/s，均是输出轴轮速分量，不能直接解释成车体平移 m/s 或自转角速度。轮速反馈换算到输出轴 rad/s；通用 RM 电机协议含原始 rpm/count 数据。跟随依赖 C2 新鲜度，50 ms 超时或单次跳变超过 30 deg 会进入异常处理。
 
 ### 有效功率限制
 
-当前 `CHASSIS_POWER_LIMIT_ENABLE=1`，CtrlTask 每轮底盘控制调用 `Power_Limit_GetTarget()` 并对四轮输出应用共同缩放。目标预算使用有效裁判功率上限与缓冲能量；快照无效/过期/范围非法时使用固定 45 W 回退预算。缓冲能量低于 45 J 时触发强降额。模型/系数限幅只约束代码输出估算值，不能替代电气实测，也不证明实车一定满足裁判功率上限。
+当前 `CHASSIS_POWER_LIMIT_ENABLE=1`，CtrlTask 每轮底盘控制调用 `Power_Limit_GetTarget()` 并对四轮输出应用共同缩放。目标预算使用有效裁判功率上限与缓冲能量；快照无效/过期/范围非法时使用固定 45 W 回退预算。缓冲能量低于 45 J 时触发强降额。四组系数沿用国赛参考工程，第三、第四组共用；尚需人工确认本车适用性。模型/系数限幅只约束代码输出估算值，不能替代电气实测，也不证明实车一定满足裁判功率上限。
 
 超电反馈 `chassis_power/cap_voltage/cap_current/ability` 当前传入功率限制状态用于观察；`SUPERCAP_CAP_SWITCH=0`、`SUPERCAP_POWER_LIMIT=0`、预充/功率缓冲关闭，超电未作为功率闭环执行器。
 
@@ -137,7 +136,7 @@ UART5 DMA/IDLE 数据由 `rc_protocol`/`rc_sensor` 转成 `rc_dev.info`；Comman
 
 USART1 使用 DMA 接收后由空闲线处理函数调用 `judge_receive()`；解析帧头 `0xA5`、CRC8、命令 ID 和 CRC16，通过后更新裁判结构与时间戳。`0x0201` robot status 提供枪管热量上限/冷却率和底盘功率限制；`0x0202` power/heat 提供 17 mm 1 号枪管热量与 buffer energy。ConnectTask 将热量快照打包到 D3，功率限制独立读取 power snapshot。
 
-`BOARD_JUDGE_ENABLE` 当前定义为 0，但仓库未用它守护 USART1 初始化/裁判回调；裁判接收实际取决于 USART1 DMA/IDLE 驱动和有效帧。`judge.status` 在线标志也不能替代 `limit_seen/buffer_seen` 与时间戳新鲜度。
+无消费者的 `BOARD_JUDGE_ENABLE` 已删除；USART1 在现用初始化链路中启用，裁判接收取决于 DMA/IDLE 回调和有效帧。`judge.status` 在线标志也不能替代 `limit_seen/buffer_seen` 与时间戳新鲜度。
 
 ## FSM、协议与参数
 
@@ -156,11 +155,10 @@ USART1 使用 DMA 接收后由空闲线处理函数调用 `judge_receive()`；�
 
 | 配置文件 | 关键当前值/用途 |
 | --- | --- |
-| `Application/ConfigLayer/board_comm_config.h` | Debug=1；D1/D2=1 ms；D3=10 ms开；D4关闭；D5/D6开；D6心跳100 ms；热量有效300 ms、参数1500 ms |
-| `Application/ConfigLayer/chassis_config.h` | 底盘 bring-up/遥控/键鼠/跟随/小陀螺开关；速度环 kp=0.8；测试力矩 2 N·m；跟随/小陀螺力矩 4 N·m |
+| `Application/ConfigLayer/board_comm_config.h` | 固定现用链路；D1/D2=1 ms；D3=10 ms开；D4关闭；D5/D6开；D6心跳100 ms；热量有效300 ms、参数1500 ms |
+| `Application/ConfigLayer/chassis_config.h` | 遥控/键鼠/跟随/小陀螺开关；速度环 kp=0.8；测试力矩 2 N·m；跟随/小陀螺力矩 4 N·m |
 | `Application/ConfigLayer/power_limit_config.h` | 开关 1；回退 45 W；裁判上限 margin 5 W；buffer 目标 59 J、guard 45 J；时间步长上限 200 ms |
 | `Application/ConfigLayer/supercap_config.h` | bring-up 通信开、离线超时 100 ms；功率输出/预充/Turbo/缓冲开关均为 0 |
-| `Application/ConfigLayer/board_comm_config.h` | `BOARD_CAP_ENABLE=0`；裁判数据接收仍供热量、弹速等链路使用 |
 
 ### 功率目标与实际输出的关系
 

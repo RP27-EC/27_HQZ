@@ -120,7 +120,7 @@ int main(void)
 	DEVICE_Init();
 	Module_Init();
 	DRIVER_Init();
-	/* CAN_Filter_Init() is already called by DRIVER_Init(). */
+	/* 驱动初始化已配置CAN过滤 */
 	// CAN_Filter_Init();
 
 

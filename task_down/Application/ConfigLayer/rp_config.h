@@ -11,22 +11,6 @@
 
 #include "rp_device_config.h"
 
-#include "rp_user_config.h"
-
-#define   CAP_SWITCH             1
-
-#define   POWER_LIMIT_SWITCH     1
-
-#define   CHASSIS_SWITCH         1
-
-#define   GIMBAL_SWITCH          1
-
-#define   LAUNCH_SWITCH          1
-
-#define   SLIP_SWITCH            1
-
-#define   TURN_MODE              0
-
 
 
 
@@ -44,5 +28,3 @@
 
 #define IMU_USE_EKF 	1
 #endif
-
-

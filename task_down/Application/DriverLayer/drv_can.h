@@ -20,10 +20,10 @@ extern uint8_t CAN2_1FF_DATA[8];
 extern FDCAN_HandleTypeDef hfdcan1;
 extern FDCAN_HandleTypeDef hfdcan2;
 extern FDCAN_HandleTypeDef hfdcan3;
-/* struct */
+/* CAN接收帧缓存 */
 typedef struct {
-	FDCAN_RxHeaderTypeDef header;
-	uint8_t				data[8];
+	FDCAN_RxHeaderTypeDef header; // 接收帧头，格式见HAL类型
+	uint8_t				data[8]; // 接收载荷，8字节
 } CAN_RxFrameTypeDef;
 void CAN1_Filter_Init(void);
 void CAN2_Filter_Init(void);

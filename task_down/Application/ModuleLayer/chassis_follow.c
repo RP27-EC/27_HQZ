@@ -282,8 +282,7 @@ static uint8_t Chassis_Follow_DataValid(void)
     return 1u;
 }
 
-/* 当前跟随中心：键鼠掉头后取掉头基准（0 或 180deg），否则用配置中心。
- * 基准由 chassis_input.c 维护，退出键鼠时它会复位回 0。 */
+/* 键鼠取掉头基准为跟随中心 */
 static float Chassis_Follow_CenterRad(void)
 {
 #if CHASSIS_FOLLOW_YAW_REFERENCE_ENABLE

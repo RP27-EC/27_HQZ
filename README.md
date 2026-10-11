@@ -6,6 +6,8 @@
 
 本节按当前工作区源码整理，适合项目介绍、答辩和复习。参数是代码默认值；运行时的 `gimbal_tune`、`lift_tune` 等调参对象可能被人工修改。功能路径已做源码核对，控制效果、功率精度和机构可靠性仍需人工实机验证。
 
+清理与来源依据：[删除清单、参考关系及人工验收](docs/code_cleanup_and_provenance.md)。
+
 快速跳转：[技术要点](#技术要点做什么怎样实现代码在哪里) · [动作与源码](#按一个动作追完整代码链) · [底盘算法](#底盘算法怎样讲) · [云台算法](#云台算法怎样讲) · [升降与发射](#升降与发射状态机怎样讲) · [功率与热量](#功率和热量怎样讲) · [参数速查](#关键参数速查数值单位和作用) · [常见追问](#常见追问与回答边界) · [构建入口](#getting-started)
 
 ### 一分钟介绍
@@ -44,11 +46,11 @@
 
 ### 底盘算法怎样讲
 
-1. **输入统一**：遥控/键鼠先转成 `chassis_cmd_t` 中的 `vx/vy/wz`、来源和有效位。当前三个量按工程控制域使用，不可把 `25` 直接介绍成 `25 m/s`。
+1. **输入统一**：遥控/键鼠先转成 `chassis_cmd_t` 中的 `vx/vy/wz`、来源和有效位。当前三个量是输出轴轮速分量（rad/s），不直接表示车体平移 m/s 或自转 rad/s。
 2. **跟随误差**：`yaw_error = wrapPi(yaw_relative - center)`，把误差归一到 ±π；前后掉头会改变跟随中心，平移旋转仍使用实际相对角。
 3. **旋转目标**：比例纠偏叠加摩擦补偿、操作角速度前馈和特定恢复阶段的辅助前馈，再做方向/幅值、接管融合和斜坡限制。普通纠偏停止/恢复门槛为 1°/2°，采用滞回避免边界反复启停。
 4. **平移坐标转换**：`vx' = cos(yaw)·vx - sin(yaw)·vy`，`vy' = sin(yaw)·vx + cos(yaw)·vy`，随后按配置方向系数输出。这样云台朝向改变时，操作者的平移输入仍可按云台方向解释。
-5. **四轮分配**：左前 `-vx+vy+wz`，左后 `-vx-vy+wz`，右前 `vx+vy+wz`，右后 `vx-vy+wz`。当前实现直接在控制域组合；`chassis_config.h` 中的几何尺寸未在该函数中用于标准 SI 运动学换算。
+5. **四轮分配**：左前 `-vx+vy+wz`，左后 `-vx-vy+wz`，右前 `vx+vy+wz`，右后 `vx-vy+wz`。当前实现直接叠加输出轴轮速分量（rad/s），未引入轮半径和轮距换算车体 SI 速度；原来未被使用的几何配置已删除。
 6. **轮速闭环**：每轮比较目标与反馈，当前 `KP=0.8`、`KI=KD=0`；按模式限矩后再应用共同功率比例。任意一轮离线则停止四轮输出。
 
 源码重点：[chassis_follow.c](task_down/Application/ModuleLayer/chassis_follow.c)、[chassis_control.c](task_down/Application/ModuleLayer/chassis_control.c)。
@@ -81,7 +83,7 @@
 | 约束 | 实现方法 | 可讲清的边界 |
 | --- | --- | --- |
 | 底盘功率预算 | 有效裁判上限先减 5 W；以 59 J 为缓冲目标，比例/积分扣减预算；低于 45 J 再限制预算上界 | 无效快照回退 45 W；降额立即生效，恢复需运动有效和新缓冲帧，并限制恢复速度 |
-| 四轮功率模型 | 单轮模型为 `k0+k1·I+k2·rpm+k3·I·rpm+k4·I²+k5·rpm²`；`I` 是电流协议原始计数 | 系数沿用模板，每轮有独立系数；预测值不是裁判实测值，实车精度需标定 |
+| 四轮功率模型 | 单轮模型为 `k0+k1·I+k2·rpm+k3·I·rpm+k4·I²+k5·rpm²`；`I` 是电流协议原始计数 | 四组系数沿用国赛参考工程，第三、第四组相同；尚需人工确认本车适用性，预测值不是裁判实测值 |
 | 公共比例限制 | 预测功率超预算时二分搜索 `scale∈[0,1]`，四轮力矩同乘该比例，再按发送量化值复算 | 保持候选力矩方向与配比；若零力矩的预测功率仍超预算，则标记 `target_unreachable`，不会额外施加制动力矩 |
 | 本地热量估计 | D3 参数/热量有效且新鲜才建立预算；结合发射增热和冷却更新本地估计 | CAN 心跳在线不能替代 D3 flags、源序号和数据新鲜度；训练模式默认关闭 |
 | 热量限频 | 每发估算增热 10；连发余量低于 20 停发、恢复到至少 30 解锁；按冷却率、余量和机械速度选择射频 | 配置上限 15 发/s，还受 6000 deg/s 拨盘速度与每发位移限制；上限不是任何状态下的实际射频 |
@@ -99,8 +101,8 @@
 
 | 参数 | 当前默认值 | 单位/含义 |
 | --- | --- | --- |
-| `CHASSIS_BRINGUP_ENABLE / CHASSIS_RC_INPUT_ENABLE / CHASSIS_KEYBOARD_INPUT_ENABLE` | 1 / 1 / 1 | 调试底盘、遥控输入、键鼠输入开关 |
-| `CHASSIS_MAX_VX / CHASSIS_MAX_VY / CHASSIS_MAX_WZ` | 25 / 25 / 20 | 输入控制域限幅，不能直接解释成 SI 速度 |
+| `CHASSIS_RC_INPUT_ENABLE / CHASSIS_KEYBOARD_INPUT_ENABLE` | 1 / 1 | 当前链路固定；遥控输入、键鼠输入开关 |
+| `CHASSIS_MAX_VX / CHASSIS_MAX_VY / CHASSIS_MAX_WZ` | 15 / 15 / 17 | 输出轴轮速分量 rad/s，不能直接解释成车体速度 |
 | `CHASSIS_RC_AXIS_MAX / CHASSIS_RC_DEADBAND` | 660 / 30 | 遥控原始通道满幅/死区 |
 | `CHASSIS_KEY_SPEED_BOOST / CHASSIS_KEY_SPEED_SLOW` | 1.5 / 0.5 | 键盘速度倍率 |
 | `CHASSIS_SPEED_KP / CHASSIS_SPEED_KI / CHASSIS_SPEED_KD` | 0.8 / 0 / 0 | 当前轮速环增益，纯 P |
@@ -260,7 +262,7 @@ flowchart LR
   FEEDBACK --> INPUT
 ```
 
-当前下板 `BOARD_COMM_DEBUG=1`、`CHASSIS_BRINGUP_ENABLE=1`：运行调试底盘链路；`UpdataTask`（IMU 更新）和 UI 任务不创建。裁判 UART 解析、裁判对象初始化及 D3 发送路径仍在工程内。宏 `BOARD_JUDGE_ENABLE` 当前定义为 `0`，但源码未以该宏屏蔽 UART1 裁判接收路径。运行状态请以各板 README 中的宏和调用路径为准。
+当前下板固定运行 `chassis_input/control/follow/spin` 与 `launch` 链路，创建 Command/Ctrl/Monitor/Connect 四项任务。旧业务、UpdataTask、停用外置 IMU、HT 和旧超电/无线充电实现已移除；USART1 裁判接收、D3/D6 转发及现用 supercap 通信保留。上板固定使用 BMI088；USART1 接收未启用。
 
 ## Prerequisites
 
@@ -284,11 +286,11 @@ flowchart LR
 | 上板 | BMI088（SPI1）；DM Yaw/Pitch；RM2006 升降、RM3508 摩擦轮、KT4005 拨盘；CAN1/CAN2 | CAN1 PD0/PD1；CAN2 PB5/PB6 |
 | 下板 | RM3508 四轮；UART5 DBUS；USART1 裁判 UART；FDCAN1/2/3 外设已初始化 | FDCAN1 PD0/PD1；FDCAN2 PB5/PB6；FDCAN3 PD12/PD13；UART5 RX PD2；USART1 RX PA10 |
 
-表内为 MCU 管脚映射，不是板端连接器编号；总线电平、收发器、端接、电源和线序需按实物原理图确认。下板 H723 工程初始化了三路 FDCAN，但当前调试配置下板间链路走 FDCAN2、四轮/超电驱动路径使用 FDCAN1；外设已初始化不代表每路业务都启用。
+表内为 MCU 管脚映射，不是板端连接器编号；总线电平、收发器、端接、电源和线序需按实物原理图确认。下板 H723 工程初始化了三路 FDCAN，但当前配置下板间链路走 FDCAN2、四轮/超电驱动路径使用 FDCAN1；外设已初始化不代表每路业务都启用。
 
 ## Getting Started
 
-### 构建
+### Quick Start：人工构建
 
 在 Windows PowerShell 中进入仓库根目录；先安装 Keil MDK、ARM Compiler 5 和上表所列 Device Pack，并确认 `UV4.exe` 在 `PATH` 中。仓库没有子模块，不需要执行 `git submodule update`。
 
@@ -304,7 +306,7 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 | 工程 | 源码可确认的表现 | 不代表什么 |
 | --- | --- | --- |
 | 上板 | `LedTask` 启动后绿灯常亮 500 ms，再按配置闪烁；观察 `imu_dev.work_state`、DM/RM/KT 电机状态、`Board_HeartBeat.status` | 绿灯闪烁只表明 LED 任务运行，不代表 IMU、电机、通信或机构自检通过 |
-| 下板调试配置 | `BOARD_COMM_DEBUG=1` 时创建 Command/Ctrl/Monitor/Connect 任务；无等价的故障码启动灯/串口启动日志 | FDCAN 外设已初始化不代表收到电机/超电反馈；裁判模块在线还需看数据新鲜度 |
+| 下板当前配置 | 创建 Command/Ctrl/Monitor/Connect 四项任务；无等价的故障码启动灯/串口启动日志 | FDCAN 外设已初始化不代表收到电机/超电反馈；裁判模块在线还需看数据新鲜度 |
 
 下板建议在 Keil Watch 观察 `rc_dev.work_state`、`chassis_ctrl.state.all_online`、`board.status->status`、`judge.status->status`、`supercap.state` 和 `power_limit_state`。源码未发现统一的上电自检通过标志或常驻串口启动日志，不能用一个灯色推断整车安全状态。
 
@@ -364,7 +366,7 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 | 云台归中/输出 | `task_up/Application/ConfigLayer/gimbal_init_config.h`、`task_up/Application/ModuleLayer/gimbal.h` | 归中目标 0 deg；超时 6000 ms；稳定 30 ms；Yaw/Pitch 力矩上限 6 N·m；Pitch 重力补偿开关 |
 | 升降 | `task_up/Application/ConfigLayer/lift_config.h` | 行程 280 电机圈；找顶速度 2865 rpm；找顶/运动超时 90000 ms；位置量以 count 计，不等于机械 mm |
 | 发射/热量 | `task_up/Application/ConfigLayer/launcher_config.h` | 6000 rpm基准、22 m/s目标、24 m/s锁止；单发5400～6000 rpm；热量余量20、恢复30、最大15发/s；D3超时100 ms |
-| 底盘 | `task_down/Application/ConfigLayer/chassis_config.h` | `CHASSIS_MAX_VX/VY/WZ=25/25/20`（工程控制域，不直接等同 SI 单位）；普通跟随停止1°/恢复2°，特殊回正到位0.5°后恢复普通死区；停稳受扰和小陀螺退出可叠加辅助前馈，见[控制说明](task_down/docs/chassis.md#跟随闭环与故障锁存)；反馈超时50 ms；轮力矩受模式限幅 |
+| 底盘 | `task_down/Application/ConfigLayer/chassis_config.h` | `CHASSIS_MAX_VX/VY/WZ=15/15/17`（输出轴轮速分量 rad/s，不直接表示车体速度）；普通跟随停止1°/恢复2°，特殊回正到位0.5°后恢复普通死区；停稳受扰和小陀螺退出可叠加辅助前馈，见[控制说明](task_down/docs/chassis.md#跟随闭环与故障锁存)；反馈超时50 ms；轮力矩受模式限幅 |
 | 底盘功率 | `task_down/Application/ConfigLayer/power_limit_config.h` | 开关 1；裁判快照无效时回退预算 45 W；在线余量 5 W；超电反馈当前只记录，不参与该闭环 |
 | 板间帧 | `task_down/Application/ConfigLayer/board_comm_config.h`、`task_up/Application/ConfigLayer/board_remote_config.h` | D1/D2 1 ms、D3 10 ms、D4 关闭、D5 开启；上板每类反馈最短 5 ms |
 

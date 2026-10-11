@@ -6,6 +6,7 @@
 uint32_t micros(void);
 void delay_us(uint32_t us);
 void delay_ms(uint32_t ms);
+void DWT_Init(void);
+uint32_t DWT_GetCycleCount(void);
 
 #endif
-

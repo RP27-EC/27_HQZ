@@ -1,6 +1,6 @@
 # 上板固件（STM32F407IGHx）
 
-[返回项目总览](../README.md) · [下板工程](../task_down/Readme.md) · [上板模块目录](docs/README.md)
+[清理与来源说明](../docs/code_cleanup_and_provenance.md) · [返回项目总览](../README.md) · [下板工程](../task_down/Readme.md) · [上板模块目录](docs/README.md)
 
 上板采集 BMI088 姿态数据，执行云台/升降/发射控制并通过 CAN2 接收下板命令、回传状态。Keil Target 为 `My_C`。
 

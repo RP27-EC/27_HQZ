@@ -5,6 +5,7 @@
 
 SuperCap_t supercap;
 
+/* 原始量±32000线性映射 */
 static float SuperCap_Scale(int16_t value, float min_value, float max_value)
 {
     float ratio = ((float)value + 32000.0f) / 64000.0f;
@@ -44,6 +45,7 @@ void SuperCap_Tx(void)
 
     SuperCap_Protocol_Encode(&control, tx_buf);
     CAN_SendData(&hfdcan1, SUPERCAP_CAN_TX_ID, tx_buf);
+    /* 统计发送尝试非成功确认 */
     supercap.tx_count++;
 }
 
@@ -67,6 +69,7 @@ void SuperCap_Heartbeat(void)
         return;
     }
 
+    /* 离线判据采用实际接收时刻 */
     if ((HAL_GetTick() - supercap.last_rx_ms) >= SUPERCAP_OFFLINE_TIMEOUT_MS)
     {
         supercap.offline_count = SUPERCAP_OFFLINE_TIMEOUT_MS;

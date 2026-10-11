@@ -2,8 +2,6 @@
 
 #include "drv_uart.h"
 #include "string.h"
-#include <stdio.h>//串口打印
-#include <stdarg.h>//串口打印
 
 extern UART_HandleTypeDef huart1;
 //extern UART_HandleTypeDef huart3;
@@ -51,18 +49,18 @@ static void dma_m1_rxcplt_callback(DMA_HandleTypeDef *hdma)
 /* 串口空闲中断回调 */
 static void uart_rx_idle_callback(UART_HandleTypeDef* huart)
 {
-	/* clear idle it flag avoid idle interrupt all the time */
+	/* 先清空闲标志防重复中断 */
 	__HAL_UART_CLEAR_IDLEFLAG(huart);	  //清除中断标志位
-	/* handle received data in idle interrupt */
+	/* 空闲中断按实际帧长分发 */
 	if (huart == &huart3)
 	{
 		//表示接收到遥控器数据，遥控器在线
 //		rc_dev.work_state=DEV_ONLINE;
 		//接下来开始切换DMA缓冲区，
-		/* clear DMA transfer complete flag */
+		/* 清DMA完成标志 */
 		__HAL_DMA_DISABLE(huart->hdmarx);
 
-		/* handle dbus data dbus_buf from DMA */
+		/* 分发当前DMA接收缓存 */
 		//uint32_t status = taskENTER_CRITICAL_FROM_ISR();
 		//判断是否接受到足够的一个数据帧，NDTR是DMA剩余传输字节数，如果满了并且是循环模式就进缓冲区2，不然就进1
 		if ((USART3_RX_BUF_LEN - huart->hdmarx->Instance->NDTR) == USART3_RX_DATA_FRAME_LEN)
@@ -74,29 +72,29 @@ static void uart_rx_idle_callback(UART_HandleTypeDef* huart)
 		}
 		//taskEXIT_CRITICAL_FROM_ISR(status);
 
-		/* restart dma transmission */
+		/* 恢复DMA接收 */
 		__HAL_DMA_SET_COUNTER(huart->hdmarx, USART3_RX_BUF_LEN);  //设置DMA缓冲区总长度
 		__HAL_DMA_ENABLE(huart->hdmarx);	  						//开启DMA
 	}
   else if (huart == &huart1)
 	{
-		/* clear DMA transfer complete flag */
+		/* 清DMA完成标志 */
 		__HAL_DMA_DISABLE(huart->hdmarx);
-		/* handle dbus data dbus_buf from DMA */
+		/* 分发当前DMA接收缓存 */
 		USART1_rxDataHandler(usart1_dma_rxbuf);
 		memset(usart1_dma_rxbuf, 0, USART1_RX_BUF_LEN);  //清空串口DMA缓冲区
-		__HAL_DMA_SET_COUNTER(huart->hdmarx, USART1_RX_BUF_LEN); /*imu_xrobot 让DMA重置时重置计数器*/
-		/* restart dma transmission */	  
+		__HAL_DMA_SET_COUNTER(huart->hdmarx, USART1_RX_BUF_LEN);
+		/* 恢复DMA接收 */
 		__HAL_DMA_ENABLE(huart->hdmarx);
 	}
 	else if (huart == &huart6)
 	{
-		/* clear DMA transfer complete flag */
+		/* 清DMA完成标志 */
 		__HAL_DMA_DISABLE(huart->hdmarx);
-		/* handle dbus data dbus_buf from DMA */
+		/* 分发当前DMA接收缓存 */
 		USART6_rxDataHandler(usart6_dma_rxbuf);//处理数据
 		memset(usart6_dma_rxbuf, 0, USART6_RX_BUF_LEN);//清空串口DMA缓冲区
-		/* restart dma transmission */	  
+		/* 恢复DMA接收 */
 		__HAL_DMA_ENABLE(huart->hdmarx);
 	}
   
@@ -307,22 +305,7 @@ void USART6_Init(void)
 			  USART6_RX_BUF_LEN);
 }
 
-/*
-* @brief 串口打印
-* @note  要求波特率115200
-* @examplet t+= 0.1;
-*			UART_printf("samples:%f, %f, %f, %f\n", sin(t), sin(2*t), sin(3*t), sin(4*t));
-*/
-void  UART_printf(char *format, ...)
-  {
-      char String[100];
-      va_list arg;	
-      va_start(arg, format);
-      vsprintf(String, format, arg);
-      va_end(arg);
-      
-      HAL_UART_Transmit(&huart6, (uint8_t *)String, strlen(String), 100);
-  }
+
 
   
 /* rxData Handler [Weak] functions -------------------------------------------*/
@@ -346,7 +329,3 @@ __WEAK void USART3_rxDataHandler(uint8_t *rxBuf)
 __WEAK void USART6_rxDataHandler(uint8_t *rxBuf)
 {	
 }
-
-
-
-

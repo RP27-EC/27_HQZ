@@ -21,10 +21,10 @@ typedef enum
 
 typedef struct
 {
-    launcher_state_e state;    /* 当前运行阶段 */
+    launcher_state_e state; // 机构或拨盘阶段，0~9
     uint32_t state_tick;       /* 阶段进入时刻，ms */
     uint32_t last_repeat_tick; /* 上次连发时刻，ms */
-    uint32_t jam_tick;         /* 堵转确认计数，ms */
+    uint32_t jam_tick; // 连续堵转确认，调用次数
 
     float fric_target_rpm;  /* 目标转速，rpm */
     float fric_l_speed_rpm; /* 左轮反馈转速，rpm */
@@ -34,11 +34,11 @@ typedef struct
     int32_t dial_target_angle; /* 目标角度，count */
     int32_t dial_zero_angle;   /* 上电零点，count */
 
-    uint8_t enabled;          /* 1 = 机构使能 */
-    uint8_t fric_ready;       /* 1 = 摩擦轮达速 */
-    uint8_t dial_online;      /* 1 = 拨盘在线 */
-    uint8_t last_shoot_level; /* 上周期发射电平 */
-    uint8_t fault;            /* 1 = 机构故障 */
+    uint8_t enabled; // 摩擦轮控制使能，0/1
+    uint8_t fric_ready; // 双轮达速确认，0/1
+    uint8_t dial_online; // 拨盘在线，0/1
+    uint8_t last_shoot_level; // 上周期发射电平，0/1
+    uint8_t fault; // 机构故障锁定，0/1
     float fric_l_output_raw; // 左轮最终电流指令，原始量
     float fric_r_output_raw; // 右轮最终电流指令，原始量
 } launcher_t;
@@ -99,7 +99,7 @@ typedef enum
 
 typedef struct
 {
-    launcher_state_e state; // 拨盘独立阶段，0~9
+    launcher_state_e state; // 机构或拨盘阶段，0~9
     launcher_dial_reject_e reject_reason; // 最近拒绝原因，0~8
     int64_t target_angle; // 累计目标，count
     int64_t target_error; // 目标减反馈，count

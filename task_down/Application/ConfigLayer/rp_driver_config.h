@@ -4,7 +4,6 @@
 #define __RP_DRIVER_CONFIG_H
 #include "stm32h7xx_hal.h"
 #include "stdbool.h"
-#define configDRV_CAN_USE_MAIL  1
 
 /* enum */
 typedef enum drv_type{
@@ -72,5 +71,3 @@ typedef struct drv_uart {
 } drv_uart_t;
 
 #endif
-
-

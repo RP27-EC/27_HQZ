@@ -525,7 +525,6 @@ typedef struct
 } judge_power_snapshot_t;
 
 uint8_t Judge_GetPowerSnapshot(judge_power_snapshot_t *snapshot);
-uint8_t Judge_GetPowerData(uint16_t *limit_w, uint16_t *buffer_j);
 
 typedef struct
 {
@@ -558,4 +557,3 @@ void Shooting_Cmd_Excute_Tick_Calculating(uint8_t flag);
 void Speed_Statistic(void);
 
 #endif
-

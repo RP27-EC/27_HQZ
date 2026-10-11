@@ -4,8 +4,6 @@
 #define __CAN_PROTOCOL_H
 #include "driver.h"
 #include "device.h"
-#define SLAVE_TX_ID
-#define SLAVE_RX_ID
 
 /* CAN 接收分发 */
 void CAN1_rxDataHandler(uint32_t canId, uint8_t *rxBuf); /* CAN1 分发 */
@@ -16,5 +14,3 @@ void CAN_SendAllZero(void); /* 全零输出 */
 
 
 #endif
-
-

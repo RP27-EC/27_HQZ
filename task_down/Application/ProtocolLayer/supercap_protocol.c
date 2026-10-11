@@ -5,10 +5,11 @@
 
 static int16_t SuperCap_ReadInt16(const uint8_t *data)
 {
-    /* 模板按低字节在前 */
+    /* 16位字段低字节在前 */
     return (int16_t)(((uint16_t)data[1] << 8) | data[0]);
 }
 
+/* 接收载荷须至少8字节 */
 void SuperCap_Protocol_Decode(const uint8_t *data, SuperCap_Feedback_t *feedback)
 {
     feedback->chassis_power = SuperCap_ReadInt16(&data[0]);
@@ -18,6 +19,7 @@ void SuperCap_Protocol_Decode(const uint8_t *data, SuperCap_Feedback_t *feedback
     feedback->pre_charge_mode = (data[6] >> 1) & 0x01u;
 }
 
+/* 位域仅保留各自最低位 */
 void SuperCap_Protocol_Encode(const SuperCap_Control_t *control, uint8_t *data)
 {
     memset(data, 0, 8);

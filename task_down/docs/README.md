@@ -59,7 +59,7 @@ flowchart LR
 
 ## 控制域与物理量边界
 
-- `CHASSIS_MAX_VX/VY/WZ` 与 follow/spin 输出使用工程控制域数值，不应直接写成 m/s 或 rad/s；只有代码定义明确换算关系时才标物理单位。
+- `CHASSIS_MAX_VX/VY/WZ` 与 follow/spin 输出是输出轴轮速分量 rad/s，不能直接作为车体 m/s 或自转角速度；目标与反馈单位须一致。
 - RM 电机反馈同时保留转子 rpm 和换算后的输出轴 rad/s；四轮 PID 力矩为 N·m 控制域，发送帧则编码为 RM 原始电流计数。
 - 裁判热量与 buffer energy 使用裁判字段单位；超电 `chassis_power` 的软件字段量纲未确认，不可据字段名当作 W。
 - FDCAN 本地入队成功、对端 CAN 心跳、协议字段有效是三种不同证据，应分开确认。

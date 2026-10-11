@@ -4,7 +4,7 @@
 
 ## 总线和任务入口
 
-下板 FDCAN2 PB5/PB6 与上板 bxCAN CAN2 相连，11-bit 标准 ID、经典 CAN、8-byte 数据帧。发送调度位于 `task_down/Application/TaskLayer/connect_task.c`，协议编码和上板反馈解码位于 `ProtocolLayer/board_protocol.c`。当前 `BOARD_COMM_DEBUG=1`、`BOARD_COMM_TX_ENABLE=1`。
+下板 FDCAN2 PB5/PB6 与上板 bxCAN CAN2 相连，11-bit 标准 ID、经典 CAN、8-byte 数据帧。发送调度位于 `task_down/Application/TaskLayer/connect_task.c`，协议编码和上板反馈解码位于 `ProtocolLayer/board_protocol.c`。当前固定使用现用链路，`BOARD_COMM_TX_ENABLE=1`。
 
 | 报文 | 方向 | 生产者/消费者 | 当前配置 |
 | --- | --- | --- | --- |

@@ -6,7 +6,7 @@
 
 void Module_Init(void)
 {
-    /* Gimbal.init is NULL until Gimbal_Init() sets the function pointers. */
+    /* 直接初始化后才可使用绑定接口 */
     Gimbal_Init(&Gimbal);
     Lift_Init();
 }

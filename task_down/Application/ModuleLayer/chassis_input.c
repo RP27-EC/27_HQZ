@@ -275,7 +275,7 @@ static void Chassis_Input_UturnUpdate(const rc_data_t *rc)
 
     if (uturn_state == CHASSIS_UTURN_PREPARE)
     {
-        /* NOTE: 时间与发送计数同时满足才交接。 */
+        /* NOTE: 双门限均满足 */
         if (((now - uturn_phase_tick) >= handoff_ms) &&
             (uturn_handoff_cycles >= CHASSIS_KEY_UTURN_HANDOFF_PERIODS))
         {
@@ -381,10 +381,8 @@ static void Chassis_Input_Keyboard(chassis_cmd_t *cmd, const rc_data_t *rc)
         scale = CHASSIS_KEY_SPEED_SLOW;
     }
 
-    /* 机械档的平移是纯底盘系，没人再帮它转向，所以基准在后方时这里整体反向，
-     * 保证 W 始终朝云台（视线）方向开。
-     * 跟随/小陀螺档的平移本来就按云台实际相对角旋转（chassis_follow/spin），
-     * 这里不能重复反向，否则两次旋转互相抵消。 */
+    /* 机械后向基准反转平移
+     * 跟随与小陀螺另做坐标旋转 */
     if ((keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH) &&
         (Chassis_Input_IsKeyboardYawRear() != 0u))
     {
@@ -396,11 +394,10 @@ static void Chassis_Input_Keyboard(chassis_cmd_t *cmd, const rc_data_t *rc)
     cmd->vy = CHASSIS_KEY_VY_SIGN * left * scale * CHASSIS_MAX_VY;
     cmd->wz = CHASSIS_KEY_WZ_SIGN * spin * scale * CHASSIS_MAX_WZ;
 
-    /* 机械档：鼠标 X 直接转底盘，等价遥控 S1 下位时 ch0 的转向作用。
-     * 云台在机械档锁机械零位，底盘一转它就跟着转，视觉上像云台跟随底盘。 */
+    /* 机械档鼠标控制底盘转向 */
     if (keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH)
     {
-        /* 只对鼠标项限幅，Q/E 的 Shift 加速口径与改动前保持一致，不能被这里压回去 */
+        /* 鼠标转向单独限幅 */
         wz_key = constrain(rc->mouse_x * CHASSIS_KEY_MECH_MOUSE_WZ_GAIN,
                            -CHASSIS_KEY_MECH_MOUSE_WZ_MAX,
                            CHASSIS_KEY_MECH_MOUSE_WZ_MAX);
@@ -483,8 +480,7 @@ void Chassis_Input_Update(void)
     last_f_pressed = f_pressed;
 
     Chassis_Input_KeyboardModeUpdate(rc);
-    /* R 掉头（机械档翻基准 / 跟随档起掉头动作）必须在驱动之前更新，
-     * 同拍的 WASD 反向才跟得上 */
+    /* 先更新掉头基准再映射平移 */
     Chassis_Input_UturnUpdate(rc);
 
     /* 键鼠模式优先于遥控摇杆 */

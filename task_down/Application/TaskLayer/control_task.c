@@ -1,8 +1,6 @@
 /* control_task.c - 控制任务 */
 
 #include "control_task.h"
-#include "cap.h"
-#include "infantry.h"
 #include "board_protocol.h"
 #include "rc_sensor.h"
 #include "board_comm_config.h"
@@ -18,28 +16,24 @@
 
 typedef struct
 {
-    volatile uint8_t rc_state;
-    volatile uint8_t s1;
-    volatile uint8_t s2;
-    volatile uint8_t b_value;
-    volatile uint8_t button_event;
-    volatile uint8_t is_hole;
-    volatile uint8_t exit_pending;
-    volatile uint8_t hole_rear_blocked; /* 反向时按 B 被拒绝 */
+    volatile uint8_t rc_state; // 遥控在线状态，见设备枚举
+    volatile uint8_t s1; // 右拨杆编码，1/2/3
+    volatile uint8_t s2; // 左拨杆编码，1/2/3
+    volatile uint8_t b_value; // B键当前电平，0/1
+    volatile uint8_t button_event; // B键按下边沿，0/1
+    volatile uint8_t is_hole; // 有效过洞请求，0/1
+    volatile uint8_t exit_pending; // 退出等待有效，0/1
+    volatile uint8_t hole_rear_blocked; // 后向过洞请求拒绝，0/1
 } board_lift_debug_t;
 
 volatile board_lift_debug_t board_lift_dbg;
 volatile uint8_t board_hole_request;
 volatile uint8_t board_hole_exit_pending;
 
-/* 云台机械模式前后方向状态：0 前，1 后。
- * 放在文件级是因为过洞命令也要判它（反向不允许进狗洞），而且 R 键现在在
- * 任何 S1 位置都要能切换，只有遥控离线才复位。 */
+/* 遥控前后基准，0前1后 */
 static uint8_t board_gimbal_yaw_rear = 0u;
 
-#if BOARD_COMM_DEBUG
-/* 生效中的"前后方向"：键鼠模式看掉头基准，遥控模式看上面那套状态。
- * 过洞的反向拦截必须用生效值，否则键鼠掉头后判断会失效。 */
+/* 按输入源读取有效前后基准 */
 static uint8_t Board_Debug_YawRear(void)
 {
     if (Chassis_Input_IsKeyboardMode() != 0u)
@@ -57,7 +51,7 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     static uint32_t hole_exit_tick = 0u;
     uint32_t now = HAL_GetTick();
     uint8_t b_now;
-    uint8_t button_event;
+    uint8_t button_event; // B键按下边沿，0/1
 
     board_lift_dbg.rc_state = (uint8_t)rc_dev.work_state;
     board_lift_dbg.s1 = (uint8_t)rc_info->s1.value;
@@ -85,10 +79,7 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     {
         if (board_hole_request == 0u)
         {
-            /*
-             * 狗洞只允许云台正对前方时进入。反向时忽略这次按键、不置位请求，
-             * 上板升降因此不会进入对位/下压流程。
-             */
+            /* 后向基准拒绝过洞请求 */
             if (Board_Debug_YawRear() == 0u)
             {
                 board_hole_request = 1u;
@@ -126,10 +117,7 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     if ((board_hole_request != 0u) || (board_hole_exit_pending != 0u))
     {
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
-        /*
-         * 过洞强制云台回前方零位，掉头基准也要跟着回前方：否则跟随中心还停在
-         * 180deg，云台被拉回前方时跟随环会用 180deg 误差把底盘转过去。
-         */
+        /* 过洞同步复位掉头与跟随基准 */
         Chassis_Input_ResetYawReference();
         board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = BOARD_MEC_YAW_FRONT_RAD;
         board.tx_pkt->gimbal_target_pkt.pitch_mec_tar =
@@ -161,7 +149,7 @@ static void Board_R_Turn_Update(uint8_t start, uint8_t cancel)
         return;
     }
 
-    /* 跟随掉头沿用原到位判据。 */
+    /* 跟随掉头状态接管完成判据 */
     if (Chassis_Input_IsUturnActive() != 0u)
     {
         active = 0u;
@@ -219,7 +207,7 @@ static void Board_R_Turn_Update(uint8_t start, uint8_t cancel)
     board.tx_pkt->car_pkt.r_turn_active = active;
 }
 
-/* 调试模式下用遥控右摇杆生成云台机械角目标 */
+/* 调试模式映射云台目标 */
 static void Board_Debug_Gimbal_Command(void)
 {
     static uint8_t mec_mode_active = 0u; /* 机械角模式已激活 */
@@ -258,7 +246,7 @@ static void Board_Debug_Gimbal_Command(void)
 #if BOARD_LIFT_ENABLE
     if (Board_Debug_Hole_Command(rc_info) != 0u)
     {
-        /* 过洞期间云台被强制正前方，不响应 R；方向状态留到退出后再改 */
+        /* 过洞期间屏蔽R掉头 */
         mec_mode_active = 0u;
         last_r_pressed = r_pressed;
         Board_R_Turn_Update(0u, 1u);
@@ -266,12 +254,7 @@ static void Board_Debug_Gimbal_Command(void)
     }
 #endif
 
-    /*
-     * R 键分工：
-     *   键鼠模式：R 归 chassis_input.c 管（机械档翻掉头基准、跟随档起掉头动作），
-     *             这里不再动 S1 下位那套前后零位预置，两套状态互不干扰。
-     *   遥控模式：保持原行为，R 在任何 S1 位置都生效，切到 S1 下位时立刻用上。
-     */
+    /* 键鼠与遥控独立维护掉头状态 */
     if (keyboard_active == 0u)
     {
         if ((r_pressed != 0u) && (last_r_pressed == 0u))
@@ -293,19 +276,19 @@ static void Board_Debug_Gimbal_Command(void)
             BOARD_MEC_YAW_REAR_RAD : BOARD_MEC_YAW_FRONT_RAD;
     }
 
-    /* 机械模式：S1 下位（遥控）或 键鼠 X 档（云台锁机械零位，看着跟底盘走） */
+    /* 遥控下位或键鼠X档机械控制 */
     if ((rc_info->s1.value == RC_SW_DOWN) || (keyboard_mech != 0u) || (uturn_mech != 0u))
     {
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
-        /* 进入机械模式时从当前角度起调，避免跳变 */
+        /* 机械模式入口对齐反馈 */
         if (mec_mode_active == 0u)
         {
             pitch_mec_target = board.rx_meg->gimbal_meg.pitch_mec;
             mec_mode_active = 1u;
         }
 
-        /* 只有遥控才用右摇杆积分 Pitch。键鼠的 Pitch 走上板 D5 鼠标角速度通路，
-         * 机械模式里 D2 的 Pitch 机械目标并不参与运算。 */
+        /* 遥控Pitch积分机械目标
+         * 键鼠Pitch使用D5输入 */
         if (keyboard_active == 0u)
         {
             pitch_mec_target += (float)rc_info->ch1 / BOARD_RC_AXIS_MAX *
@@ -333,9 +316,8 @@ static void Board_Debug_Gimbal_Command(void)
          (board.tx_pkt->gimbal_target_pkt.yaw_mec_tar != previous_yaw_target)) ? 1u : 0u,
         ((keyboard_active != 0u) && (keyboard_mech == 0u) && (uturn_mech == 0u)) ? 1u : 0u);
 }
-#endif
 
-/* 下板 1 kHz 控制任务，按调试阶段切换控制链路 */
+/* 当前控制链每1ms运行 */
 
 void StartCtrlTask(void const *argument)
 {
@@ -343,30 +325,16 @@ void StartCtrlTask(void const *argument)
 
     for (;;)
     {
-#if CHASSIS_BRINGUP_ENABLE
         Chassis_Input_Update();
-#endif
 
-#if BOARD_COMM_DEBUG
         Board_Debug_Gimbal_Command();
-#endif
 
-    /* 第一阶段底盘调试链路 */
-#if CHASSIS_BRINGUP_ENABLE
         Chassis_Follow_UpdateMode();
         Chassis_Spin_UpdateMode();
         Chassis_Follow_Update(&chassis_input_cmd);
         Chassis_Spin_Update(&chassis_input_cmd);
         Chassis_Control_Update(&chassis_input_cmd);
         launch.work(&launch);
-#elif !BOARD_COMM_DEBUG
-        infantry.work(&infantry);
-
-#if BOARD_CAP_ENABLE
-        cap.tx();
-#endif
-
-#endif
 
 #if SUPERCAP_BRINGUP_ENABLE
         SuperCap_Tx();
@@ -374,4 +342,3 @@ void StartCtrlTask(void const *argument)
         osDelay(1);
     }
 }
-

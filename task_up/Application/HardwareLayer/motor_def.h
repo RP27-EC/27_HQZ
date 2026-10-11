@@ -7,6 +7,14 @@
 #include "stm32f4xx_hal.h"
 #include "pid.h"
 
+/* MIT模式命令编号 */
+typedef enum mit_cmd_enum_t
+{
+    Enter_Motor_Mode = 0, // 使能命令，编号0
+    Exit_Motor_Mode = 1, // 失能命令，编号1
+    Zero_Position_Sensor = 2, // 零点设定命令，编号2
+} mit_cmd_t;
+
 
 /**
  *	@brief	电机PID
@@ -94,7 +102,3 @@ void motor_pid_init(motor_pid_t *motor_pid,motor_pid_t extern_motor_pid);
 
 
 #endif
-
-
-
-

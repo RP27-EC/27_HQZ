@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_HAL_DRIVER,STM32F407xx,__CC_ARM,__TARGET_FPU_VFP,ARM_MATH_CM</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../Application/AlgorithmLayer;../Application/ConfigLayer;../Application/DeviceLayer;../Application/DriverLayer;../Application/DeviceLayer/Imu;../Application/DeviceLayer/Sensor;../Application/ModuleLayer;../Application/HardwareLayer;../Application/ProtocolLayer;../Application/TaskLayer;../Application/UserLayer;../Application/Support;../Application/ControlLayer;../Application/ServiceLayer;../Drivers/CMSIS/DSP;../USB_DEVICE/App;../USB_DEVICE/Target;../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;../Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc;../Drivers/CMSIS/DSP/Include</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../Application/AlgorithmLayer;../Application/ConfigLayer;../Application/DeviceLayer;../Application/DriverLayer;../Application/DeviceLayer/Imu;../Application/DeviceLayer/Sensor;../Application/ModuleLayer;../Application/HardwareLayer;../Application/ProtocolLayer;../Application/TaskLayer;../Application/UserLayer;../Drivers/CMSIS/DSP;../USB_DEVICE/App;../USB_DEVICE/Target;../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;../Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc;../Drivers/CMSIS/DSP/Include</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -506,11 +506,6 @@
           <GroupName>Task</GroupName>
           <Files>
             <File>
-              <FileName>community_task.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\TaskLayer\community_task.c</FilePath>
-            </File>
-            <File>
               <FileName>control_task.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\TaskLayer\control_task.c</FilePath>
@@ -586,11 +581,6 @@
               <FileType>1</FileType>
               <FilePath>..\Application\DeviceLayer\Sensor\imu_sensor.c</FilePath>
             </File>
-            <File>
-              <FileName>imu_xrobot.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\DeviceLayer\imu_xrobot.c</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>
@@ -625,11 +615,6 @@
               <FileName>RM_motor.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\HardwareLayer\RM_motor.c</FilePath>
-            </File>
-            <File>
-              <FileName>HT_motor.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\HardwareLayer\HT_motor.c</FilePath>
             </File>
             <File>
               <FileName>DM_Motor.c</FileName>
@@ -707,11 +692,6 @@
           <GroupName>Driver</GroupName>
           <Files>
             <File>
-              <FileName>drv_flash.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\DriverLayer\drv_flash.c</FilePath>
-            </File>
-            <File>
               <FileName>drv_uart.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\DriverLayer\drv_uart.c</FilePath>
@@ -720,11 +700,6 @@
               <FileName>drv_can.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\DriverLayer\drv_can.c</FilePath>
-            </File>
-            <File>
-              <FileName>drv_tim.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\DriverLayer\drv_tim.c</FilePath>
             </File>
             <File>
               <FileName>driver.c</FileName>
@@ -750,11 +725,6 @@
               <FileName>config_uart.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\ConfigLayer\config_uart.c</FilePath>
-            </File>
-            <File>
-              <FileName>rp_user_config.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Application\ConfigLayer\rp_user_config.h</FilePath>
             </File>
             <File>
               <FileName>rp_driver_config.h</FileName>

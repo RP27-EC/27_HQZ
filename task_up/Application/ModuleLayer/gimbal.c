@@ -53,7 +53,7 @@ static float gimbal_ramp_wrapped(float current, float target, float step)
     return gimbal_wrap_deg(current + error);
 }
 
-/* 角度归一化到 [-180, 180) */
+/* -180≤角度<180度 */
 static float gimbal_wrap_deg(float angle)
 {
     while (angle >= 180.0f) angle -= 360.0f;
@@ -81,7 +81,7 @@ static float gimbal_axis_to_rate(int16_t axis, float max_rate)
 }
 #endif
 
-/* 合并遥控器和键鼠输入，生成统一角速度指令 */
+/* 统一遥控与键鼠速率指令 */
 static void gimbal_manual_input_update(gimbal_t *gimbal)
 {
     float yaw_rate = 0.0f;
@@ -139,7 +139,7 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
     (void)gimbal;
 #endif
 
-    /* Apply operator direction conventions after source decoding. */
+    /* 输入解码后统一方向 */
     yaw_rate *= gimbal_tune.manual_yaw_sign;
     pitch_rate *= gimbal_tune.manual_pitch_sign;
 
@@ -153,8 +153,7 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
     gimbal->feedforward.pitch_rate_cmd_deg_s = pitch_rate;
 }
 
-/* 重置单个 PID 历史状态 */
-/* 清空单个 PID 的积分和微分历史 */
+/* 清空PID积分与微分历史 */
 static void gimbal_pid_clear(pid_ctrl_t *pid)
 {
     integral_to_zero(pid);
@@ -167,8 +166,7 @@ static void gimbal_pid_clear(pid_ctrl_t *pid)
     pid->last_dout = 0.0f;
 }
 
-//清空所有 PID 历史状态
-/* 清除云台所有控制环历史，用于模式切换 */
+/* 模式切换清除控制环历史 */
 static void gimbal_clear_all_pid(gimbal_t *gimbal)
 {
     gimbal_pid_clear(&gimbal->pid_info.yaw_gyro_outer);
@@ -187,11 +185,10 @@ static void gimbal_clear_all_pid(gimbal_t *gimbal)
     gimbal_pid_clear(&gimbal->pid_info.pitch_hold);
 }
 
-/* 参数默认值 */
-/* 初始化串级 PID 与松杆保持环参数 */
+/* 初始化串级与保持环参数 */
 static void gimbal_pid_init(gimbal_t *gimbal)
 {
-	pid_ctrl_t *pid; /* 当前配置的 PID 指针 */
+	pid_ctrl_t *pid;
 
     /* Yaw 陀螺仪串级 */
     pid = &gimbal->pid_info.yaw_gyro_outer;//  外环
@@ -212,7 +209,7 @@ static void gimbal_pid_init(gimbal_t *gimbal)
     pid->integral_max = 0.0f; pid->out_max = 10.0f;
 
     /* Yaw 机械编码器串级 */
-    pid = &gimbal->pid_info.yaw_mec_outer;//下面的也是同理
+    pid = &gimbal->pid_info.yaw_mec_outer;
     pid->kp = 1.0f; pid->ki = 0.0f; pid->kd = GIMBAL_MEC_OUTER_KD;
     pid->deadband = GIMBAL_MEC_ERR_DEADBAND_DEG;
     pid->d_filter_alpha = GIMBAL_MEC_OUTER_D_FILTER_ALPHA;
@@ -222,7 +219,7 @@ static void gimbal_pid_init(gimbal_t *gimbal)
     pid->kp = 5.5f; pid->ki = 0.0f; pid->kd = 0.2f;
     pid->integral_max = 0.0f; pid->out_max = 100.0f;
 
-    /* Yaw 掉头串级：与归中同款做法，参数是独立的一份拷贝 */
+    /* 掉头参数独立于归中 */
     pid = &gimbal->pid_info.yaw_turn_outer;
     pid->kp = GIMBAL_TURN_YAW_OUTER_KP;
     pid->ki = GIMBAL_TURN_YAW_OUTER_KI;
@@ -279,7 +276,7 @@ static void gimbal_pid_init(gimbal_t *gimbal)
     pid->deadband = 0.0f;
     pid->d_filter_alpha = GIMBAL_INIT_D_FILTER_ALPHA;
 
-    /* 速控松杆保持环：角度误差 -> 目标角速度修正量 */
+    /* 保持环输出角速度修正 */
     pid = &gimbal->pid_info.yaw_hold;
     pid->kp = GIMBAL_YAW_HOLD_KP; pid->ki = GIMBAL_YAW_HOLD_KI; pid->kd = 0.0f;
     pid->integral_max = GIMBAL_YAW_HOLD_INTEGRAL_MAX;
@@ -297,21 +294,18 @@ static void gimbal_pid_init(gimbal_t *gimbal)
     gimbal_clear_all_pid(gimbal);
 }
 
-/* 传感器数据同步与坐标偏置换算 */
-/* 同步 IMU、电机和控制输入到云台状态 */
+/* 同步传感器与控制输入 */
 static void gimbal_info_update(gimbal_t *gimbal)
 {
-	imu_data_t *imu = imu_dev.info; /* IMU 数据源 */
+	imu_data_t *imu = imu_dev.info;
 
     /* IMU 姿态与角速度 */
-    //获取IMU的角度和角速度信息
     gimbal->base_info.yaw_imu_angle = imu->base_info.yaw;
     gimbal->base_info.yaw_imu_speed = imu->base_info.rate_yaw;
     gimbal->base_info.pitch_imu_angle = imu->base_info.pitch;
     gimbal->base_info.pitch_imu_speed = imu->base_info.rate_pitch;
 
     /* 电机编码器角度换算 */
-    //获取电机的角度和速度信息，并进行换算
     gimbal->base_info.yaw_mec_angle = gimbal_wrap_deg( /* Yaw 机械角 */
         gimbal->yaw_motor->rx_info->motor_angle * GIMBAL_RAD_TO_DEG -
         GIMBAL_YAW_MIDDLE_DEG);
@@ -322,7 +316,6 @@ static void gimbal_info_update(gimbal_t *gimbal)
         GIMBAL_PITCH_MIDDLE_DEG);
     gimbal->base_info.pitch_mec_speed = gimbal->pitch_motor->rx_info->speed;
 
-    //获取上位机发送的目标角度信息，并进行换算
     gimbal->pid_info.yaw_mec_target_raw =
         Board_Rx_Info.gimbal_target_pkt.yaw_mec_tar * GIMBAL_RAD_TO_DEG;
     gimbal->pid_info.pitch_mec_target_raw =
@@ -335,23 +328,21 @@ static void gimbal_info_update(gimbal_t *gimbal)
     gimbal_manual_input_update(gimbal);
 }
 
-/* 硬件与数据流 */
-/* 板间通信在线且车辆使能才允许闭环 */
+/* 板间在线且整车使能才闭环 */
 static uint8_t gimbal_safety_allows_control(gimbal_t *gimbal)
 {
     (void)gimbal;
-    /* Keep the same enable logic as the working reference project. */
+    /* 板间在线且整车使能 */
     if (Board_HeartBeat.status != DEV_ONLINE) return 0;
     if (Board_Rx_Info.state_pkt.car_state == 0) return 0;
 
     return 1;
 }
 
-/* 控制模式仲裁 */
-/* 根据安全、初始化和板间模式选择控制模式 */
+/* 安全与归中优先仲裁模式 */
 static gimbal_mode_e gimbal_select_mode(gimbal_t *gimbal)
 {
-    // 任意安全条件不满足，进入休眠模式
+    // 安全条件失效时休眠
     if (!gimbal_safety_allows_control(gimbal))
     {
         gimbal->init_info.init_flag = 0;
@@ -365,7 +356,7 @@ static gimbal_mode_e gimbal_select_mode(gimbal_t *gimbal)
         return G_INIT;
     }
 
-    // 通信包模式字分发 (0: 机械环, 其他: 陀螺仪自稳)
+    // 板间模式0选择机械控制
     if (Board_Rx_Info.state_pkt.gimbal_mode == 0)
     {
         return G_MEC;
@@ -374,8 +365,7 @@ static gimbal_mode_e gimbal_select_mode(gimbal_t *gimbal)
     return G_RATE;// 速控模式
 }
 
-/* 获取当前模式最终目标 */
-/* 取出当前模式对应的 Yaw/Pitch 目标 */
+/* 读取当前模式两轴目标 */
 static void gimbal_get_command_target(gimbal_t *gimbal, float *yaw_target, float *pitch_target)
 {
     switch (gimbal->gimbal_mode)
@@ -404,23 +394,22 @@ static void gimbal_get_command_target(gimbal_t *gimbal, float *yaw_target, float
     }
 }
 
-/* 对最终 Pitch 目标限位 */
-/* 按机械限位反推 IMU Pitch 目标上限 */
+/* 机械限位约束惯性角目标 */
 static float gimbal_limit_pitch_target(gimbal_t *gimbal, float pitch_target)
 {
     if ((gimbal->gimbal_mode == G_GYRO) ||
         (gimbal->gimbal_mode == G_AUTO))
     {
-        float delta = pitch_target - gimbal->base_info.pitch_imu_angle; /* 目标变化量 */
-        float predicted_mec_angle = gimbal->base_info.pitch_mec_angle + delta; /* 预测机械角 */
+        float delta = pitch_target - gimbal->base_info.pitch_imu_angle;
+        float predicted_mec_angle = gimbal->base_info.pitch_mec_angle + delta;
 
         if (predicted_mec_angle > GIMBAL_PITCH_MAX_DEG)
         {
-            delta -= predicted_mec_angle - GIMBAL_PITCH_MAX_DEG; /* 扣掉超限 */
+            delta -= predicted_mec_angle - GIMBAL_PITCH_MAX_DEG;
         }
         else if (predicted_mec_angle < GIMBAL_PITCH_MIN_DEG)
         {
-            delta += GIMBAL_PITCH_MIN_DEG - predicted_mec_angle; /* 补足下限 */
+            delta += GIMBAL_PITCH_MIN_DEG - predicted_mec_angle;
         }
 
         return gimbal->base_info.pitch_imu_angle + delta;
@@ -436,9 +425,9 @@ static void gimbal_update_init(gimbal_t *gimbal)
         gimbal->base_info.yaw_mec_angle - gimbal->init_info.yaw_home_deg));
     float pitch_error = gimbal_abs(
         gimbal->base_info.pitch_mec_angle - gimbal->init_info.pitch_home_deg);
-    uint8_t position_ok = (yaw_error <= gimbal->init_info.yaw_angle_tolerance) && /* 到位 */
+    uint8_t position_ok = (yaw_error <= gimbal->init_info.yaw_angle_tolerance) &&
                           (pitch_error <= gimbal->init_info.pitch_angle_tolerance);
-    uint8_t speed_ok = (gimbal_abs(gimbal->base_info.yaw_mec_speed) <= /* 静止 */
+    uint8_t speed_ok = (gimbal_abs(gimbal->base_info.yaw_mec_speed) <=
                         gimbal->init_info.yaw_speed_tolerance) &&
                        (gimbal_abs(gimbal->base_info.pitch_mec_speed) <=
                         gimbal->init_info.pitch_speed_tolerance);
@@ -543,7 +532,7 @@ static void gimbal_update_targets(gimbal_t *gimbal)
     }
 }
 
-/* 保持环与操作手的交接系数：1 = 完全保持，0 = 完全跟随操作手 */
+/* 保持权重，0手控1保持 */
 static float gimbal_hold_blend(float rate_mag)
 {
     float enter = gimbal_tune.rate_hold_enter_deg_s;
@@ -645,7 +634,7 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
         integral_to_zero(&gimbal->pid_info.pitch_hold);
     }
 
-    /* 增益每周期同步一次，方便在 Keil Watch 里在线改参 */
+    /* 每周期同步调节增益 */
     gimbal->pid_info.yaw_hold.kp = gimbal_tune.yaw_hold_kp;
     gimbal->pid_info.yaw_hold.ki = gimbal_tune.yaw_hold_ki;
     gimbal->pid_info.yaw_hold.integral_max = gimbal_tune.yaw_hold_integral_max;
@@ -755,16 +744,12 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     }
     gimbal->feedforward.pitch_zero_hold_last = pitch_zero_hold;
 
-    /* 保持环：角度误差 -> 角速度修正量 */
+    /* 保持环输出角速度修正 */
     gimbal->pid_info.yaw_hold.err = gimbal_wrap_deg(
         gimbal->feedforward.yaw_hold_angle_deg - gimbal->base_info.yaw_imu_angle);
     single_pid_ctrl(&gimbal->pid_info.yaw_hold);
 
-    /*
-     * Pitch 保持环用编码器机械角，不用 IMU 欧拉角。
-     * IMU 装在偏航部分，云台俯仰时它测不到俯仰变化，用 IMU 角度会得到
-     * 恒为零的误差，保持环就不会出力。编码器给的是精确相对角，锁位置够用。
-     */
+    /* Pitch保持采用机械角 */
     gimbal->pid_info.pitch_hold.err =
         gimbal->feedforward.pitch_hold_angle_deg - gimbal->base_info.pitch_mec_angle;
     single_pid_ctrl(&gimbal->pid_info.pitch_hold);
@@ -799,7 +784,7 @@ static float gimbal_gravity_compensation(gimbal_t *gimbal)
             gimbal_tune.gravity_b_nm);
 }
 
-/* Dedicated pitch gravity feed-forward for homing only. */
+/* 归中独立重力补偿 */
 static float gimbal_init_gravity_compensation(gimbal_t *gimbal)
 {
     float angle_rad;
@@ -818,7 +803,7 @@ static float gimbal_init_gravity_compensation(gimbal_t *gimbal)
 }
 
 /* 机械 Yaw 制动限速。 */
-/* 按剩余角计算制动速度，统一转换回 deg/s。 */
+/* 剩余角约束制动速限 */
 static float gimbal_mec_speed_limit(float error_deg,
                                      float max_rate_deg_s,
                                      float decel_rad_s2)
@@ -835,7 +820,7 @@ static float gimbal_mec_speed_limit(float error_deg,
     return brake_rate * GIMBAL_RAD_TO_DEG;
 }
 
-/* Init cascade with its own speed and deceleration limits. */
+/* 归中独立速度与制动限幅 */
 static float gimbal_init_pid_calc(pid_ctrl_t *outer,
                                  pid_ctrl_t *inner,
                                  float target,
@@ -857,11 +842,7 @@ static float gimbal_init_pid_calc(pid_ctrl_t *outer,
     }
     single_pid_ctrl(outer);
 
-    /*
-     * 是否套用制动曲线限速由调用方传入：
-     * 关闭时外环只受自身 out_max 限幅，等价于旧版快速归中的 all_pid_calc 路径。
-     * 归中与掉头各传各的开关，两边参数互不影响。
-     */
+    /* 归中与掉头独立选择制动限速 */
     if (speed_limit_enable != 0u)
     {
         speed_limit = gimbal_mec_speed_limit(outer->err,
@@ -878,28 +859,14 @@ static float gimbal_init_pid_calc(pid_ctrl_t *outer,
     return inner->out;
 }
 
-/*
- * 机械 Yaw 双环专用的 PID 状态。
- *
- * 不复用 pid_info 里的任何 PID 对象：G_INIT 归中和掉头段依赖
- * 这两个对象只被 gimbal_mec_yaw_calc 使用。
- */
+/* 机械定位使用独立PID状态 */
 static pid_ctrl_t gimbal_mec_yaw_pos_pid;
 static pid_ctrl_t gimbal_mec_yaw_rate_pid;
 static float gimbal_mec_yaw_ff_blend;
 static float gimbal_mec_yaw_chassis_rate_lpf;
 static uint8_t gimbal_mec_yaw_hard_hold;
 
-/*
- * 位置式 PID
- *
- *   1. 抗积分饱和：输出已饱和且误差还会加剧饱和时，本拍不累加积分
- *   2. 微分是 Kd * d(Error)/dt（除以控制周期），不是 Kd * ΔError。
- *   3. 没有死区、没有微分低通：死区由调用方用连续软死区实现。
- *
- * integral_max 的单位是「输入量 × 秒」；kd 的单位是「秒」，
- * 内部会除以 control_period_s 变成增益。
- */
+/* 积分乘周期微分除周期 */
 static float gimbal_pid_calc(pid_ctrl_t *pid,
                              float setpoint,
                              float measure,
@@ -919,7 +886,7 @@ static float gimbal_pid_calc(pid_ctrl_t *pid,
     pid->err = setpoint - measure;
     derivative = (pid->err - pid->last_err) / control_period_s;
 
-    /* 先算候选积分；输出已饱和且误差仍会加剧饱和时不采纳 */
+    /* 加剧饱和时拒绝候选积分 */
     candidate_integral = pid->integral + pid->err * control_period_s;
     if (candidate_integral > pid->integral_max)
     {
@@ -954,7 +921,7 @@ static float gimbal_pid_calc(pid_ctrl_t *pid,
     return pid->out;
 }
 
-/* 清空一个 PID 的全部状态（参数保留） */
+/* 重置PID历史保留参数 */
 static void gimbal_mec_yaw_pid_reset(pid_ctrl_t *pid)
 {
     pid->integral = 0.0f;
@@ -970,9 +937,7 @@ static void gimbal_mec_yaw_pid_reset(pid_ctrl_t *pid)
 }
 
 
-/*
- * 机械模式 Yaw 双环定位：位置外环（编码器相对角）+ 速度内环（IMU 角速度）。
- */
+/* 计数位置环串级惯性速率环 */
 static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
 {
     float err_count;
@@ -998,9 +963,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     float torque;
     static uint8_t gyro_was_online; /* IMU 恢复沿检测，用于防突跳 */
 
-    /* ---- IMU 掉线保护（照抄参考 cloud_terrace.c:485-493）----
-     * 内环反馈来自 IMU，掉线时 yaw_imu_speed 会保持旧值或变 0，内环会按
-     * "目标速度 - 0" 持续出力。参考的做法是停闭环 + 清两个 PID + 卸力。 */
+    /* IMU失联清环并卸力 */
     if (imu_dev.work_state.dev_state != DEV_ONLINE)
     {
         gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_pos_pid);
@@ -1012,11 +975,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
         return 0.0f;
     }
 
-    /* ---- 位置外环：编码器【计数】域，与参考完全一致（参考 cloud_terrace.c:496）----
-     * 参考的位置环工作在编码器计数域（MOTOR4310_ECD_PER_ROUND = 65535/圈），
-     * 所以 position_kp / position_integral_limit / position_kd 都是"码"域的值。
-     * 本工程 base_info.yaw_mec_angle 是【度】（归中/掉头/lift 共用，不能动），
-     * 所以这里用 GIMBAL_DEG_TO_COUNT 做域换算 —— 参数本身不折算，保持原值。 */
+    /* 最短角误差换算为计数 */
     err_count = gimbal_wrap_deg(gimbal->pid_info.yaw_target -
                                 gimbal->base_info.yaw_mec_angle) *
                 GIMBAL_DEG_TO_COUNT;
@@ -1028,10 +987,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     else if (err_count < -deadzone_count) { control_target_count += deadzone_count; }
     else                                  { control_target_count = 0.0f; }
 
-    /* ---- 制动曲线（照抄参考 cloud_terrace.c:510-518）----
-     * 参考：speed_limit = min(position_output_limit, brake_gain*sqrt(remaining_deg))
-     * remaining_deg 由【死区裁剪后】的目标算出，所以死区内给 0，
-     * 速度内环此时只做制动。 */
+    /* 剩余角度约束制动速度 */
     speed_limit = max_rate;
     brake_limit = gimbal_mec_speed_limit(
         gimbal_abs(control_target_count) * GIMBAL_COUNT_TO_DEG,
@@ -1048,12 +1004,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
         speed_limit = near_rate_limit;
     }
 
-    /* ---- 位置外环 PID（照抄参考 cloud_terrace.c:520-531）----
-     * 参考：PID_Calc(position_pid, control_target, yaw.total_angle)
-     *   target  = 死区裁剪后的控制目标（编码器计数）
-     *   measure = 当前累计编码器计数
-     * 两个都是绝对计数值，PID 内部自己减出误差；微分项也是对这个误差求导。
-     * 这里用 yaw_mec_angle 换算成同一计数基准，保持同样语义。 */
+    /* 目标与反馈使用同一计数基准 */
     measure_count = gimbal->base_info.yaw_mec_angle * GIMBAL_DEG_TO_COUNT;
     ref_target_count = measure_count + control_target_count;
 
@@ -1068,23 +1019,16 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
                                     measure_count,
                                     GIMBAL_CONTROL_PERIOD_S);
 
-    /* 位置环输出（码）乘命令比例换成目标角速度 deg/s（参考 :532-535） */
+    /* 外环输出换算为deg/s */
     speed_target = speed_command * GIMBAL_COUNT_TO_DEG_S;
 
-    /* ---- 速度内环：IMU 角速度反馈（照抄参考 cloud_terrace.c:534-549）----
-     * 参考的 target 和反馈都是 deg/s，与这里完全同量纲，
-     * 所以 kp/ki/kd 直接用参考的 mechanical_yaw_rate_* 原值。 */
+    /* 内环使用IMU角速度反馈 */
     gyro_dir = gimbal_tune.mec_yaw_gyro_direction;
     rate_measure = gyro_dir * gimbal->base_info.yaw_imu_speed;
     relative_rate = gimbal->base_info.yaw_mec_speed * GIMBAL_RAD_TO_DEG;
     chassis_rate = rate_measure - relative_rate;
 
-    /* WARNING: 速率死区【不能】加在 rate_measure 上！
-     * rate_measure 后面还要参与 chassis_rate = rate_measure - relative_rate，
-     * 一旦在它上面做死区，chassis_rate 会在阈值附近反复跳变，进而让
-     * ff_blend 抖动、hard_hold 状态来回翻转 —— 每次翻转都会 reset PID 并
-     * 输出 0 力矩，结果就是震动比不加死区还厉害。
-     * 所以死区只加在【喂给速度内环 PID 的那份反馈】上，见下面 rate_feedback。 */
+    /* 底盘估速保留原始反馈 */
 
     gimbal_mec_yaw_chassis_rate_lpf += GIMBAL_MEC_YAW_FF_FILTER_ALPHA *
         (chassis_rate - gimbal_mec_yaw_chassis_rate_lpf);
@@ -1122,8 +1066,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
         return 0.0f;
     }
 #else
-    /* 静止卸力已关闭：静止附近交给位置环软死区 + 速率死区，
-     * 保留保持力，避免"卸力后漂出去再满力抓回来"的阶跃抽动。 */
+    /* 关闭卸力时保留双环控制 */
     gimbal_mec_yaw_hard_hold = 0u;
 #endif
 
@@ -1133,19 +1076,14 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     gimbal_mec_yaw_rate_pid.integral_max = gimbal_tune.mec_hold_rate_ki_limit;
     gimbal_mec_yaw_rate_pid.out_max = gimbal_tune.mec_hold_rate_out_max_nm;
 
-    /* 速率死区：只作用在【喂给速度内环 PID】这一份反馈上。
-     * 静止时陀螺测到的微小抖动被当作 0，内环不再对它反复出反向力矩 ——
-     * 这是"停下来后嗡嗡震动"的直接来源。运动段完全不受影响
-     * （60 deg/s 时仍是 0.1*60 = 6 N·m，照旧满力刹车）。
-     * rate_measure 本身保持原始值，供上面 chassis_rate / FF / hard_hold 使用。 */
+    /* 速率死区仅用于内环反馈 */
     rate_feedback = rate_measure;
     if (gimbal_abs(rate_feedback) < gimbal_tune.mec_hold_rate_deadband_dps)
     {
         rate_feedback = 0.0f;
     }
 
-    /* 陀螺仪恢复沿：重置两个 PID 并把位置环 last_err 对齐当前误差，
-     * 避免微分项把恢复瞬间当成突变（参考 cloud_terrace.c:524-530, 542-546）。 */
+    /* 恢复沿对齐误差防微分突变 */
     if (gyro_was_online == 0u)
     {
         gimbal_mec_yaw_pid_reset(&gimbal_mec_yaw_pos_pid);
@@ -1165,7 +1103,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
                         gimbal_tune.mec_hold_rate_out_max_nm);
 }
 
-/* 旧掉头路径仅供对照，参数默认沿用归中配置。 */
+/* 可选掉头串级控制 */
 static float gimbal_mec_yaw_turn_calc(gimbal_t *gimbal)
 {
     return gimbal_clamp(
@@ -1182,7 +1120,7 @@ static float gimbal_mec_yaw_turn_calc(gimbal_t *gimbal)
         GIMBAL_TURN_YAW_TORQUE_LIMIT_NM);
 }
 
-/* 按当前模式计算两轴力矩并做硬件限幅 */
+/* 模式闭环计算后统一限矩 */
 static void gimbal_calc_output(gimbal_t *gimbal)
 {
     float gravity = (gimbal->gimbal_mode == G_INIT) ?
@@ -1221,15 +1159,11 @@ static void gimbal_calc_output(gimbal_t *gimbal)
             -gimbal->init_info.yaw_torque_limit_nm,
             gimbal->init_info.yaw_torque_limit_nm);
         break;
-    case G_MEC: /* 机械模式：Pitch 复用速控通路，Yaw 走统一定位律 */
+    case G_MEC: /* 机械模式复用Pitch速控 */
     {
         float yaw_out;
 
-        /*
-         * Pitch 与 G_RATE 分支是同一段逻辑：操作手角速度前馈 + 松杆保持环
-         * 出目标角速度，再走 pitch_gyro_inner 速度环。共用一个 PID 对象，
-         * 改速控参数即改机械模式，不留第二套参数。
-         */
+        /* 机械与速控共用Pitch内环 */
         gimbal_update_rate_targets(gimbal);
 
         gimbal->base_info.output_gimbal_p =
@@ -1242,7 +1176,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          GIMBAL_RAD_TO_DEG,
                          0) + gravity;
 
-        /* 旧两段切换默认关闭，机械 Yaw 统一使用定位律。 */
+        /* 按开关选择机械定位律 */
 #if GIMBAL_MEC_YAW_USE_TURN_PATH
         if (gimbal_abs(gimbal_wrap_deg(gimbal->pid_info.yaw_target -
                                        gimbal->base_info.yaw_mec_angle)) >
@@ -1329,7 +1263,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          0);
         break;
 
-    case G_SLEEP://休眠一定是无力的
+    case G_SLEEP:// 休眠关闭两轴输出
     default:
         gimbal->base_info.output_gimbal_p = 0.0f;
         gimbal->base_info.output_gimbal_y = 0.0f;
@@ -1361,12 +1295,12 @@ static void gimbal_calc_output(gimbal_t *gimbal)
     }
 }
 
-/* 初始化调参、电机绑定、归中参数和 PID */
+/* 初始化设备与控制参数 */
 void Gimbal_Init(gimbal_t *gimbal)
 {
     if (gimbal == NULL) return;
 
-    /* Runtime tuning defaults. These can be edited in Keil Watch. */
+    /* 运行参数支持在线调节 */
     gimbal_tune.gravity_enable = GIMBAL_GRAVITY_ENABLE;
     gimbal_tune.gravity_k_nm = GIMBAL_GRAVITY_K_NM;
     gimbal_tune.gravity_b_nm = GIMBAL_GRAVITY_B_NM;
@@ -1394,9 +1328,7 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_tune.mouse_pitch_sign = GIMBAL_MOUSE_PITCH_SIGN;
     gimbal_tune.mouse_rate_ff_dps_per_count = GIMBAL_MOUSE_RATE_FF_DPS_PER_COUNT;
     gimbal_tune.mouse_deadband_count = GIMBAL_MOUSE_DEADBAND_COUNT;
-    /* 旧的两项已废弃：位置刚度并入 mec_hold_kp_nm_per_deg，
-     * 阻尼改为 IMU 速度内环（见 gimbal_mec_yaw_calc）。
-     * 字段保留在结构体里以免动到 Keil Watch 布局，但不再从宏装载。 */
+    /* 兼容字段不参与当前控制 */
     gimbal_tune.mec_yaw_max_rate_deg_s = GIMBAL_MEC_YAW_MAX_RATE_DEG_S;
     gimbal_tune.mec_yaw_decel_rad_s2 = GIMBAL_MEC_YAW_DECEL_RAD_S2;
     gimbal_tune.mec_yaw_deadband_deg = GIMBAL_MEC_ERR_DEADBAND_DEG;
@@ -1404,7 +1336,7 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_tune.mec_yaw_friction_ff_nm = GIMBAL_MEC_YAW_FRICTION_FF_NM;
     gimbal_tune.mec_hold_full_err_deg = GIMBAL_MEC_HOLD_FULL_ERR_DEG;
     gimbal_tune.mec_hold_enter_err_deg = GIMBAL_MEC_HOLD_ENTER_ERR_DEG;
-    /* 机械 Yaw 双环（照搬参考工程 cloud_control_yaw_mechanical） */
+    /* 机械定位双环参数 */
     gimbal_tune.mec_hold_kp_nm_per_deg = GIMBAL_MEC_HOLD_KP_NM_PER_DEG;
     gimbal_tune.mec_hold_ki_nm_per_deg = GIMBAL_MEC_HOLD_KI_NM_PER_DEG;
     gimbal_tune.mec_hold_kd_nm_per_deg = GIMBAL_MEC_HOLD_KD_NM_PER_DEG;
@@ -1417,11 +1349,11 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_tune.mec_hold_rate_ki_limit = GIMBAL_MEC_HOLD_RATE_KI_LIMIT;
     gimbal_tune.mec_hold_rate_out_max_nm = GIMBAL_MEC_HOLD_RATE_OUT_MAX_NM;
     gimbal_tune.mec_hold_rate_deadband_dps = GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS;
-    gimbal_tune.mec_yaw_gyro_direction = 1.0f; /* 实机核对：yaw_imu_angle 与 yaw_mec_angle 同向 */
+    gimbal_tune.mec_yaw_gyro_direction = 1.0f; /* IMU与机械角方向符号 */
 
     /* 绑定电机驱动 */
-    gimbal->pitch_motor = &dm_motor[PITCH]; /* 绑定 Pitch */
-    gimbal->yaw_motor = &dm_motor[YAW]; /* 绑定 Yaw */
+    gimbal->pitch_motor = &dm_motor[PITCH];
+    gimbal->yaw_motor = &dm_motor[YAW];
     gimbal->init = Gimbal_Init;
     gimbal->work = Gimbal_Work;
 
@@ -1483,7 +1415,7 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_mec_yaw_hard_hold = 0u;
 }
 
-/* 主执行入口，放control任务中 */
+/* 控制任务周期入口 */
 void Gimbal_Work(gimbal_t *gimbal)
 {
     gimbal_mode_e selected_mode;
@@ -1507,7 +1439,7 @@ void Gimbal_Work(gimbal_t *gimbal)
         gimbal->init_info.mode_transition_active = 1;
         gimbal->init_info.stable_time = 0;
 
-        // 切换时将目标位置对齐到当前实际位置
+        // 切换目标对齐当前反馈
         if ((selected_mode == G_GYRO) || (selected_mode == G_AUTO))
         {
             gimbal->pid_info.yaw_target = gimbal->base_info.yaw_imu_angle;
@@ -1525,7 +1457,7 @@ void Gimbal_Work(gimbal_t *gimbal)
              (gimbal->feedforward.pitch_zero_hold_last != 0u)) ?
             0.0f : gimbal->base_info.pitch_mec_angle;
 
-        // 切换帧先卸力，下一帧从当前角度开始是斜坡步进
+        // 切换帧卸力后斜坡接管
         gimbal->base_info.output_gimbal_p = 0.0f;
         gimbal->base_info.output_gimbal_y = 0.0f;
     }
@@ -1545,8 +1477,8 @@ void Gimbal_Work(gimbal_t *gimbal)
     }
 
     //  写入电机底层发送缓冲区
-    gimbal->pitch_motor->tx_info->torque = gimbal->base_info.output_gimbal_p; /* Pitch 输出 */
-    gimbal->yaw_motor->tx_info->torque = gimbal->base_info.output_gimbal_y; /* Yaw 输出 */
+    gimbal->pitch_motor->tx_info->torque = gimbal->base_info.output_gimbal_p;
+    gimbal->yaw_motor->tx_info->torque = gimbal->base_info.output_gimbal_y;
 }
 
 

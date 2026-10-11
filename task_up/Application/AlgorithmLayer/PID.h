@@ -5,33 +5,31 @@
 
 #include <stdint.h>
 
-/**
- * @brief PID 
- */
+/* 周期累加与时间积分共用状态 */
 typedef struct
 {
-    float kp;
-    float ki;
-    float kd;
+    float kp; // 比例增益，输出/输入单位
+    float ki; // 积分增益，量纲随算法
+    float kd; // 微分增益，量纲随算法
 
-    float integral_max;      // 积分项限幅
-    float out_max;           // 总输出限幅
-    float deadband;          // 误差死区
+    float integral_max; // 积分状态限幅，量纲随算法
+    float out_max; // 输出幅值上限，≥0
+    float deadband; // 误差死区，与目标同单位
 
-    float d_filter_alpha;    // 低通滤波系数
+    float d_filter_alpha; // 微分历史权重，0~1
 
-    float target;
-    float measure;
-    float err;
-    float last_err;
-    float integral;
+    float target; // 目标，单位随控制对象
+    float measure; // 反馈，与目标同单位
+    float err; // 目标减反馈，与目标同单位
+    float last_err; // 上周期误差，与目标同单位
+    float integral; // 误差积分，量纲随算法
 
     /* 各项输出分量 */
-    float pout;
-    float iout;
-    float dout;
-    float last_dout;
-    float out;               // 总输出
+    float pout; // 比例分量，与输出同单位
+    float iout; // 积分分量，与输出同单位
+    float dout; // 微分分量，与输出同单位
+    float last_dout; // 微分历史，与输出同单位
+    float out; // 限幅后输出，±out_max
 } pid_ctrl_t;
 
 void single_pid_ctrl(pid_ctrl_t *pid);

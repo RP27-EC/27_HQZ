@@ -74,32 +74,8 @@ float deadzone(float input, float center, float death)
 		return center;
 	return input;
 }
-/* Time_Trigger_inloop */
-void Time_Trigger_inloop(Time_trigger_t *Time_trigger_struct)
-{
-	if (Time_trigger_struct->private_flag == NULL || Time_trigger_struct->last_trigger_tick == NULL || Time_trigger_struct->ignore_first_trigger_flag == NULL)
-	{
-		return;
-	}
 
 
-	if (Time_trigger_struct->if_ignore_first == 1 && Time_trigger_struct->ignore_first_trigger_flag == 0)
-	{
-		*Time_trigger_struct->ignore_first_trigger_flag = 1;
-		*Time_trigger_struct->last_trigger_tick = HAL_GetTick();
-	}
-
-	if ((HAL_GetTick() - *Time_trigger_struct->last_trigger_tick > Time_trigger_struct->delay_tick) && (Time_trigger_struct->ignore_first_trigger_flag != 0 || Time_trigger_struct->if_ignore_first == 0))
-	{
-		*Time_trigger_struct->private_flag = 1;
-		*Time_trigger_struct->last_trigger_tick = HAL_GetTick();
-	}
-
-	else
-	{
-		*Time_trigger_struct->private_flag = Time_trigger_struct->flag_before_trigger;
-	}
-}
 
 
 uint16_t float_to_uint(float x, float x_min, float x_max, uint8_t bits)
@@ -134,7 +110,3 @@ float step_limit_filter(float new_value, float last_value, float max_step)
     
     return filtered_value; 
 }
-
-
-
-

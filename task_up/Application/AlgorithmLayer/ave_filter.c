@@ -13,12 +13,14 @@ void ave_fil_init(ave_filter_t *ave_fil)
 
 /* 滑动平均滤波 */
  
+/* 调用窗口须为1~30 */
 float avg_push(ave_filter_t *ave_fil, float value, uint16_t max)
 {
 	if(max > ave_filter_times_max)
 	{
 		max = ave_filter_times_max;
 	}
+	/* 窗口变化重置历史样本 */
 	if(max != ave_fil->filter_times)
 	{
 		ave_fil_init(ave_fil);

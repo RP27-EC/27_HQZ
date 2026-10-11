@@ -9,21 +9,21 @@
 
 typedef enum
 {
-    SUPERCAP_STATE_OFFLINE = 0,
-    SUPERCAP_STATE_ONLINE = 1
+    SUPERCAP_STATE_OFFLINE = 0, // 未收有效反馈，状态0
+    SUPERCAP_STATE_ONLINE = 1 // 收到有效反馈，状态1
 } SuperCap_State_e;
 
 typedef struct
 {
-    SuperCap_State_e state;
-    SuperCap_Feedback_t feedback;
-    int16_t chassis_power;
-    float cap_voltage;
-    float cap_current;
-    uint32_t tx_count;
-    uint32_t rx_count;
-    uint32_t last_rx_ms;
-    uint16_t offline_count;
+    SuperCap_State_e state; // 超电在线状态，0/1
+    SuperCap_Feedback_t feedback; // 原始反馈，量纲见协议类型
+    int16_t chassis_power; // 底盘功率计数，量纲待确认
+    float cap_voltage; // 解码电容电压，V
+    float cap_current; // 解码电容电流，A
+    uint32_t tx_count; // 发送尝试次数，uint32回绕
+    uint32_t rx_count; // 接收次数，uint32回绕
+    uint32_t last_rx_ms; // 最近接收时刻，ms
+    uint16_t offline_count; // 心跳计数，饱和值为超时配置
 } SuperCap_t;
 
 extern SuperCap_t supercap;

@@ -23,7 +23,7 @@ flowchart LR
   ONLINE[四轮心跳] --> SCALE
 ```
 
-调度入口为 `task_down/Application/TaskLayer/control_task.c`；输入/模式在 `chassis_input.c`、`chassis_follow.c`、`chassis_spin.c`，执行在 `chassis_control.c`。当前 `BOARD_COMM_DEBUG=1` 且 `CHASSIS_BRINGUP_ENABLE=1`，实际运行调试底盘链路。
+调度入口为 `task_down/Application/TaskLayer/control_task.c`；输入/模式在 `chassis_input.c`、`chassis_follow.c`、`chassis_spin.c`，执行在 `chassis_control.c`。当前固定运行这条链路；旧 infantry/Chassis 业务及切换宏已删除。
 
 ## 输入选择与模式
 
@@ -91,7 +91,7 @@ C2 超过 50 ms、角度非法或相邻反馈跳变超过 30 deg 会使跟随故
 
 | 配置文件 | 参数 | 当前值/单位 |
 | --- | --- | --- |
-| `task_down/Application/ConfigLayer/chassis_config.h` | `CHASSIS_MAX_VX/VY/WZ` | 25 / 25 / 20，控制域量，不可直接标作 m/s 或 rad/s |
+| `task_down/Application/ConfigLayer/chassis_config.h` | `CHASSIS_MAX_VX/VY/WZ` | 15 / 15 / 17，输出轴轮速分量 rad/s，不直接表示车体速度 |
 | 同上 | `CHASSIS_SPEED_KP/KI/KD` | 0.8 / 0 / 0，速度环纯 P；输出为 N·m |
 | 同上 | 测试/跟随/小陀螺扭矩上限 | 2 / 4 / 4 N·m |
 | 同上 | `CHASSIS_FOLLOW_KP`, `MAX_WZ` | 20 控制量/rad、40 控制量 |
@@ -136,6 +136,6 @@ C2 超过 50 ms、角度非法或相邻反馈跳变超过 30 deg 会使跟随故
 
 ### 参数应按层定位
 
-输入幅值/轮速环、跟随/小陀螺参数在 [chassis_config.h](../Application/ConfigLayer/chassis_config.h)；预算、缓冲PI和比例搜索在 [power_limit_config.h](../Application/ConfigLayer/power_limit_config.h)。几何长度、质量、轮半径虽然有配置，但当前四轮逆解直接按控制域组合，不使用这些参数完成标准SI运动学；讲解不能把控制量25直接称作25 m/s。
+输入幅值/轮速环、跟随/小陀螺参数在 [chassis_config.h](../Application/ConfigLayer/chassis_config.h)；预算、缓冲PI和比例搜索在 [power_limit_config.h](../Application/ConfigLayer/power_limit_config.h)。原来未使用的几何长度、质量和轮半径配置已删除。当前四轮逆解叠加输出轴轮速分量（rad/s），没有车体 m/s 和自转角速度到轮速的几何换算。
 
 可用于讲解：“底盘先仲裁模式并处理云台坐标，再分配四轮目标；各轮速度P环生成力矩，裁判缓冲反馈和功率模型进一步决定整组输出比例。”

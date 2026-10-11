@@ -62,26 +62,7 @@ typedef enum {
 	DEV_DATA_ERR,	// 设备数据错误
 } dev_errno_t;
 
-typedef enum {
-	DAIL,		  //	CAN1     0x207	
-	IMAGE,        //	CAN1	 0x206
-	TELESCOPE,    //	CAN1	 0x205
-	
-	FRIC_B_UP,	//		CAN2	 0x201
-	FRIC_F_UP, 	//		CAN2	 0x202
-	FRIC_B_R, 	//  	CAN2	 0x203
-	FRIC_B_L,	//		CAN2	 0x204
-	FRIC_F_R, 	//		CAN2	 0x205
-	GIMB_P, 	//		CAN2	 0x206
-	FRIC_F_L,   //		CAN2	 0x207
-	
-	
-	RM_MOTOR_LIST,
-} dev_rm_motor_list_e;			  //  Yaw轴kt电机CAN1  0x142 2个包  
 
 
 
 #endif
-
-
-

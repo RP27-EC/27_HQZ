@@ -12,15 +12,6 @@ typedef enum jugde_logical_e // 逻辑判断
 
 } jugde_logical_e;
 
-typedef struct Time_trigger_struct{
-	uint8_t *private_flag;
-	uint32_t *last_trigger_tick;
-	uint8_t *ignore_first_trigger_flag; 
-	uint8_t flag_before_trigger;
-	uint8_t flag_after_trigger;
-	uint32_t delay_tick;
-	uint8_t if_ignore_first;
-}Time_trigger_t;
 /* 位操作函数 */
 #define SET_EVENT(EVENT, FLAG) ((EVENT) |= FLAG)
 #define CLEAR_EVENT(EVENT, FLAG) ((EVENT) &= ~(FLAG))
@@ -46,5 +37,3 @@ float Lowpass(float X_last, float X_new, float K);
 float motor_half_cycle(float angle, float max);
 
 #endif
-
-

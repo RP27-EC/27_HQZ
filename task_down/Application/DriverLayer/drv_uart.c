@@ -2,8 +2,6 @@
 #include "drv_uart.h"
 #include "string.h"
 #include "judge_protocol.h"
-#include <stdio.h>
-#include <stdarg.h>
 #include <string.h>
 extern UART_HandleTypeDef huart1;
 extern UART_HandleTypeDef huart5;
@@ -16,8 +14,6 @@ extern UART_HandleTypeDef huart10;
 
 
 //#define USART5_RX_BUF_LEN	  600	//200
-#define BUFF_SIZE 512
-uint8_t rx_buff[BUFF_SIZE];
 __WEAK void USART10_rxDataHandler(uint8_t *rxBuf);
 __WEAK void USART9_rxDataHandler(uint8_t *rxBuf);
 __WEAK void USART8_rxDataHandler(uint8_t *rxBuf);
@@ -93,10 +89,10 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef * huart, uint16_t Size)
 #if !UART5_RC_USE_HAL_TOIDLE_DMA
 	huart->ReceptionType = HAL_UART_RECEPTION_TOIDLE;
 	
-	/* Enalbe IDLE interrupt */
+	/* 启用串口空闲中断 */
   __HAL_UART_ENABLE_IT(huart, UART_IT_IDLE);
 	
-  /* Enable the DMA transfer for the receiver request */
+  /* 启用串口接收DMA请求 */
   SET_BIT(huart->Instance->CR3, USART_CR3_DMAR);
 	
 	__HAL_DMA_ENABLE(huart->hdmarx);
@@ -176,15 +172,7 @@ void USART10_Init(void)
 	
 }
 
-/* USART7 初始化 */
-void USART7_Init(void)
-{
-	__HAL_UART_ENABLE_IT(&huart7, UART_IT_IDLE);
-		
-	
-	HAL_UART_Receive_DMA(&huart7, usart7_dma_rxbuf, USART7_RX_BUF_LEN);
-	
-}
+
 
 /* USART8 初始化 */
 void USART8_Init(void)
@@ -212,13 +200,13 @@ static void uart_rx_idle_callback(UART_HandleTypeDef* huart)
 	
 	if (huart == &huart10)
 	{
-		/* clear DMA transfer complete flag */
+		/* 清DMA完成标志 */
 		__HAL_DMA_DISABLE(huart->hdmarx);
 		HAL_UART_Receive_DMA(&huart10, usart10_dma_rxbuf, USART10_RX_BUF_LEN);
-		/* handle dbus data dbus_buf from DMA */
+		/* 分发当前DMA接收缓存 */
 		USART10_rxDataHandler(usart10_dma_rxbuf);
 		//memset(usart10_dma_rxbuf, 0, USART10_RX_BUF_LEN);
-		/* restart dma transmission */	  
+		/* 恢复DMA接收 */
 		__HAL_DMA_ENABLE(huart->hdmarx);		
 	}
 	
@@ -234,37 +222,37 @@ static void uart_rx_idle_callback(UART_HandleTypeDef* huart)
 	
 	else if (huart == &huart7)
 	{
-		/* clear DMA transfer complete flag */
+		/* 清DMA完成标志 */
 		__HAL_DMA_DISABLE(huart->hdmarx);
 		HAL_UART_Receive_DMA(&huart7, usart7_dma_rxbuf, USART7_RX_BUF_LEN);
-		/* handle dbus data dbus_buf from DMA */
+		/* 分发当前DMA接收缓存 */
 		USART7_rxDataHandler(usart7_dma_rxbuf);
 		//memset(usart7_dma_rxbuf, 0, USART7_RX_BUF_LEN);
-		/* restart dma transmission */	  
+		/* 恢复DMA接收 */
 		__HAL_DMA_ENABLE(huart->hdmarx);		
 	}
 	
 	else if (huart == &huart8)
 	{
-		/* clear DMA transfer complete flag */
+		/* 清DMA完成标志 */
 		__HAL_DMA_DISABLE(huart->hdmarx);
 		HAL_UART_Receive_DMA(&huart8, usart8_dma_rxbuf, USART8_RX_BUF_LEN);
-		/* handle dbus data dbus_buf from DMA */
+		/* 分发当前DMA接收缓存 */
 		USART8_rxDataHandler(usart8_dma_rxbuf);
 		//memset(usart8_dma_rxbuf, 0, USART8_RX_BUF_LEN);
-		/* restart dma transmission */	  
+		/* 恢复DMA接收 */
 		__HAL_DMA_ENABLE(huart->hdmarx);		
 	}
 	
 	else if (huart == &huart9)
 	{
-		/* clear DMA transfer complete flag */
+		/* 清DMA完成标志 */
 		__HAL_DMA_DISABLE(huart->hdmarx);
 		HAL_UART_Receive_DMA(&huart9, usart9_dma_rxbuf, USART9_RX_BUF_LEN);
-		/* handle dbus data dbus_buf from DMA */
+		/* 分发当前DMA接收缓存 */
 		USART9_rxDataHandler(usart9_dma_rxbuf);
 		//memset(usart9_dma_rxbuf, 0, USART9_RX_BUF_LEN);
-		/* restart dma transmission */	  
+		/* 恢复DMA接收 */
 		__HAL_DMA_ENABLE(huart->hdmarx);		
 	}
 }
@@ -347,16 +335,7 @@ void DRV_UART_IRQHandler(UART_HandleTypeDef *huart)
 	}
 }
 
-void WL_UART_printf(char *format, ...)
-{
-		char String[100];
-		va_list arg;
-		va_start(arg, format);
-		vsprintf(String, format, arg);
-		va_end(arg);
-		
-		HAL_UART_Transmit(&huart7, (uint8_t *)String, strlen(String), 1000);
-}
+
 
 /* rxData Handler [Weak] functions -------------------------------------------*/
 /* __WEAK */
@@ -390,6 +369,3 @@ __WEAK void USART8_rxDataHandler(uint8_t *rxBuf)
 __WEAK void USART9_rxDataHandler(uint8_t *rxBuf)
 {	
 }
-
-
-

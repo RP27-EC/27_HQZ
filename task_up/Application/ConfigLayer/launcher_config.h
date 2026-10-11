@@ -14,8 +14,7 @@
 #define LAUNCHER_FRIC_KP                  2.0f // 比例增益，原始量/rpm
 #define LAUNCHER_FRIC_KI                  1.0f // 积分增益，原始量/累积误差
 #define LAUNCHER_FRIC_KD                  0.0f // 微分增益，原始量/误差差值
-#define LAUNCHER_FRIC_INTEGRAL_MAX        500.0f // 积分累积上限，rpm
-#define LAUNCHER_FRIC_KFF                 0.0f // 前馈增益，原始量/rpm
+#define LAUNCHER_FRIC_INTEGRAL_MAX        500.0f // 积分累积上限，rpm·周期
 #define LAUNCHER_FRIC_OUT_MAX             5000.0f // 电流输出限幅，原始量
 #define LAUNCHER_FRIC_L_DIRECTION         1.0f // 左轮旋向，正负1
 #define LAUNCHER_FRIC_R_DIRECTION         -1.0f // 右轮旋向，正负1
@@ -33,8 +32,8 @@
 #define LAUNCHER_SPEED_MIN_RPM         5400.0f // 正常修正下限，rpm
 #define LAUNCHER_SPEED_MAX_RPM         6000.0f // 正常修正上限，rpm
 #define LAUNCHER_SPEED_GAIN              20.0f // 修正增益，rpm/(m/s)
-#define LAUNCHER_SPEED_STEP_MAX_RPM      50.0f // 每组三发步长，rpm
-#define LAUNCHER_SPEED_SAMPLE_COUNT       3u // 同目标有效样本，条
+#define LAUNCHER_SPEED_STEP_MAX_RPM      50.0f // 每组学习最大修正，rpm
+#define LAUNCHER_SPEED_SAMPLE_COUNT       3u // 每组有效样本数，≥1
 #define LAUNCHER_SPEED_WAIT_MS         1000u // 反馈学习超时，ms
 #define LAUNCHER_SPEED_LINK_MS          300u // D6链路超时，ms
 #define LAUNCHER_SPEED_REARM_MS        1000u // 切换后隔离旧反馈，ms
@@ -46,12 +45,12 @@
 #define LAUNCHER_DIAL_ANGLE_KP            0.08f // 位置增益，(deg/s)/count
 #define LAUNCHER_DIAL_ANGLE_KI            0.0f // 积分增益，速度/累积误差
 #define LAUNCHER_DIAL_ANGLE_KD            0.0f // 微分增益，速度/误差差值
-#define LAUNCHER_DIAL_ANGLE_INTEGRAL_MAX  0.0f // 位置积分上限，count
+#define LAUNCHER_DIAL_ANGLE_INTEGRAL_MAX  0.0f // 位置积分限幅，count·周期
 #define LAUNCHER_DIAL_ANGLE_DEADBAND      0.0f // 单发位置死区，count
 #define LAUNCHER_DIAL_SPEED_KP            0.1f // 速度增益，原始量/(deg/s)
 #define LAUNCHER_DIAL_SPEED_KI            0.05f // 积分增益，原始量/累积误差
 #define LAUNCHER_DIAL_SPEED_KD            0.0f // 微分增益，原始量/误差差值
-#define LAUNCHER_DIAL_SPEED_INTEGRAL_MAX  500.0f // 速度积分上限，deg/s
+#define LAUNCHER_DIAL_SPEED_INTEGRAL_MAX  500.0f // 速度积分限幅，deg/s·周期
 #define LAUNCHER_DIAL_SPEED_OUT_MAX       1500.0f // 单发电流限幅，原始量
 
 /* 待发独立阻尼 */

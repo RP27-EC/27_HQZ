@@ -33,10 +33,10 @@
 #define LIFT_POS_MIN_SPEED_RPM          95.5f    // 最低运动速度，rpm
 #define LIFT_MOVE_SPEED_RPM             9549.0f  // 运动速度上限，rpm
 
-#define LIFT_SPEED_KP                   20.0f    // 比例增益，原始量/rpm
+#define LIFT_SPEED_KP                   20.0f    // 比例增益，原始量/(rad/s)
 #define LIFT_SPEED_KI                   10.0f    // 积分增益，按周期累加
 #define LIFT_SPEED_KD                   0.0f     // 微分增益，按周期差分
-#define LIFT_SPEED_INTEGRAL_MAX         0.0f     // 误差累加限幅，rpm·周期
+#define LIFT_SPEED_INTEGRAL_MAX         0.0f     // 误差累加限幅，rad/s·周期
 #define LIFT_SPEED_OUT_MAX_RAW          4444.0f  // 速度环输出上限，原始量
 
 #define LIFT_POS_TOL_COUNTS             200.0f   // 到位位置误差，count

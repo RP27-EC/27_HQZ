@@ -6,11 +6,9 @@
 #include "BMI088driver.h"
 #include "BMI088reg.h"
 #include "BMI088Middleware.h"
-#include "drv_tim.h"
 #include "PID.h"
 #include "rp_math.h"
 #include "ave_filter.h"
-//#define IMU_Set_PWM(x) TIM3_Set_PWM(x) 
 typedef enum{
   IMU_E_NONE,
   IMU_E_TYPE,
@@ -117,4 +115,3 @@ typedef struct imu_dev {
 
 extern imu_dev_t imu_dev;
 #endif
-

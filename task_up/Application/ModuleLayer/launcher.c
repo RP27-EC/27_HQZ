@@ -107,6 +107,7 @@ static void Launcher_SpeedLearn(float speed, uint8_t mode)
     float *target = (mode != 0u) ? &launcher_speed.repeat_target_rpm :
         &launcher_speed.single_target_rpm;
 
+    /* 同模式同目标分组学习 */
     launcher_speed.sample_sum_mps += speed;
     launcher_speed.sample_count++;
     if (launcher_speed.sample_count < LAUNCHER_SPEED_SAMPLE_COUNT)
@@ -115,6 +116,7 @@ static void Launcher_SpeedLearn(float speed, uint8_t mode)
     }
     launcher_speed.average_mps = launcher_speed.sample_sum_mps /
         (float)LAUNCHER_SPEED_SAMPLE_COUNT;
+    /* 分组均值限制修正步长 */
     error = LAUNCHER_SPEED_TARGET_MPS - launcher_speed.average_mps;
     if (fabsf(error) > LAUNCHER_SPEED_DEADBAND_MPS)
     {
@@ -160,6 +162,7 @@ static void Launcher_SpeedFail(launcher_speed_reason_e reason)
     Launcher_SpeedClearSamples();
 }
 
+/* 关联不明仅隔离学习 */
 static void Launcher_SpeedDropLearning(launcher_speed_reason_e reason, uint32_t now)
 {
     if (reason == LAUNCHER_SPEED_TIMEOUT)
@@ -237,6 +240,7 @@ static void Launcher_SpeedUpdate(uint32_t now, uint8_t vehicle_on,
     launcher_speed_runtime.last_vehicle = vehicle_on;
 
     age = (uint32_t)(now - snapshot.event_rx_tick);
+    /* 样本年龄相加防溢出 */
     if (age > (UINT32_MAX - snapshot.event_age_ms))
     {
         age = UINT32_MAX;
@@ -278,6 +282,7 @@ static void Launcher_SpeedUpdate(uint32_t now, uint8_t vehicle_on,
         }
         else if (snapshot.event_seq != launcher_speed_runtime.last_seq)
         {
+            /* 序号按16位回绕求差 */
             event_delta = (uint16_t)(snapshot.event_seq - launcher_speed_runtime.last_seq);
             new_event = 1u;
             launcher_speed_runtime.last_seq = snapshot.event_seq;
@@ -352,6 +357,7 @@ static void Launcher_SpeedUpdate(uint32_t now, uint8_t vehicle_on,
             }
             else if ((launcher_speed.waiting != 0u) && (mode == 0u))
             {
+                /* 单发仅关联下一有效事件 */
                 delta = (uint16_t)(snapshot.event_seq - launcher_speed.pending_seq);
                 elapsed = (uint32_t)(now - launcher_speed.wait_tick);
                 if ((delta != 1u) || (elapsed > LAUNCHER_SPEED_WAIT_MS) ||
@@ -450,6 +456,7 @@ static uint8_t Launcher_SpeedReserve(void)
     {
         launcher_speed_runtime.learning_tick = now;
     }
+    /* 预占记录启动前序号 */
     launcher_speed.pending_seq = snapshot.event_seq;
     launcher_speed_runtime.reserved = 1u;
     return 1u;
@@ -458,6 +465,7 @@ static uint8_t Launcher_SpeedReserve(void)
 static void Launcher_SpeedStart(uint32_t now)
 {
     now = HAL_GetTick();
+    /* 实际启动后才计反馈超时 */
     launcher_speed.wait_tick = now;
     launcher_speed.waiting = 1u;
     launcher_speed_runtime.reserved = 0u;
@@ -508,6 +516,7 @@ static void Launcher_HeatRefreshRate(void)
         launcher_heat.blocked = 1u;
         return;
     }
+    /* 停发与恢复阈值形成滞回 */
     if (launcher_heat.remaining < LAUNCHER_HEAT_STOP)
     {
         launcher_heat.blocked = 1u;
@@ -520,6 +529,7 @@ static void Launcher_HeatRefreshRate(void)
     {
         return;
     }
+    /* 射频不超过机械供弹能力 */
     mechanical_rate = (float)LAUNCHER_DIAL_REPEAT_SPEED_DPS /
                       (LAUNCHER_DIAL_ONE_SHOT_ANGLE * 360.0f / 65536.0f);
     if (max_rate > mechanical_rate)
@@ -549,6 +559,7 @@ static void Launcher_HeatObserveFriction(uint8_t index,
 {
     uint32_t irq_state = __get_PRIMASK();
     rm_rx_t *feedback = rm_motor[index].rx_info;
+    /* 临界区获取同帧摩擦轮反馈 */
     __disable_irq();
     observation->current_a = feedback->torque_current;
     observation->speed_rpm = (float)feedback->encoder_speed;
@@ -601,6 +612,7 @@ static void Launcher_HeatUpdate(uint32_t now)
         if (launcher_heat_runtime.repeat_tracking != 0u)
         {
             launcher_heat_runtime.travel += delta;
+            /* 只计新位移避免退让重复计热 */
             if (launcher_heat_runtime.travel > launcher_heat_runtime.high_water)
             {
                 launcher_heat.heat += LAUNCHER_HEAT_PER_SHOT *
@@ -674,7 +686,7 @@ static uint8_t Launcher_HeatReserveSingle(void)
     {
         return 0u;
     }
-    /* 预占保留至下次裁判校准 */
+    /* 单发受理即预占热量 */
     launcher_heat_runtime.repeat_tracking = 0u;
     launcher_heat.heat += LAUNCHER_HEAT_PER_SHOT;
     Launcher_HeatRefreshRate();
@@ -760,7 +772,7 @@ static HAL_StatusTypeDef Launcher_DialRun(void)
     return dail_motor.tx_W_cmd(&dail_motor, MOTOR_RUN_ID);
 }
 
-/* 位置环生成速度目标，再由速度环出力矩 */
+/* 计数位置环串级速度环 */
 static void Launcher_DialPositionControl(int64_t target)
 {
     float speed_target;    /* 位置环输出的速度目标 */
@@ -828,7 +840,7 @@ static void Launcher_DialSpeedControl(void)
     Launcher_DialApplyTorque(current_output);
 }
 
-/* 制动后接管停止位置 */
+/* 零速闭环制动拨盘 */
 static void Launcher_DialBrakeControl(void)
 {
     int16_t current_output;
@@ -857,7 +869,7 @@ static void Launcher_DialBrakeControl(void)
     Launcher_DialApplyTorque(current_output);
 }
 
-/* 低速高电流连续确认后判定堵转 */
+/* 低速高流连续确认堵转 */
 #if LAUNCHER_DIAL_JAM_ENABLE
 static uint8_t Launcher_DialBlockCheck(uint8_t moving)
 {
@@ -885,13 +897,14 @@ static uint8_t Launcher_DialBlockCheck(uint8_t moving)
             LAUNCHER_DIAL_JAM_CONFIRM_TICKS) ? 1u : 0u;
 }
 
-/* 堵转后反向退让，再回到原供弹目标 */
+/* 堵转先退让再恢复供弹 */
 static void Launcher_DialEnterStuckRecovery(uint8_t continuous)
 {
     int64_t current_angle = (int64_t)Launcher_DialAngle(); /* 当前绝对角度 */
     int64_t error = launcher_dial_target - current_angle; /* 目标残差 */
 
     launcher_dial_recovery_repeat = continuous;
+    /* 单发保留目标连发捕获当前位置 */
     launcher_dial_feed_target =
         (continuous != 0u) ? current_angle : launcher_dial_target;
     launcher_dial_motion_direction =
@@ -917,6 +930,7 @@ static void Launcher_DialReject(launcher_dial_reject_e reason)
     launcher_dial.trigger_ready = 0u;
 }
 
+/* 制动结束捕获停止位置 */
 static void Launcher_DialEnterHold(uint32_t now, uint8_t capture)
 {
     if (capture != 0u)
@@ -1084,6 +1098,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         return;
     }
 
+    /* 重新使能先对齐当前位置 */
     if (launcher_dial_target_synced == 0u)
     {
         launcher.dial_zero_angle = Launcher_DialAngle();
@@ -1147,6 +1162,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         {
             Launcher_DialReject(LAUNCHER_DIAL_REJECT_SPEED);
         }
+        /* 单发受理前要求摩擦轮达速 */
         else if (launcher.fric_ready == 0u)
         {
             Launcher_DialReject(LAUNCHER_DIAL_REJECT_FRIC);
@@ -1179,6 +1195,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         launcher_speed_runtime.reserved = 0u;
     }
 
+    /* 运行帧成功后启动已受理单发 */
     if (launcher_dial_stopped != 0u)
     {
         status = Launcher_DialRun();
@@ -1227,7 +1244,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
 
     case LAUNCHER_SINGLE:
 #if LAUNCHER_REPEAT_ENABLE
-        /* 长按优先于单发超时 */
+        /* 达速长按优先转入连发 */
         if ((continuous != 0u) && (launcher.fric_ready != 0u))
         {
             launcher_dial.state = LAUNCHER_REPEAT;
@@ -1327,6 +1344,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         }
         break;
 
+    /* 停稳或超时后捕获保持位置 */
     case LAUNCHER_STOPPING:
         if ((speed <= (float)LAUNCHER_DIAL_BRAKE_STOP_SPEED_DPS) ||
             ((now - launcher_dial.state_tick) >= LAUNCHER_DIAL_BRAKE_TIMEOUT_MS))
@@ -1357,7 +1375,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
     }
 }
 
-/* 双摩擦轮速度环，离线或失能时卸力 */
+/* 离线或失能时摩擦轮卸力 */
 static void Launcher_FricControl(uint8_t enable)
 {
     for (uint8_t i = 0u; i < SHOOT_FRIC_NUM; i++)
@@ -1417,7 +1435,7 @@ static void Launcher_FricControl(uint8_t enable)
     RM_Group.group_set_torque(&RM_Group);
 }
 
-/* 双轮连续达速后才置就绪 */
+/* 双轮连续达速确认就绪 */
 static void Launcher_UpdateFrictionReady(uint8_t enabled)
 {
     float l_speed = fabsf((float)rm_motor[SHOOT_FRIC_L].rx_info->encoder_speed); /* 左轮转速 */
@@ -1579,7 +1597,7 @@ void Launcher_Init(void)
     launcher_dial_hold_speed_pid.kd = LAUNCHER_DIAL_HOLD_SPEED_KD;
 }
 
-/* 发射机构周期任务 */
+/* 发射机构周期入口 */
 void Launcher_Work(void)
 {
     uint32_t now = HAL_GetTick();
@@ -1623,6 +1641,7 @@ void Launcher_Work(void)
     shoot_level = 0u;
     shoot_mode = 0u;
 #endif
+    /* 保持许可与供弹许可分离 */
     launcher_dial.feed_allowed = ((launcher_dial.hold_allowed != 0u) &&
         (fric_on != 0u) && (Board_Rx_Info.shoot_pkt.is_hole == 0u)) ? 1u : 0u;
     if ((launcher_dial.hold_allowed == 0u) ||
@@ -1631,6 +1650,7 @@ void Launcher_Work(void)
         launcher_speed_runtime.press_single_started = 0u;
         launcher_dial.trigger_ready = 0u;
     }
+    /* 松开发射键后重新允许触发 */
     else if (shoot_level == 0u)
     {
         launcher_speed_runtime.press_single_started = 0u;
@@ -1648,7 +1668,7 @@ void Launcher_Work(void)
                   (launcher_heat.blocked == 0u) &&
                   (launcher_heat.target_rate > 0.0f)) ? 1u : 0u;
 
-    /* 摩擦轮停机不覆盖拨盘阶段 */
+    /* 摩擦轮与拨盘分别推进状态 */
     if (launcher.fault != 0u)
     {
         launcher.enabled = 0u;

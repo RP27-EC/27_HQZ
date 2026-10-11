@@ -40,7 +40,7 @@ USART1 RX/TX 为 PA10/PA9，115200 baud、8N1；接收使用 DMA 和空闲线回
 
 底盘功率：`Judge_GetPowerSnapshot()` → `Power_Limit_GetTarget()` → 四轮候选力矩经比例限幅。当前开关 `CHASSIS_POWER_LIMIT_ENABLE=1`；快照不满足新鲜度/范围条件时使用 45 W 固定回退预算。详细 PI/缓冲能量机制见[底盘功率限制](chassis.md)。D3 的发射热量字段不能替代底盘 `power_limit_state`。
 
-配置宏 `BOARD_JUDGE_ENABLE=0` 当前没有守护 USART1 初始化或裁判解析调用；它不能代表本配置下裁判 UART 不运行。以 `DRIVER_Init()`、`USART1_Init()` 和 RX 回调实际执行路径为准。
+无消费者的 `BOARD_JUDGE_ENABLE` 已删除。现用 `DRIVER_Init()` 启用 USART1；裁判数据由 DMA/IDLE 回调解析。
 
 ## 逐发弹速
 

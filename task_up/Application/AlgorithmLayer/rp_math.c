@@ -75,34 +75,3 @@ float deadzone(float input, float center, float death)
 		return center;
 	return input;
 }
-/* 周期触发: 首次只记录时间, 之后按 delay_tick 判断是否到点 */
-void Time_Trigger_inloop(Time_trigger_t *Time_trigger_struct)
-{
-	if (Time_trigger_struct->private_flag == NULL || Time_trigger_struct->last_trigger_tick == NULL || Time_trigger_struct->ignore_first_trigger_flag == NULL)
-	{
-		return;
-	}
-
-  // 首次调用只记录时间, 直接返回
-	if (Time_trigger_struct->if_ignore_first == 1 && Time_trigger_struct->ignore_first_trigger_flag == 0)
-	{
-		*Time_trigger_struct->ignore_first_trigger_flag = 1;
-		*Time_trigger_struct->last_trigger_tick = HAL_GetTick();
-	}
-
-	if ((HAL_GetTick() - *Time_trigger_struct->last_trigger_tick > Time_trigger_struct->delay_tick) && (Time_trigger_struct->ignore_first_trigger_flag != 0 || Time_trigger_struct->if_ignore_first == 0))
-	{
-		*Time_trigger_struct->private_flag = 1;
-		*Time_trigger_struct->last_trigger_tick = HAL_GetTick();
-	}
-/* 更新内部标志位 */
-	else
-	{
-		*Time_trigger_struct->private_flag = Time_trigger_struct->flag_before_trigger;
-	}
-}
-
-
-
-
-

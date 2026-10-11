@@ -13,7 +13,6 @@ void USART6_Init(void);
 void USART8_Init(void);
 void USART9_Init(void);
 void USART10_Init(void);
-void WL_UART_printf(char *format, ...);
 
 extern UART_HandleTypeDef huart7;
 extern UART_HandleTypeDef huart8;
@@ -33,4 +32,3 @@ extern UART_HandleTypeDef huart1;
 #endif
 
 #endif
-

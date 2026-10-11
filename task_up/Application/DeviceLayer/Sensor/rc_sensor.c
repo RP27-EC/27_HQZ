@@ -33,19 +33,12 @@ rc_dev_t rc_dev = {
 	.work_state = DEV_OFFLINE,
 	.id = DEV_ID_RC,
 };
-/**
- *	@brief	遥控器数据检查
- *  step[0]:拨轮推到顶跳变
- *  step[1]:拨轮往上推一点跳变
- *  step[2]:拨轮推到底跳变
- *  step[3]:拨轮往下推一点跳变
- *  不知道谁写的抽象玩意，注释没有一点
- */
+/* 拨轮回中按峰值翻转档位 */
 static void rc_check(rc_dev_t *rc_sen)
 {
 	/*波轮跳变----------------------------------------------------------------*/
-	static int16_t thumbwheel_record = 0;	// 用来记录最大拨到多少的
-	static uint8_t thumbwheel_last_step[4]; // 用来记录上一次跳变的值
+	static int16_t thumbwheel_record = 0;	// 本次拨动峰值，原始量
+	static uint8_t thumbwheel_last_step[4]; // 上次四档电平，每项0/1
 	rc_data_t *rc_info = rc_sen->info;
 
 	/* 更新最大波轮值*/
@@ -78,7 +71,7 @@ static void rc_check(rc_dev_t *rc_sen)
 		}
 		thumbwheel_record = 0;
 	}
-	/*波轮上升沿赋值*/
+	/* 两种翻转沿均产生事件 */
 	for (uint8_t i = 0; i < 4; i++)
 	{
 		if (thumbwheel_last_step[i] != rc_info->thumbwheel.step[i])

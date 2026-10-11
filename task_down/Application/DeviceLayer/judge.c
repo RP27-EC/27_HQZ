@@ -2,7 +2,6 @@
 #include "judge_protocol.h"
 #include "Board_protocol.h"
 #include "imu_sensor.h"
-#include "cap.h"
 #include "drv_tick.h"
 #include <string.h>
 
@@ -136,18 +135,7 @@ void Judge_GetSpeedSnapshot(judge_speed_snapshot_t *snapshot)
     __set_PRIMASK(irq_state);
 }
 
-uint8_t Judge_GetPowerData(uint16_t *limit_w, uint16_t *buffer_j)
-{
-    judge_power_snapshot_t snapshot;
-    if ((limit_w == NULL) || (buffer_j == NULL))
-    {
-        return 0u;
-    }
-    Judge_GetPowerSnapshot(&snapshot);
-    *limit_w = snapshot.limit_w;
-    *buffer_j = snapshot.buffer_j;
-    return snapshot.valid;
-}
+
 
 void Judge_Data_Update(uint16_t id, uint8_t *rxBuf)
 {
@@ -569,7 +557,3 @@ void Shooting_Cmd_Excute_Tick_Calculating(uint8_t flag)
 		
 	}
 }
-
-
-
-

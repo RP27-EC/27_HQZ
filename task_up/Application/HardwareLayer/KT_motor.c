@@ -1,4 +1,4 @@
-/* KT motor CAN driver */
+/* KT电机CAN驱动 */
 
 #include "KT_motor.h"
 extern CAN_HandleTypeDef hcan1;
@@ -43,15 +43,15 @@ void KT_motor_class_init(KT_motor_t *motor)
 	if(motor == NULL)
 		return;
 	
-	memset ( (uint8_t*)motor->tx_buff, 0, 8 ); /* clear tx frame */
-	memset ( &motor->KT_motor_info.tx_info, 0, 8); /* clear tx data */
+	memset ( (uint8_t*)motor->tx_buff, 0, 8 );
+	memset ( &motor->KT_motor_info.tx_info, 0, 8);
 	
-	motor->KT_motor_info.state_info.init_flag         = M_INIT; /* init done */
+	motor->KT_motor_info.state_info.init_flag         = M_INIT;
 	motor->KT_motor_info.state_info.offline_cnt_max   = OFFLINE_LINE_CNT_MAX;
 	motor->KT_motor_info.state_info.selfprotect_cnt_max   = SELFPROTECT_CNT_MAX;	
 	motor->KT_motor_info.state_info.offline_cnt      	 = 	0;
 	motor->KT_motor_info.state_info.selfprotect_cnt       = 0;
-	motor->KT_motor_info.state_info.work_state        = M_OFFLINE; /* start offline */
+	motor->KT_motor_info.state_info.work_state        = M_OFFLINE;
 	motor->KT_motor_info.state_info.selfprotect_flag  = M_PROTECT_OFF;
 	
 
@@ -75,11 +75,11 @@ void KT_motor_class_init(KT_motor_t *motor)
 
 void KT_motor_class_heartbeat(KT_motor_t *motor)
 {	
-	static int16_t current_last; /* last current feedback */
+	static int16_t current_last;
 	if(motor == NULL)	
 		return;
 			
-	KT_motor_state_info_t *state_info = &motor->KT_motor_info.state_info; /* state cache */
+	KT_motor_state_info_t *state_info = &motor->KT_motor_info.state_info;
 
 	if(state_info->init_flag == M_DEINIT)
 	{
@@ -87,11 +87,11 @@ void KT_motor_class_heartbeat(KT_motor_t *motor)
 		return;
 	}
 		
-	state_info->offline_cnt++; /* heartbeat counter */
+	state_info->offline_cnt++;
 	// 电流反馈不变时累计保护计数
 	if(motor->KT_motor_info.rx_info.current==current_last)
 	{
-		state_info->selfprotect_cnt++; /* current stuck count */
+		state_info->selfprotect_cnt++;
 	}
 	current_last=motor->KT_motor_info.rx_info.current;
 	
@@ -109,7 +109,7 @@ void KT_motor_class_heartbeat(KT_motor_t *motor)
 	if(state_info->selfprotect_cnt > state_info->selfprotect_cnt_max) 
 	{
 		state_info->selfprotect_cnt = state_info->selfprotect_cnt_max;
-		state_info->selfprotect_flag = M_PROTECT_ON; /* protect latched */
+		state_info->selfprotect_flag = M_PROTECT_ON;
 	}
 	else 
 	{
@@ -128,9 +128,9 @@ void kt_motor_class_pid_init(KT_motor_t *motor)
 	if(motor == NULL)	
 		return;
 
-	KT_motor_pid_t *pid = &motor->KT_motor_info.pid_info; /* pid cache */
+	KT_motor_pid_t *pid = &motor->KT_motor_info.pid_info;
 	
-	pid->init_flag     = M_INIT; /* pid init done */
+	pid->init_flag     = M_INIT;
 	
 	pid->rx.angleKp    = 0;
 	pid->rx.angleKi    = 0;
@@ -140,7 +140,7 @@ void kt_motor_class_pid_init(KT_motor_t *motor)
 	pid->rx.iqKi       = 0;
 
 	
-	pid->tx.angleKp    = 10; /* default angle Kp */
+	pid->tx.angleKp    = 10;
 	pid->tx.angleKi    = 1;
 	pid->tx.speedKp    = 10;
 	pid->tx.speedKi    = 1;
@@ -166,9 +166,9 @@ void kt_motor_multi_control(int16_t* iqControl, char kt_motor_num, motor_drive_e
 			iqControl[i] = 0;
 	}
 	
-	uint8_t tx_buff[8] = {0}; /* multi motor tx frame */
+	uint8_t tx_buff[8] = {0};
 	
-	tx_buff[0] = (uint8_t) iqControl[0]; /* motor 1 low byte */
+	tx_buff[0] = (uint8_t) iqControl[0];
 	tx_buff[1] = (uint8_t) (iqControl[0] >> 8);
 	tx_buff[2] = (uint8_t) iqControl[1];
 	tx_buff[3] = (uint8_t) (iqControl[1] >> 8);
@@ -197,11 +197,11 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 	if( motor == NULL )
 		return HAL_ERROR;
 	
-	KT_motor_pid_t       *pid      = &motor->KT_motor_info.pid_info; /* pid cache */
+	KT_motor_pid_t       *pid      = &motor->KT_motor_info.pid_info;
 	
-	KT_motor_tx_info_t   *tx_info  = &motor->KT_motor_info.tx_info; /* tx cache */
+	KT_motor_tx_info_t   *tx_info  = &motor->KT_motor_info.tx_info;
 	
-	memset( (uint8_t*)motor->tx_buff, 0, 8 ); /* clear frame */
+	memset( (uint8_t*)motor->tx_buff, 0, 8 );
 	
 	switch(command)
 	{
@@ -232,7 +232,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
 			motor->tx_buff[3] = 0x00;
-			motor->tx_buff[4] = (uint8_t) tx_info->accel; /* accel low byte */
+			motor->tx_buff[4] = (uint8_t) tx_info->accel;
 			motor->tx_buff[5] = (uint8_t) (tx_info->accel >> 8);
 			motor->tx_buff[6] = (uint8_t) (tx_info->accel >> 16);
 			motor->tx_buff[7] = (uint8_t) (tx_info->accel >> 24);
@@ -245,7 +245,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[3] = 0x00;
 			motor->tx_buff[4] = 0x00;
 			motor->tx_buff[5] = 0x00;
-			motor->tx_buff[6] = (uint8_t) tx_info->encoderOffset; /* offset low byte */
+			motor->tx_buff[6] = (uint8_t) tx_info->encoderOffset;
 			motor->tx_buff[7] = (uint8_t) (tx_info->encoderOffset >> 8);
 		break;
 		
@@ -277,7 +277,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
 			motor->tx_buff[3] = 0x00;
-			motor->tx_buff[4] = (uint8_t) tx_info->powerControl; /* power low byte */
+			motor->tx_buff[4] = (uint8_t) tx_info->powerControl;
 			motor->tx_buff[5] = (uint8_t) (tx_info->powerControl >> 8);
 			motor->tx_buff[6] = 0x00;
 			motor->tx_buff[7] = 0x00;
@@ -288,7 +288,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
 			motor->tx_buff[3] = 0x00;
-			motor->tx_buff[4] = *(uint8_t*) (&tx_info->iqControl); /* iq low byte */
+			motor->tx_buff[4] = *(uint8_t*) (&tx_info->iqControl);
 			motor->tx_buff[5] = *((uint8_t*)(&tx_info->iqControl)+1);
 			motor->tx_buff[6] = 0x00;
 			motor->tx_buff[7] = 0x00;
@@ -299,7 +299,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
 			motor->tx_buff[3] = 0x00;
-			motor->tx_buff[4] = (uint8_t) tx_info->speedControl; /* speed low byte */
+			motor->tx_buff[4] = (uint8_t) tx_info->speedControl;
 			motor->tx_buff[5] = (uint8_t) (tx_info->speedControl >> 8);
 			motor->tx_buff[6] = (uint8_t) (tx_info->speedControl >> 16);
 			motor->tx_buff[7] = (uint8_t) (tx_info->speedControl >> 24);
@@ -310,7 +310,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
 			motor->tx_buff[3] = 0x00;
-			motor->tx_buff[4] = (uint8_t) tx_info->angle_sum_Control; /* angle low byte */
+			motor->tx_buff[4] = (uint8_t) tx_info->angle_sum_Control;
 			motor->tx_buff[5] = (uint8_t) (tx_info->angle_sum_Control >> 8);
 			motor->tx_buff[6] = (uint8_t) (tx_info->angle_sum_Control >> 16);
 			motor->tx_buff[7] = (uint8_t) (tx_info->angle_sum_Control >> 24);
@@ -319,7 +319,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 		case POSI_CLOSE_LOOP_ID2:
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID2;
 			motor->tx_buff[1] = 0x00;
-		  motor->tx_buff[2] = (uint8_t) tx_info->angle_sum_Control_maxSpeed; /* max speed low */
+		  motor->tx_buff[2] = (uint8_t) tx_info->angle_sum_Control_maxSpeed;
 			motor->tx_buff[3] = (uint8_t) (tx_info->angle_sum_Control_maxSpeed >> 8);
 			motor->tx_buff[4] = (uint8_t) tx_info->angle_sum_Control;
 			motor->tx_buff[5] = (uint8_t) (tx_info->angle_sum_Control >> 8);
@@ -329,7 +329,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 		
 		case POSI_CLOSE_LOOP_ID3:
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID3;
-			motor->tx_buff[1] = (uint8_t) tx_info->angle_single_Control_spinDirection; /* spin direction */
+			motor->tx_buff[1] = (uint8_t) tx_info->angle_single_Control_spinDirection;
 		  motor->tx_buff[2] = 0x00;
 			motor->tx_buff[3] = 0x00;
 			motor->tx_buff[4] = (uint8_t) tx_info->angle_single_Control;
@@ -354,7 +354,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 			motor->tx_buff[1] = 0x00;
 		  motor->tx_buff[2] = 0x00;
 			motor->tx_buff[3] = 0x00;
-			motor->tx_buff[4] = (uint8_t) tx_info->angle_add_Control; /* delta low byte */
+			motor->tx_buff[4] = (uint8_t) tx_info->angle_add_Control;
 			motor->tx_buff[5] = (uint8_t) (tx_info->angle_add_Control >> 8);
 			motor->tx_buff[6] = (uint8_t) (tx_info->angle_add_Control >> 16);
 			motor->tx_buff[7] = (uint8_t) (tx_info->angle_add_Control >> 24);
@@ -363,7 +363,7 @@ HAL_StatusTypeDef tx_kt_motor_W_command(KT_motor_t *motor, uint8_t command)
 		case POSI_CLOSE_LOOP_ID6:
 			motor->tx_buff[0] = POSI_CLOSE_LOOP_ID6;
 			motor->tx_buff[1] = 0x00;
-		  motor->tx_buff[2] = (uint8_t) tx_info->angle_add_Control_maxSpeed; /* max speed low */
+		  motor->tx_buff[2] = (uint8_t) tx_info->angle_add_Control_maxSpeed;
 			motor->tx_buff[3] = (uint8_t) (tx_info->angle_add_Control_maxSpeed >> 8);
 			motor->tx_buff[4] = (uint8_t) tx_info->angle_add_Control;
 			motor->tx_buff[5] = (uint8_t) (tx_info->angle_add_Control >> 8);
@@ -457,7 +457,7 @@ static void KT_Encoder_Sum_Cal(KT_motor_t *motor)
 
     if (rx_info->encoder_sum_ready == 0u)
     {
-        /* First feedback frame only establishes the origin, no displacement. */
+        /* 首帧仅建立累计角度基准 */
         rx_info->encoder_sum = 0;
         rx_info->encoder_sum_ready = 1u;
         rx_info->last_encoder = rx_info->encoder;
@@ -468,12 +468,12 @@ static void KT_Encoder_Sum_Cal(KT_motor_t *motor)
 
     if (err > 32767)
     {
-        /* Wrapped backwards past the encoder zero point: real delta is negative. */
+        /* 反向跨零修正计数差 */
         rx_info->encoder_sum += (err - 65536);
     }
     else if (err < -32767)
     {
-        /* Wrapped forwards past the encoder zero point: real delta is positive. */
+        /* 正向跨零修正计数差 */
         rx_info->encoder_sum += (err + 65536);
     }
     else
@@ -492,13 +492,13 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 		return;
 	}	
 	
-	uint8_t ID = rxBuf[0]; /* feedback command id */
+	uint8_t ID = rxBuf[0];
 	
-	KT_motor_pid_rx_info_t *pid_rx_info = &motor->KT_motor_info.pid_info.rx; /* pid feedback */
-	KT_motor_rx_info_t     *rx_info     = &motor->KT_motor_info.rx_info; /* feedback cache */
-	KT_motor_state_info_t  *state_info  = &motor->KT_motor_info.state_info; /* online state */
+	KT_motor_pid_rx_info_t *pid_rx_info = &motor->KT_motor_info.pid_info.rx;
+	KT_motor_rx_info_t     *rx_info     = &motor->KT_motor_info.rx_info;
+	KT_motor_state_info_t  *state_info  = &motor->KT_motor_info.state_info;
 	
-	state_info->offline_cnt = 0; /* frame received */
+	state_info->offline_cnt = 0;
 	state_info->work_state = M_ONLINE;
 	
 	switch (ID)
@@ -531,7 +531,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 		break;
 		
 		case ACCEL_RX_ID:
-			rx_info->accel  = (int32_t)rxBuf[7]; /* big-endian accel */
+			rx_info->accel  = (int32_t)rxBuf[7];
 			rx_info->accel <<= 8;
 			rx_info->accel |= (int32_t)rxBuf[6];
 			rx_info->accel <<= 8;
@@ -553,7 +553,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 		break;	
 		
 		case ENCODER_RX_ID:
-			rx_info->encoder = (uint16_t)rxBuf[3]; /* encoder high byte */
+			rx_info->encoder = (uint16_t)rxBuf[3];
 			rx_info->encoder <<= 8;
 			rx_info->encoder |= (uint16_t)rxBuf[2];
 			rx_info->encoderRaw = (uint16_t)rxBuf[5];
@@ -605,7 +605,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 		
 		case STATE1_ID:
 			rx_info->temperature = (int8_t)rxBuf[1]; 
-			rx_info->voltage = (uint16_t)rxBuf[4]; /* voltage high byte */
+			rx_info->voltage = (uint16_t)rxBuf[4];
 			rx_info->voltage <<= 8;
 			rx_info->voltage |= (uint16_t)rxBuf[3];
 			rx_info->errorState = rxBuf[7];
@@ -613,10 +613,10 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 		
 		case STATE2_ID:
 			rx_info->temperature = (int8_t)rxBuf[1];
-			rx_info->current = (int16_t)rxBuf[3]; /* current high byte */
+			rx_info->current = (int16_t)rxBuf[3];
 			rx_info->current <<= 8;
 			rx_info->current |= (int16_t)rxBuf[2];
-			rx_info->speed = (int16_t)rxBuf[5]; /* speed high byte */
+			rx_info->speed = (int16_t)rxBuf[5];
 			rx_info->speed <<= 8;
 			rx_info->speed |= (int16_t)rxBuf[4];
 			rx_info->encoder = (uint16_t)rxBuf[7];
@@ -626,13 +626,13 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 		
 		case STATE3_ID:
 			rx_info->temperature = (int8_t)rxBuf[1];
-			rx_info->current_A = (int16_t)rxBuf[3]; /* phase A current */
+			rx_info->current_A = (int16_t)rxBuf[3];
 			rx_info->current_A <<= 8;
 			rx_info->current_A |= (int16_t)rxBuf[2];
-			rx_info->current_B = (int16_t)rxBuf[5]; /* phase B current */
+			rx_info->current_B = (int16_t)rxBuf[5];
 			rx_info->current_B <<= 8;
 			rx_info->current_B |= (int16_t)rxBuf[4];
-			rx_info->current_C = (int16_t)rxBuf[7]; /* phase C current */
+			rx_info->current_C = (int16_t)rxBuf[7];
 			rx_info->current_C <<= 8;
 			rx_info->current_C |= (int16_t)rxBuf[6];
 		break;
@@ -680,7 +680,7 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 	
 }
 
-/* write PID parameters to tx cache */
+/* 配置PID参数载荷 */
 void write_kt_motor_pid_param(KT_motor_t *motor, uint8_t* buff)
 {
 	if(motor == NULL || buff == NULL)
@@ -688,7 +688,7 @@ void write_kt_motor_pid_param(KT_motor_t *motor, uint8_t* buff)
 	
 	KT_motor_pid_t *pid = &motor->KT_motor_info.pid_info;
 	
-	pid->tx.angleKp    = buff[0]; /* angle Kp */
+	pid->tx.angleKp    = buff[0];
 	pid->tx.angleKi    = buff[1];
 	pid->tx.speedKp    = buff[2];
 	pid->tx.speedKi    = buff[3];
@@ -697,7 +697,7 @@ void write_kt_motor_pid_param(KT_motor_t *motor, uint8_t* buff)
 }
 
 
-/* write acceleration parameter */
+/* 配置加速度载荷 */
 void write_kt_motor_accel_param(KT_motor_t *motor, int32_t accel)
 {
 	if(motor == NULL)
@@ -707,7 +707,7 @@ void write_kt_motor_accel_param(KT_motor_t *motor, int32_t accel)
 }
 
 
-/* write encoder offset with range check */
+/* 编码器偏移限制在单圈内 */
 void write_kt_motor_encoderOffset_param(KT_motor_t *motor, uint16_t encoderOffset)
 {
 	if(motor == NULL)
@@ -719,7 +719,7 @@ void write_kt_motor_encoderOffset_param(KT_motor_t *motor, uint16_t encoderOffse
 	motor->KT_motor_info.tx_info.encoderOffset = encoderOffset;
 }
 
-/* write open-loop torque command */
+/* 开环功率指令载荷 */
 void write_kt_motor_powerControl_param(KT_motor_t *motor, int16_t powerControl)
 {
 	if(motor == NULL)
@@ -731,19 +731,19 @@ void write_kt_motor_powerControl_param(KT_motor_t *motor, int16_t powerControl)
 	motor->KT_motor_info.tx_info.powerControl = powerControl;
 }
 
-/* write current-loop command */
+/* 电流闭环指令载荷 */
 void write_kt_motor_iqControl_param(KT_motor_t *motor, int16_t iqControl)
 {
 	if(motor == NULL)
 		return;
 	
-	iqControl = constrain(iqControl, -KT_TX_IQ_CONTROL_MAX, KT_TX_IQ_CONTROL_MAX); /* clamp */
+	iqControl = constrain(iqControl, -KT_TX_IQ_CONTROL_MAX, KT_TX_IQ_CONTROL_MAX);
 	
 	motor->KT_motor_info.tx_info.iqControl = iqControl;
 }
 
 
-/* write speed-loop command */
+/* 速度闭环指令载荷 */
 void write_kt_motor_speedControl_param(KT_motor_t *motor, int32_t speedControl)
 {
 	if(motor == NULL)
@@ -752,7 +752,7 @@ void write_kt_motor_speedControl_param(KT_motor_t *motor, int32_t speedControl)
 	motor->KT_motor_info.tx_info.speedControl = speedControl;
 }
 
-/* write multi-turn angle target and max speed */
+/* 多圈目标附带最大速度 */
 void write_kt_motor_angle_sum_Control_param(KT_motor_t    *motor, 
 																						int32_t       angle_sum_Control,
 	                                          uint16_t      angle_sum_Control_maxSpeed)
@@ -766,7 +766,7 @@ void write_kt_motor_angle_sum_Control_param(KT_motor_t    *motor,
 }
 
 
-/* write single-turn angle target and direction */
+/* 单圈目标附带旋转方向 */
 void write_kt_motor_angle_single_Control_param(KT_motor_t   *motor, 
 											 uint16_t     angle_single_Control,
 											 uint8_t   	  angle_single_Control_spinDirection,
@@ -781,7 +781,7 @@ void write_kt_motor_angle_single_Control_param(KT_motor_t   *motor,
 	motor->KT_motor_info.tx_info.angle_single_Control_maxSpeed = angle_single_Control_maxSpeed;
 }
 
-/* write angle delta target and max speed */
+/* 增量目标附带最大速度 */
 void write_kt_motor_angle_add_Control_param(KT_motor_t   *motor, 
 																						int32_t      angle_add_Control,
 																			      uint16_t     angle_add_Control_maxSpeed)

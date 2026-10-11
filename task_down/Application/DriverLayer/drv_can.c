@@ -86,6 +86,7 @@ HAL_StatusTypeDef CAN_SendData(FDCAN_HandleTypeDef *hcan, uint32_t stdId, uint8_
 	tx_message.DataLength = FDCAN_DLC_BYTES_8;
 	tx_message.ErrorStateIndicator = FDCAN_ESI_ACTIVE;
 	tx_message.BitRateSwitch = FDCAN_BRS_OFF;
+	/* 板间使用经典CAN数据帧 */
 	tx_message.FDFormat = FDCAN_CLASSIC_CAN;
 	tx_message.TxFrameType = FDCAN_DATA_FRAME;
 	tx_message.MessageMarker = 0;
@@ -119,7 +120,7 @@ __WEAK void CAN3_rxDataHandler(uint32_t rxId, uint8_t *rxBuf)
 void CAN1_Filter_Init(void)
 {
 	FDCAN_FilterTypeDef sFilterConfig;
-  /* Configure Rx filter */	
+  /* 标准帧进入接收FIFO */
 	sFilterConfig.IdType = FDCAN_STANDARD_ID;//扩展ID不接收
   sFilterConfig.FilterIndex = 0;
   sFilterConfig.FilterType = FDCAN_FILTER_MASK;
@@ -144,7 +145,7 @@ void CAN1_Filter_Init(void)
 void CAN2_Filter_Init(void)
 {
 	FDCAN_FilterTypeDef sFilterConfig;
-  /* Configure Rx filter */
+  /* 标准帧进入接收FIFO */
   sFilterConfig.IdType =  FDCAN_STANDARD_ID;
   sFilterConfig.FilterIndex = 0;
   sFilterConfig.FilterType = FDCAN_FILTER_MASK;
@@ -168,7 +169,7 @@ void CAN2_Filter_Init(void)
 void CAN3_Filter_Init(void)
 {
 	FDCAN_FilterTypeDef sFilterConfig;
-  /* Configure Rx filter */
+  /* 标准帧进入接收FIFO */
   sFilterConfig.IdType =  FDCAN_STANDARD_ID;
   sFilterConfig.FilterIndex = 1;
   sFilterConfig.FilterType = FDCAN_FILTER_MASK;

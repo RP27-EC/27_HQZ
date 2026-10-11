@@ -341,7 +341,6 @@ void Board_Tx_Pkt_05(Board_t* board)
 #endif
         {
         /* 遥控角速度装箱 */
-#if CHASSIS_BRINGUP_ENABLE
             if (rc_dev.info->s1.value == RC_SW_DOWN)
             {
                 yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
@@ -366,10 +365,6 @@ void Board_Tx_Pkt_05(Board_t* board)
                                                      BOARD_D5_YAW_RATE_MAX_DEG_S);
 #endif
             }
-#else
-            yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0,
-                                                 BOARD_D5_YAW_RATE_MAX_DEG_S);
-#endif
             pitch_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch1,
                                                    BOARD_D5_PITCH_RATE_MAX_DEG_S);
         }
@@ -436,7 +431,3 @@ void Board_Rx_Meg_02(Board_t* board,uint8_t* rxbuf)
 
 	board->status->offline_cnt = 0;
 }
-
-
-
-

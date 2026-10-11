@@ -4,7 +4,6 @@
 #define __RP_DRIVER_CONFIG_H
 #include "stm32f4xx_hal.h"
 #include "stdbool.h"
-#define configDRV_CAN_USE_MAIL  1
 /* 驱动层配置 */
 /**
  *	@brief 驱动层配置
@@ -99,6 +98,3 @@ typedef struct drv_uart {
 } drv_uart_t;
 
 #endif
-
-
-

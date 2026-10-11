@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_PWR_LDO_SUPPLY,USE_HAL_DRIVER,STM32H723xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Application/AlgorithmLayer;../Application/ConfigLayer;../Application/DriverLayer;../Application/DeviceLayer/Imu;../Application/DeviceLayer/Sensor;../Application/DeviceLayer;../Application/HardwareLayer;../Application/ModuleLayer;../Application/ProtocolLayer;../Application/SolvingLayer;../Application/TaskLayer;../Application/UserLayer;../Application/ServiceLayer;../Application/ParameterLayer;../Application/ControlLayer</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../Application/AlgorithmLayer;../Application/ConfigLayer;../Application/DriverLayer;../Application/DeviceLayer/Imu;../Application/DeviceLayer/Sensor;../Application/DeviceLayer;../Application/HardwareLayer;../Application/ModuleLayer;../Application/ProtocolLayer;../Application/TaskLayer;../Application/UserLayer</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -567,11 +567,6 @@
               <FilePath>..\Application\TaskLayer\monitor_task.c</FilePath>
             </File>
             <File>
-              <FileName>observe_task.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\TaskLayer\observe_task.c</FilePath>
-            </File>
-            <File>
               <FileName>connect_task.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\TaskLayer\connect_task.c</FilePath>
@@ -581,21 +576,11 @@
         <Group>
           <GroupName>Control</GroupName>
           <Files>
-            <File>
-              <FileName>infantry.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\ControlLayer\infantry.c</FilePath>
-            </File>
           </Files>
         </Group>
         <Group>
           <GroupName>Module</GroupName>
           <Files>
-            <File>
-              <FileName>chassis.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\ModuleLayer\chassis.c</FilePath>
-            </File>
             <File>
               <FileName>chassis_control.c</FileName>
               <FileType>1</FileType>
@@ -615,11 +600,6 @@
               <FileName>chassis_spin.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\ModuleLayer\chassis_spin.c</FilePath>
-            </File>
-            <File>
-              <FileName>gimbal.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\ModuleLayer\gimbal.c</FilePath>
             </File>
             <File>
               <FileName>launch.c</FileName>
@@ -721,11 +701,6 @@
               <FilePath>..\Application\DeviceLayer\Sensor\rc_sensor.c</FilePath>
             </File>
             <File>
-              <FileName>cap.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\DeviceLayer\cap.c</FilePath>
-            </File>
-            <File>
               <FileName>supercap.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\DeviceLayer\supercap.c</FilePath>
@@ -754,11 +729,6 @@
               <FileName>rc_protocol.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\ProtocolLayer\rc_protocol.c</FilePath>
-            </File>
-            <File>
-              <FileName>cap_protocol.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\ProtocolLayer\cap_protocol.c</FilePath>
             </File>
             <File>
               <FileName>supercap_protocol.c</FileName>
@@ -796,24 +766,9 @@
               <FilePath>..\Application\DriverLayer\drv_tick.c</FilePath>
             </File>
             <File>
-              <FileName>drv_tim.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\DriverLayer\drv_tim.c</FilePath>
-            </File>
-            <File>
               <FileName>drv_uart.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\Application\DriverLayer\drv_uart.c</FilePath>
-            </File>
-            <File>
-              <FileName>drv_flash.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\Application\DriverLayer\drv_flash.c</FilePath>
-            </File>
-            <File>
-              <FileName>drv_flash.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Application\DriverLayer\drv_flash.h</FilePath>
             </File>
           </Files>
         </Group>
@@ -846,11 +801,6 @@
               <FilePath>..\Application\ConfigLayer\rp_config.h</FilePath>
             </File>
             <File>
-              <FileName>config_chassis.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Application\ConfigLayer\config_chassis.h</FilePath>
-            </File>
-            <File>
               <FileName>chassis_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Application\ConfigLayer\chassis_config.h</FilePath>
@@ -869,11 +819,6 @@
               <FileName>rp_driver_config.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\Application\ConfigLayer\rp_driver_config.h</FilePath>
-            </File>
-            <File>
-              <FileName>rp_user_config.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\Application\ConfigLayer\rp_user_config.h</FilePath>
             </File>
           </Files>
         </Group>
