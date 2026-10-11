@@ -65,3 +65,4 @@ flowchart LR
 - FDCAN 本地入队成功、对端 CAN 心跳、协议字段有效是三种不同证据，应分开确认。
 
 硬件方向、失联保护和首次上电步骤见[下板 README](../Readme.md#troubleshooting--safety)。功率模型输出不是实测功率证明，超电输出当前配置关闭。
+
