@@ -40,7 +40,7 @@
 #define GIMBAL_MEC_OUTER_KD              0.1f
 #define GIMBAL_MEC_OUTER_D_FILTER_ALPHA  0.85f
 #define GIMBAL_MEC_ERR_DEADBAND_DEG      0.2f
-#define GIMBAL_MEC_YAW_MAX_RATE_DEG_S    300.0f
+#define GIMBAL_MEC_YAW_MAX_RATE_DEG_S    360.0f // 机械回正上限，deg/s
 #define GIMBAL_MEC_YAW_DECEL_RAD_S2      25.0f
 #define GIMBAL_MEC_YAW_TORQUE_STEP_NM    0.08f
 
@@ -50,7 +50,7 @@
 #define GIMBAL_MEC_YAW_FF_FALL_STEP      0.10f
 #define GIMBAL_MEC_YAW_FF_FILTER_ALPHA   0.05f
 #define GIMBAL_MEC_YAW_FF_MAX_GAIN       0.90f
-#define GIMBAL_MEC_YAW_NEAR_RATE_KP      10.0f
+#define GIMBAL_MEC_YAW_NEAR_RATE_KP      15.0f // 近区速度增益，s^-1
 /* 静摩擦补偿只在误差死区外生效。 */
 #define GIMBAL_MEC_YAW_FRICTION_FF_NM    0.3f
 /* 速度反馈低通滤波系数，0~1。 */
@@ -85,7 +85,7 @@
 #define GIMBAL_MEC_HOLD_RATE_KD_NM_PER_DPS  0.0f
 #define GIMBAL_MEC_HOLD_RATE_KI_LIMIT       0.0f
 #define GIMBAL_MEC_HOLD_RATE_OUT_MAX_NM     6.0f
-#define GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS   10.0f
+#define GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS   3.0f // 速度反馈死区，deg/s
 
 /* 位置保持的死区与退出阈值，单位 deg。 */
 #define GIMBAL_MEC_HOLD_DEADZONE_DEG     0.3f
@@ -151,7 +151,7 @@
 #define GIMBAL_RATE_HOLD_EXIT_DEG_S        8.0f
 
 /* Yaw 保持环：输入角度误差(deg)，输出目标角速度(deg/s) */
-#define GIMBAL_YAW_HOLD_KP                 15.0f
+#define GIMBAL_YAW_HOLD_KP                 18.0f // 锁角速度增益，s^-1
 #define GIMBAL_YAW_HOLD_KI                 0.003f
 #define GIMBAL_YAW_HOLD_INTEGRAL_MAX       5000.0f
 #define GIMBAL_YAW_HOLD_OUT_MAX            300.0f

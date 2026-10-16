@@ -35,6 +35,8 @@ volatile uint8_t board_hole_exit_pending;
 
 // NOTE: 下降时同步复位朝向
 static uint8_t board_gimbal_yaw_rear = 0u;
+static uint8_t board_yaw_override; // R键方向锁定，0/1
+static uint32_t board_yaw_override_tick; // R键锁定起点，ms
 
 #if BOARD_COMM_DEBUG
 static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
@@ -65,12 +67,14 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     last_b_value = b_now;
 
     if ((rc_info->s1.value == RC_SW_UP) &&
-        (rc_info->s2.value == RC_SW_MID) &&
+        ((Chassis_Input_IsKeyboardMode() != 0u) || (rc_info->s2.value == RC_SW_MID)) &&
         (button_event != 0u))
     {
+        Chassis_Input_CancelSpin();
         if (board_hole_request == 0u)
         {
             board_gimbal_yaw_rear = 0u;
+            board_yaw_override = 0u;
             board_hole_request = 1u;
             board_hole_exit_pending = 0u;
         }
@@ -207,6 +211,7 @@ static void Board_Debug_Gimbal_Command(void)
     if (rc_dev.work_state != DEV_ONLINE)
     {
         board_gimbal_yaw_rear = 0u;
+        board_yaw_override = 0u;
         last_r_pressed = 0u;
         mec_mode_active = 0u;
         board.tx_pkt->car_pkt.car_state = 0u;
@@ -248,11 +253,29 @@ static void Board_Debug_Gimbal_Command(void)
         if ((r_pressed != 0u) && (last_r_pressed == 0u))
         {
             board_gimbal_yaw_rear ^= 1u;
+            board_yaw_override = 1u;
+            board_yaw_override_tick = HAL_GetTick();
         }
     }
     last_r_pressed = r_pressed;
 
     /* 预发送与定位共用固定终点。 */
+    if ((keyboard_active == 0u) && (r_edge == 0u) &&
+        (board.tx_pkt->car_pkt.r_turn_active == 0u) &&
+        (board.status->gimbal_data_valid != 0u) &&
+        ((HAL_GetTick() - board.status->gimbal_rx_time_ms) <= CHASSIS_FOLLOW_TIMEOUT_MS))
+    {
+        float target = (board_gimbal_yaw_rear != 0u) ? BOARD_MEC_YAW_REAR_RAD : BOARD_MEC_YAW_FRONT_RAD;
+        float error = atan2f(sinf(target - board.rx_meg->gimbal_meg.yaw_mec),
+                            cosf(target - board.rx_meg->gimbal_meg.yaw_mec));
+        if ((fabsf(error) <= CHASSIS_KEY_UTURN_TOL_DEG * 0.0174532925f) ||
+            ((HAL_GetTick() - board_yaw_override_tick) >= CHASSIS_KEY_UTURN_TIMEOUT_MS))
+            board_yaw_override = 0u;
+        if (board_yaw_override == 0u)
+            board_gimbal_yaw_rear = Chassis_Input_SelectNearestYaw(
+                board.rx_meg->gimbal_meg.yaw_mec, board_gimbal_yaw_rear);
+        Chassis_Input_SetYawRear(board_gimbal_yaw_rear);
+    }
     if (keyboard_active != 0u)
     {
         board.tx_pkt->gimbal_target_pkt.yaw_mec_tar = Chassis_Input_GetKeyboardYawTargetRad();

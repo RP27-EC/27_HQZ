@@ -5,6 +5,7 @@
 #include "communicate.h"
 #include "gimbal.h"
 #include "lift_config.h"
+#include <math.h>
 
 lift_t lift;
 lift_tune_t lift_tune;
@@ -15,6 +16,8 @@ volatile lift_debug_t lift_debug;
 #define LIFT_FAULT_OVERTRAVEL     3u
 #define LIFT_FAULT_STALL_CURRENT  4u
 #define LIFT_FAULT_STALL_PROGRESS 5u
+#define LIFT_FAULT_HOLD_CURRENT   6u // 保持过载，值6
+#define LIFT_FAULT_FEEDBACK       7u // 反馈异常，值7
 
 static float lift_abs(float value)
 {
@@ -66,6 +69,7 @@ static void lift_pid_clear(pid_ctrl_t *pid)
 
 static void lift_enter_state(lift_state_e state, uint32_t now)
 {
+    float hold_i_raw = lift.speed_pid.iout;
     lift.state = state;
     lift.state_enter_tick = now;
     lift.homing_confirm_ms = 0u;
@@ -73,8 +77,16 @@ static void lift_enter_state(lift_state_e state, uint32_t now)
     lift.overcurrent_confirm_ms = 0u;
     lift.stall_progress_tick = now;
     lift.stall_progress_count = lift.motor->rx_info->encoder_sum;
+    lift.speed_target_rpm = 0.0f;
+    lift.overtravel_ms = 0u;
+    lift.hold_current_ms = 0u;
     lift_pid_clear(&lift.position_pid);
     lift_pid_clear(&lift.speed_pid);
+    if ((state == LIFT_READY_UP) || (state == LIFT_READY_DOWN) || (state == LIFT_ALIGN_DOWN))
+    {
+        lift.speed_pid.integral = lift_clamp(hold_i_raw, -LIFT_HOLD_I_MAX_RAW,
+            LIFT_HOLD_I_MAX_RAW) / LIFT_HOLD_SPEED_KI;
+    }
 
     if (state == LIFT_HOMING_UP)
     {
@@ -90,6 +102,30 @@ static void lift_enter_state(lift_state_e state, uint32_t now)
 static void lift_output_speed(float target_rpm, float output_limit)
 {
     float output;
+    uint8_t terminal = ((lift.state == LIFT_READY_UP) || (lift.state == LIFT_READY_DOWN) ||
+        (lift.state == LIFT_ALIGN_DOWN) || (lift.state == LIFT_RETRACT_DOWN) ||
+        ((lift.state == LIFT_MOVING_UP) &&
+         (lift_abs((float)lift.top_target - lift_encoder_units()) <= LIFT_BRAKE_COUNTS)) ||
+        ((lift.state == LIFT_MOVING_DOWN) &&
+         (lift_abs((float)lift.bottom_target - lift_encoder_units()) <= LIFT_BRAKE_COUNTS)));
+
+    // NOTE: 末端积分承担静载
+    lift.speed_pid.ki = terminal ? LIFT_HOLD_SPEED_KI : LIFT_SPEED_KI;
+    lift.speed_pid.integral_max = terminal ?
+        LIFT_HOLD_I_MAX_RAW / LIFT_HOLD_SPEED_KI : LIFT_SPEED_INTEGRAL_MAX;
+    lift.speed_pid.out_max = fminf(lift_tune.speed_out_max_raw, lift_abs(output_limit));
+
+    if ((lift.home_valid != 0u) && (lift.state != LIFT_HOMING_UP))
+    {
+        float position = lift_encoder_units();
+        if (((position - (float)lift.top_zero) * LIFT_UP_DIRECTION >= 0.0f &&
+             target_rpm * LIFT_UP_DIRECTION > 0.0f) ||
+            ((position - (float)lift.bottom_target) * LIFT_UP_DIRECTION <= -LIFT_POS_TOL_COUNTS &&
+             target_rpm * LIFT_UP_DIRECTION < 0.0f))
+        {
+            target_rpm = 0.0f;
+        }
+    }
 
     lift.speed_pid.target = lift_rpm_to_rad_s(target_rpm);
     lift.speed_pid.measure = lift_rpm_to_rad_s(
@@ -99,6 +135,18 @@ static void lift_output_speed(float target_rpm, float output_limit)
     single_pid_ctrl(&lift.speed_pid);
 
     output = lift.speed_pid.out * LIFT_OUTPUT_DIRECTION;
+    if ((lift.home_valid != 0u) && (lift.state != LIFT_HOMING_UP))
+    {
+        float position = lift_encoder_units();
+        if (((position - (float)lift.top_zero) * LIFT_UP_DIRECTION >= 0.0f &&
+             output * LIFT_OUTPUT_DIRECTION * LIFT_UP_DIRECTION > 0.0f) ||
+            ((position - (float)lift.bottom_target) * LIFT_UP_DIRECTION <= -LIFT_POS_TOL_COUNTS &&
+             output * LIFT_OUTPUT_DIRECTION * LIFT_UP_DIRECTION < 0.0f))
+        {
+            output = 0.0f;
+            integral_to_zero(&lift.speed_pid);
+        }
+    }
     lift.motor->tx_info->torque =
         lift_clamp(output, -output_limit, output_limit);
 }
@@ -108,9 +156,8 @@ static void lift_output_position_limited(int32_t target_count,
                                          float output_limit)
 {
     float speed_target;
-    float output;
-    float limit = lift_abs(output_limit);
 
+    lift.position_pid.kp = (lift.state == LIFT_RETRACT_DOWN) ? LIFT_TERMINAL_KP : lift_tune.pos_kp;
     lift.position_pid.target = (float)target_count;
     lift.position_pid.measure = lift_encoder_units();
     lift.position_pid.err = lift.position_pid.target - lift.position_pid.measure;
@@ -119,32 +166,14 @@ static void lift_output_position_limited(int32_t target_count,
     speed_target = lift_clamp(lift.position_pid.out,
                               -lift_abs(speed_limit),
                               lift_abs(speed_limit));
-    if ((speed_target > 0.0f) &&
-        (speed_target < lift_tune.pos_min_speed_rpm))
-    {
-        speed_target = lift_tune.pos_min_speed_rpm;
-    }
-    else if ((speed_target < 0.0f) &&
-             (speed_target > -lift_tune.pos_min_speed_rpm))
-    {
-        speed_target = -lift_tune.pos_min_speed_rpm;
-    }
-    lift.speed_pid.target = lift_rpm_to_rad_s(speed_target);
-    lift.speed_pid.measure = lift_rpm_to_rad_s(
-        (float)lift.motor->rx_info->encoder_speed *
-        lift_tune.speed_direction_sign);
-    lift.speed_pid.err = lift.speed_pid.target - lift.speed_pid.measure;
-    single_pid_ctrl(&lift.speed_pid);
-
-    output = lift.speed_pid.out * LIFT_OUTPUT_DIRECTION;
-    lift.motor->tx_info->torque = lift_clamp(output, -limit, limit);
+    lift_output_speed(speed_target, lift_abs(output_limit));
 }
 
 static void lift_output_position(int32_t target_count)
 {
     lift_output_position_limited(target_count,
-                                 lift_tune.move_speed_rpm,
-                                 lift_tune.speed_out_max_raw);
+                                 LIFT_HOLD_SPEED_MAX_RPM,
+                                 LIFT_HOLD_OUTPUT_MAX_RAW);
 }
 
 static uint8_t lift_alignment_ok(void)
@@ -181,56 +210,49 @@ static uint8_t lift_alignment_ok(void)
 static void lift_fault(uint8_t code)
 {
     lift.motor->tx_info->torque = 0.0f;
+    lift.pitch_zero_hold = 0u;
     lift.fault_code = code;
+    lift.fault_count++;
     lift_enter_state(LIFT_FAULT, HAL_GetTick());
+}
+
+static void lift_pause(uint8_t code, uint32_t now)
+{
+    lift.motor->tx_info->torque = 0.0f;
+    lift.pitch_zero_hold = 0u;
+    lift.fault_code = code;
+    lift.fault_count++;
+    lift_enter_state(LIFT_PAUSED, now);
 }
 
 static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
 {
-    uint8_t high_current;
-    uint8_t low_speed;
-    uint8_t no_progress;
-    uint32_t confirm_ms;
-    float over_current;
+    float threshold = (moving_up != 0u) ? lift_tune.over_current_up_raw :
+                      lift_tune.over_current_down_raw;
+    uint32_t confirm = (uint32_t)((moving_up != 0u) ?
+        lift_tune.up_over_current_confirm_ms : lift_tune.down_over_current_confirm_ms);
+    uint8_t driven = (lift_abs(lift.motor->tx_info->torque) >= LIFT_STALL_OUTPUT_MIN_RAW);
+    uint8_t low_speed = (lift_abs((float)lift.motor->rx_info->encoder_speed) <= LIFT_SPEED_TOL_RPM);
+    uint8_t high_current = (lift_abs((float)lift.motor->rx_info->torque_current_raw) >= threshold);
 
-    over_current = (moving_up != 0u) ?
-                   lift_tune.over_current_up_raw :
-                   lift_tune.over_current_down_raw;
-    confirm_ms = (moving_up != 0u) ?
-                 (uint32_t)lift_tune.up_over_current_confirm_ms :
-                 (uint32_t)lift_tune.down_over_current_confirm_ms;
-
-    high_current = (lift_abs((float)lift.motor->rx_info->torque_current_raw) >=
-                    over_current) ? 1u : 0u;
-    low_speed = (lift_abs((float)lift.motor->rx_info->encoder_speed) <=
-                 LIFT_SPEED_TOL_RPM) ? 1u : 0u;
-
-    if ((high_current != 0u) && (low_speed != 0u))
-    {
-        lift.overcurrent_confirm_ms += dt;
-    }
-    else
+    if (((now - lift.state_enter_tick) < LIFT_STALL_START_GRACE_MS) || (driven == 0u))
     {
         lift.overcurrent_confirm_ms = 0u;
-    }
-
-    no_progress = ((now - lift.stall_progress_tick) >= confirm_ms) &&
-                  (lift_abs((float)(lift.motor->rx_info->encoder_sum -
-                           lift.stall_progress_count)) <
-                   lift_tune.stall_progress_counts);
-
-    if ((lift.overcurrent_confirm_ms >= confirm_ms) ||
-        (no_progress != 0u))
-    {
-        return (lift.overcurrent_confirm_ms >= confirm_ms) ? 1u : 2u;
-    }
-
-    if ((now - lift.stall_progress_tick) >= confirm_ms)
-    {
         lift.stall_progress_tick = now;
         lift.stall_progress_count = lift.motor->rx_info->encoder_sum;
+        return 0u;
     }
-
+    if ((high_current != 0u) && (low_speed != 0u)) lift.overcurrent_confirm_ms += dt;
+    else lift.overcurrent_confirm_ms = 0u;
+    if (lift.overcurrent_confirm_ms >= confirm) return 1u;
+    if ((now - lift.stall_progress_tick) >= confirm)
+    {
+        float progress = lift_abs((float)((int64_t)lift.motor->rx_info->encoder_sum -
+                                  lift.stall_progress_count));
+        lift.stall_progress_tick = now;
+        lift.stall_progress_count = lift.motor->rx_info->encoder_sum;
+        if ((progress < lift_tune.stall_progress_counts) && (low_speed != 0u)) return 2u;
+    }
     return 0u;
 }
 
@@ -296,7 +318,7 @@ static void lift_homing_up_update(uint32_t now, uint32_t dt)
                              (int32_t)(LIFT_UP_DIRECTION *
                                        LIFT_TRAVEL_COUNTS);
         lift.home_valid = 1u;
-        lift_enter_state(LIFT_READY_UP, now);
+        lift_enter_state(LIFT_RETRACT_DOWN, now);
         lift.motor->tx_info->torque = 0.0f;
         return;
     }
@@ -339,65 +361,74 @@ static void lift_retract_update(uint32_t now, uint32_t dt)
 static void lift_move_update(uint32_t now, uint32_t dt, int32_t target,
                             uint8_t moving_up)
 {
-    float position_error;
-    float speed;
+    float error = (float)target - lift_encoder_units();
+    float remaining = lift_abs(error);
+    float speed = (float)lift.motor->rx_info->encoder_speed;
+    float speed_cap;
+    float desired;
+    float step;
     uint8_t stall;
-    int32_t travel;
-    position_error = (float)target - lift_encoder_units();
-    speed = (float)lift.motor->rx_info->encoder_speed;
-
-    travel = (int32_t)(((float)lift.top_zero - lift_encoder_units()) *
-                       LIFT_UP_DIRECTION);
-    if ((travel < -(int32_t)LIFT_OVERTRAVEL_COUNTS) ||
-        (travel > (int32_t)(LIFT_TRAVEL_COUNTS + LIFT_OVERTRAVEL_COUNTS)))
-    {
-        lift_fault(LIFT_FAULT_OVERTRAVEL);
-        return;
-    }
 
     if ((now - lift.state_enter_tick) >= LIFT_MOVE_TIMEOUT_MS)
     {
-        lift_fault(LIFT_FAULT_MOVE_TIMEOUT);
+        lift_pause(LIFT_FAULT_MOVE_TIMEOUT, now);
         return;
     }
-
-    if (lift_abs(position_error) <= LIFT_POS_TOL_COUNTS)
+    if (remaining <= LIFT_POS_TOL_COUNTS)
     {
-        if (lift_abs(speed) <= LIFT_SPEED_TOL_RPM)
-        {
-            lift.stable_confirm_ms += dt;
-        }
-        else
-        {
-            lift.stable_confirm_ms = 0u;
-        }
-
+        if (lift_abs(speed) <= LIFT_SPEED_TOL_RPM) lift.stable_confirm_ms += dt;
+        else lift.stable_confirm_ms = 0u;
         lift_output_position(target);
         if (lift.stable_confirm_ms >= LIFT_STABLE_CONFIRM_MS)
         {
-            lift_enter_state((target == lift.bottom_target) ?
-                             LIFT_READY_DOWN : LIFT_READY_UP, now);
+            lift_enter_state(moving_up ? LIFT_READY_UP : LIFT_READY_DOWN, now);
         }
         return;
     }
-
     lift.stable_confirm_ms = 0u;
     stall = lift_move_stalled(now, dt, moving_up);
     if (stall != 0u)
     {
-        if (moving_up == 0u)
-        {
-            lift.motor->tx_info->torque = 0.0f;
-            lift_enter_state(LIFT_STALL_STOP, now);
-            return;
-        }
-        lift_fault((stall == 1u) ?
-                   LIFT_FAULT_STALL_CURRENT : LIFT_FAULT_STALL_PROGRESS);
+        lift_pause((stall == 1u) ? LIFT_FAULT_STALL_CURRENT : LIFT_FAULT_STALL_PROGRESS, now);
         return;
     }
+    // NOTE: 末段按制动距离限速
+    speed_cap = lift_tune.move_speed_rpm * sqrtf(fminf(remaining / LIFT_BRAKE_COUNTS, 1.0f));
+    speed_cap = fminf(speed_cap, lift_tune.pos_out_max_rpm);
+    desired = lift_clamp(LIFT_TERMINAL_KP * error, -speed_cap, speed_cap);
+    step = lift_tune.move_speed_rpm * (float)dt / LIFT_ACCEL_TIME_MS;
+    lift.speed_target_rpm += lift_clamp(desired - lift.speed_target_rpm, -step, step);
+    lift.speed_target_rpm = lift_clamp(lift.speed_target_rpm, -speed_cap, speed_cap);
+    lift_output_speed(lift.speed_target_rpm, lift_tune.speed_out_max_raw);
+}
 
-    lift_output_position(target);
-} 
+static uint8_t lift_check_limits(uint32_t now, uint32_t dt)
+{
+    float travel = ((float)lift.top_zero - lift_encoder_units()) * LIFT_UP_DIRECTION;
+    if ((travel < -LIFT_OVERTRAVEL_COUNTS) ||
+        (travel > LIFT_TRAVEL_COUNTS + LIFT_OVERTRAVEL_COUNTS))
+    {
+        lift.overtravel_ms += dt;
+        if (lift.overtravel_ms >= LIFT_OVERTRAVEL_CONFIRM_MS)
+        {
+            lift_fault(LIFT_FAULT_OVERTRAVEL);
+            return 1u;
+        }
+    }
+    else lift.overtravel_ms = 0u;
+    if (((lift.state == LIFT_READY_UP) || (lift.state == LIFT_READY_DOWN)) &&
+        (lift_abs((float)lift.motor->rx_info->torque_current_raw) >= LIFT_HOLD_CURRENT_RAW))
+    {
+        lift.hold_current_ms += dt;
+        if (lift.hold_current_ms >= LIFT_HOLD_CONFIRM_MS)
+        {
+            lift_pause(LIFT_FAULT_HOLD_CURRENT, now);
+            return 1u;
+        }
+    }
+    else lift.hold_current_ms = 0u;
+    return 0u;
+}
 
 static void lift_debug_record(int32_t count)
 {
@@ -503,6 +534,11 @@ void Lift_Init(void)
     lift.control_is_hole = 0u;
     lift.pitch_zero_hold = 0u;
     lift.fault_code = 0u;
+    lift.fault_count = 0u;
+    lift.recover_request = 0u;
+    lift.speed_target_rpm = 0.0f;
+    lift.overtravel_ms = 0u;
+    lift.hold_current_ms = 0u;
     lift.state_enter_tick = HAL_GetTick();
     lift.init_tick = lift.state_enter_tick;
     lift.home_window_tick = lift.state_enter_tick;
@@ -606,6 +642,18 @@ void Lift_Work(void)
         return;
     }
 
+    if ((lift.motor->rx_info->feedback_seq == 0u) ||
+        ((now - lift.motor->rx_info->feedback_tick) > LIFT_FEEDBACK_TIMEOUT_MS))
+    {
+        if (lift.state != LIFT_FAULT) lift_fault(LIFT_FAULT_FEEDBACK);
+        lift.motor->tx_info->torque = 0.0f;
+        lift.pitch_zero_hold = 0u;
+        return;
+    }
+    if ((lift.home_valid != 0u) && (lift.state != LIFT_FAULT) &&
+        (lift.state != LIFT_PAUSED) && (lift.state != LIFT_HOMING_UP) &&
+        (lift_check_limits(now, dt) != 0u)) return;
+
     raw_is_hole = (Board_Rx_Info.shoot_pkt.is_hole != 0u) ? 1u : 0u;
     cmd_changed = 0u;
     if (lift.cmd_seen == 0u)
@@ -628,6 +676,8 @@ void Lift_Work(void)
         lift.control_is_hole = lift.pending_is_hole;
         lift.pending_valid = 0u;
     }
+    if ((cmd_changed != 0u) && ((lift.state == LIFT_PAUSED) ||
+        (lift.state == LIFT_FAULT) || (lift.state == LIFT_STALL_STOP))) lift.recover_request = 1u;
     is_hole = lift.control_is_hole;
     if (is_hole != 0u)
     {
@@ -717,38 +767,19 @@ void Lift_Work(void)
         }
         else
         {
-            lift.motor->tx_info->torque = 0.0f;
+            lift_output_position(lift.top_target);
         }
         break;
 
     case LIFT_STALL_STOP:
-        lift.motor->tx_info->torque = 0.0f;
-        if (is_hole == 0u)
-        {
-            lift_enter_state(LIFT_MOVING_UP, now);
-        }
-        break;
-
+    case LIFT_PAUSED:
     case LIFT_FAULT:
         lift.motor->tx_info->torque = 0.0f;
-        if (cmd_changed == 0u)
-        {
-            break;
-        }
-
-        lift.fault_code = 0u;
-        if (lift.home_valid == 0u)
-        {
-            lift_enter_state(LIFT_HOMING_UP, now);
-        }
-        else if (is_hole != 0u)
-        {
-            lift_enter_state(LIFT_ALIGN_DOWN, now);
-        }
-        else
-        {
-            lift_enter_state(LIFT_MOVING_UP, now);
-        }
+        if (((cmd_changed == 0u) && (lift.recover_request == 0u)) ||
+            ((now - lift.state_enter_tick) < LIFT_PAUSE_COOLDOWN_MS)) break;
+        lift.recover_request = 0u;
+        if (lift.home_valid == 0u) lift_enter_state(LIFT_HOMING_UP, now);
+        else lift_enter_state(is_hole ? LIFT_ALIGN_DOWN : LIFT_MOVING_UP, now);
         break;
 
     default:
@@ -758,7 +789,7 @@ void Lift_Work(void)
 
     if (((lift.state == LIFT_READY_UP) && (is_hole == 0u)) ||
         (lift.state == LIFT_MOVING_UP) ||
-        (lift.state == LIFT_FAULT) || (lift.state == LIFT_STALL_STOP))
+        (lift.state == LIFT_FAULT) || (lift.state == LIFT_PAUSED) || (lift.state == LIFT_STALL_STOP))
     {
         lift.pitch_zero_hold = 0u;
     }
@@ -795,6 +826,7 @@ uint8_t Lift_Get_Report_State(void)
     case LIFT_READY_UP:
         return 2u;
 
+    case LIFT_PAUSED:
     case LIFT_FAULT:
         return 3u;
 

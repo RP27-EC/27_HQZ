@@ -36,6 +36,30 @@ typedef struct
 
 static launcher_speed_runtime_t launcher_speed_runtime;
 static uint8_t launcher_keyboard_press_ready; // 本次键鼠按住许可，0/1
+static uint8_t launcher_input_armed; // 新按下许可，0/1
+static uint8_t launcher_press_authorized; // 当前按住已受理，0/1
+
+launcher_protection_t launcher_protection;
+
+typedef struct
+{
+    uint32_t update_tick; // 保护更新时间，ms
+    uint32_t poll_tick; // 状态读取时刻，ms
+    uint32_t run_tick; // 恢复发送时刻，ms
+    uint32_t run_seq; // 启机前反馈序号，循环
+    uint32_t rebase_count; // 最近编码器重建，次
+    uint32_t dial_start_tick; // 拨盘运动起点，ms
+    uint32_t progress_tick; // 进展窗口起点，ms
+    int32_t progress_angle; // 窗口位置，count
+    uint32_t jam_ms; // 低速高流持续，ms
+    uint32_t hold_ms; // 保持高流持续，ms
+    uint32_t fric_start_tick; // 摩擦轮升速起点，ms
+    uint32_t fric_jam_ms[2]; // 两轮堵转持续，ms
+    uint8_t dial_moving; // 上拍运动请求，0/1
+    uint8_t fric_on; // 上拍开轮请求，0/1
+} launcher_safety_runtime_t;
+
+static launcher_safety_runtime_t launcher_safety;
 
 typedef struct
 {
@@ -479,13 +503,19 @@ static void Launcher_SpeedStart(uint32_t now)
 static uint8_t Launcher_FricOnline(uint8_t index)
 {
     return ((rm_motor[index].state != NULL) &&
-            (rm_motor[index].state->status == DEV_ONLINE)) ? 1u : 0u;
+            (rm_motor[index].state->status == DEV_ONLINE) &&
+            (rm_motor[index].rx_info->feedback_seq != 0u) &&
+            ((HAL_GetTick() - rm_motor[index].rx_info->feedback_tick) <=
+             LAUNCHER_FEEDBACK_TIMEOUT_MS)) ? 1u : 0u;
 }
 
 /* 拨盘是否在线 */
 static uint8_t Launcher_DialOnline(void)
 {
-    return (dail_motor.KT_motor_info.state_info.work_state == M_ONLINE) ? 1u : 0u;
+    return ((dail_motor.KT_motor_info.state_info.work_state == M_ONLINE) &&
+            (dail_motor.KT_motor_info.rx_info.feedback_seq != 0u) &&
+            ((HAL_GetTick() - dail_motor.KT_motor_info.rx_info.feedback_tick) <=
+             LAUNCHER_FEEDBACK_TIMEOUT_MS)) ? 1u : 0u;
 }
 
 static uint8_t Launcher_HeatConfigValid(void)
@@ -1051,6 +1081,197 @@ static void Launcher_DialSafeStop(uint32_t now)
     launcher.jam_tick = 0u;
     launcher_dial_target_synced = 0u;
     launcher_dial.settling = 0u;
+    launcher_protection.recovery_phase = 0u;
+}
+
+static void Launcher_ProtectStop(uint8_t reason, uint32_t now)
+{
+    if (launcher_protection.active == 0u) launcher_protection.count++;
+    launcher_protection.active = 1u;
+    launcher_protection.reason = reason;
+    launcher_protection.fault_tick = now;
+    launcher_protection.released = 0u;
+    launcher.fault = 1u;
+    launcher.state = LAUNCHER_FAULT;
+    launcher_dial.wait_single = 0u;
+    launcher_dial.pending_single = 0u;
+    launcher_speed_runtime.reserved = 0u;
+    launcher_speed_runtime.press_single_started = 0u;
+    launcher_press_authorized = 0u;
+    launcher_input_armed = 0u;
+    launcher_keyboard_press_ready = 0u;
+    launcher_dial.reject_reason = LAUNCHER_DIAL_REJECT_PROTECT;
+    Launcher_DialApplyTorque(0);
+    Launcher_DialSafeStop(now);
+}
+
+static void Launcher_ProtectionUpdate(uint32_t now, uint8_t vehicle_on, uint8_t shoot_level)
+{
+    KT_motor_rx_info_t feedback;
+    uint32_t irq = __get_PRIMASK();
+    uint32_t dt = now - launcher_safety.update_tick;
+    uint8_t moving;
+    uint8_t fric_request;
+    uint8_t fresh;
+    __disable_irq();
+    feedback = dail_motor.KT_motor_info.rx_info;
+    __set_PRIMASK(irq);
+    launcher_safety.update_tick = now;
+    if (dt > 20u) dt = 20u;
+    fresh = ((feedback.feedback_seq != 0u) &&
+             ((now - feedback.feedback_tick) <= LAUNCHER_FEEDBACK_TIMEOUT_MS));
+    if (launcher_protection.active != 0u)
+    {
+        uint8_t mouse_down = Board_Rx_Info.remote_cmd_pkt.button_bits & 0x01u;
+        if ((shoot_level == 0u) && (mouse_down == 0u)) launcher_protection.released = 1u;
+        if ((vehicle_on != 0u) && (fresh != 0u) &&
+            (launcher_protection.released != 0u) && (shoot_level != 0u) &&
+            (launcher.last_shoot_level == 0u) &&
+            ((now - launcher_protection.fault_tick) >= LAUNCHER_PROTECT_COOLDOWN_MS) &&
+            (fabsf((float)feedback.current) < LAUNCHER_DIAL_JAM_CURRENT_RAW) &&
+            (fabsf((float)rm_motor[SHOOT_FRIC_L].rx_info->torque_current_raw) < LAUNCHER_PROTECT_FRIC_CURRENT_RAW) &&
+            (fabsf((float)rm_motor[SHOOT_FRIC_R].rx_info->torque_current_raw) < LAUNCHER_PROTECT_FRIC_CURRENT_RAW) &&
+            ((feedback.errorState & 0x09u) == 0u))
+        {
+            launcher_protection.active = 0u;
+            launcher.fault = 0u;
+            launcher.state = LAUNCHER_SLEEP;
+            launcher_input_armed = 1u;
+            launcher_safety.jam_ms = 0u;
+            launcher_safety.hold_ms = 0u;
+            launcher_safety.fric_jam_ms[0] = 0u;
+            launcher_safety.fric_jam_ms[1] = 0u;
+            launcher_safety.fric_on = 0u;
+        }
+        return;
+    }
+    if ((LAUNCHER_PROTECT_ENABLE == 0u) || (vehicle_on == 0u))
+    {
+        launcher_safety.dial_moving = 0u;
+        launcher_safety.fric_on = 0u;
+        launcher_safety.jam_ms = 0u;
+        launcher_safety.hold_ms = 0u;
+        launcher_safety.fric_jam_ms[0] = 0u;
+        launcher_safety.fric_jam_ms[1] = 0u;
+        return;
+    }
+    moving = ((launcher_dial.state == LAUNCHER_REPEAT) ||
+              ((launcher_dial.state == LAUNCHER_SINGLE) &&
+               (Launcher_DialAtTarget(launcher_dial_target) == 0u)));
+    if ((moving != 0u) && (launcher_safety.dial_moving == 0u))
+    {
+        launcher_safety.dial_start_tick = now;
+        launcher_safety.progress_tick = now;
+        launcher_safety.progress_angle = feedback.encoder_sum;
+        launcher_safety.jam_ms = 0u;
+    }
+    launcher_safety.dial_moving = moving;
+    if ((fresh != 0u) && (moving != 0u) &&
+        ((now - launcher_safety.dial_start_tick) >= LAUNCHER_PROTECT_START_MS))
+    {
+        uint8_t low = (fabsf((float)feedback.speed) <= LAUNCHER_DIAL_JAM_SPEED_DPS);
+        if ((low != 0u) && (fabsf((float)feedback.current) >= LAUNCHER_DIAL_JAM_CURRENT_RAW))
+            launcher_safety.jam_ms += dt;
+        else launcher_safety.jam_ms = 0u;
+        if (launcher_safety.jam_ms >= LAUNCHER_PROTECT_CONFIRM_MS)
+        {
+            Launcher_ProtectStop(1u, now);
+            return;
+        }
+        if (fabsf((float)launcher_dial.output_current_raw) < LAUNCHER_PROTECT_OUTPUT_RAW)
+        {
+            launcher_safety.progress_tick = now;
+            launcher_safety.progress_angle = feedback.encoder_sum;
+        }
+        else if ((now - launcher_safety.progress_tick) >= LAUNCHER_PROTECT_PROGRESS_MS)
+        {
+            float progress = fabsf((float)((int64_t)feedback.encoder_sum - launcher_safety.progress_angle));
+            launcher_safety.progress_tick = now;
+            launcher_safety.progress_angle = feedback.encoder_sum;
+            if ((low != 0u) && (progress < LAUNCHER_PROTECT_PROGRESS_COUNTS))
+            {
+                Launcher_ProtectStop(1u, now);
+                return;
+            }
+        }
+    }
+    else launcher_safety.jam_ms = 0u;
+    if ((fresh != 0u) && (launcher_dial.state == LAUNCHER_READY) &&
+        (fabsf((float)feedback.current) >= LAUNCHER_DIAL_JAM_CURRENT_RAW))
+        launcher_safety.hold_ms += dt;
+    else launcher_safety.hold_ms = 0u;
+    if (launcher_safety.hold_ms >= LAUNCHER_PROTECT_HOLD_MS)
+    {
+        Launcher_ProtectStop(2u, now);
+        return;
+    }
+    fric_request = (Board_Rx_Info.shoot_pkt.launch_state != 0u);
+    if ((fric_request != 0u) && (launcher_safety.fric_on == 0u)) launcher_safety.fric_start_tick = now;
+    launcher_safety.fric_on = fric_request;
+    for (uint8_t i = 0u; i < SHOOT_FRIC_NUM; ++i)
+    {
+        rm_rx_t *rx = rm_motor[i].rx_info;
+        if ((fric_request != 0u) &&
+            ((now - launcher_safety.fric_start_tick) >= LAUNCHER_PROTECT_FRIC_START_MS) &&
+            (rx->feedback_seq != 0u) && ((now - rx->feedback_tick) <= LAUNCHER_FEEDBACK_TIMEOUT_MS) &&
+            (fabsf((float)rx->encoder_speed) <= LAUNCHER_PROTECT_FRIC_RPM) &&
+            (fabsf((float)rx->torque_current_raw) >= LAUNCHER_PROTECT_FRIC_CURRENT_RAW))
+            launcher_safety.fric_jam_ms[i] += dt;
+        else launcher_safety.fric_jam_ms[i] = 0u;
+        if (launcher_safety.fric_jam_ms[i] >= LAUNCHER_PROTECT_CONFIRM_MS)
+        {
+            Launcher_ProtectStop(3u, now);
+            return;
+        }
+    }
+}
+
+static void Launcher_RecoveryUpdate(uint32_t now, uint8_t allowed)
+{
+    KT_motor_rx_info_t *rx = &dail_motor.KT_motor_info.rx_info;
+    if ((now - launcher_safety.poll_tick) >= LAUNCHER_RECOVER_POLL_MS)
+    {
+        launcher_safety.poll_tick = now;
+        dail_motor.tx_R_cmd(&dail_motor, STATE2_ID);
+        dail_motor.tx_R_cmd(&dail_motor, STATE1_ID);
+    }
+    if ((allowed == 0u) || (Launcher_DialOnline() == 0u) ||
+        (launcher_safety.rebase_count != rx->rebase_count) || ((rx->errorState & 0x09u) != 0u))
+    {
+        launcher_protection.recovery_phase = 0u;
+        launcher_safety.rebase_count = rx->rebase_count;
+        launcher_dial_target_synced = 0u;
+        launcher_dial.wait_single = 0u;
+        launcher_dial.pending_single = 0u;
+        launcher_speed_runtime.reserved = 0u;
+        launcher_press_authorized = 0u;
+        launcher_input_armed = 0u;
+        launcher_keyboard_press_ready = 0u;
+        return;
+    }
+    if (launcher_protection.recovery_phase == 0u)
+    {
+        if ((now - launcher_safety.run_tick) < LAUNCHER_RECOVER_RETRY_MS) return;
+        launcher_safety.run_tick = now;
+        launcher_safety.run_seq = rx->feedback_seq;
+        Launcher_DialClearPid();
+        Launcher_DialApplyTorque(0);
+        if (launcher_dial.torque_tx_status != HAL_OK) return;
+        launcher_dial.run_tx_status = (uint8_t)Launcher_DialRun();
+        if (launcher_dial.run_tx_status == HAL_OK) launcher_protection.recovery_phase = 1u;
+        return;
+    }
+    if (launcher_protection.recovery_phase == 1u)
+    {
+        if (rx->feedback_seq != launcher_safety.run_seq)
+        {
+            launcher_protection.recovery_phase = 2u;
+            launcher_dial_stopped = 0u;
+            launcher_dial_target_synced = 0u;
+        }
+        else if ((now - launcher_safety.run_tick) >= LAUNCHER_FEEDBACK_TIMEOUT_MS)
+            launcher_protection.recovery_phase = 0u;
+    }
 }
 
 static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
@@ -1090,7 +1311,15 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         }
         launcher_dial.state = (launcher.fault != 0u) ?
                               LAUNCHER_FAULT : LAUNCHER_SLEEP;
-        Launcher_DialSafeStop(now);
+        if ((Board_HeartBeat.status == DEV_ONLINE) &&
+            (Board_Rx_Info.state_pkt.car_state != 0u) && (launcher.fault == 0u) &&
+            (Board_Rx_Info.shoot_pkt.is_hole == 0u) &&
+            (launcher_dial_hole_release_pending == 0u))
+        {
+            Launcher_DialApplyTorque(0);
+            launcher_dial_target_synced = 0u;
+        }
+        else Launcher_DialSafeStop(now);
         return;
     }
 
@@ -1480,6 +1709,10 @@ void Launcher_Init(void)
     memset(&launcher_dial, 0, sizeof(launcher_dial));
     memset(&launcher_speed, 0, sizeof(launcher_speed));
     memset(&launcher_speed_runtime, 0, sizeof(launcher_speed_runtime));
+    memset(&launcher_protection, 0, sizeof(launcher_protection));
+    memset(&launcher_safety, 0, sizeof(launcher_safety));
+    launcher_input_armed = 0u;
+    launcher_press_authorized = 0u;
     launcher_keyboard_press_ready = 0u;
     launcher_speed.single_target_rpm = LAUNCHER_FRIC_TARGET_RPM;
     launcher_speed.repeat_target_rpm = LAUNCHER_FRIC_TARGET_RPM;
@@ -1602,19 +1835,27 @@ static void Launcher_KeyboardPressUpdate(uint8_t fric_on)
     if ((Board_Rx_Info.remote_cmd_pkt.valid == 0u) ||
         (Board_Rx_Info.remote_cmd_pkt.ctrl_source != 1u) ||
         (Board_HeartBeat.offline_cnt_5 >= Board_HeartBeat.offline_cnt_max) ||
-        (fric_on == 0u) || (launcher_dial.feed_allowed == 0u) ||
-        (launcher_speed.source_ready == 0u) ||
-        (launcher_speed_runtime.fault != LAUNCHER_SPEED_OK) ||
-        (launcher_speed.guard_latched != 0u) ||
-        (launcher_heat.ready == 0u) || (launcher_heat.blocked != 0u) ||
-        (launcher_heat.target_rate <= 0.0f))
+        (Board_HeartBeat.status != DEV_ONLINE) || (Board_Rx_Info.state_pkt.car_state == 0u) ||
+        (Board_Rx_Info.shoot_pkt.is_hole != 0u) || (launcher.fault != 0u))
     {
+        launcher_input_armed = 0u;
+        launcher_press_authorized = 0u;
         launcher_keyboard_press_ready = 0u;
+        launcher_dial.wait_single = 0u;
+        return;
     }
-    else if ((Board_Rx_Info.shoot_pkt.shoot_level == 0u) &&
-             ((Board_Rx_Info.remote_cmd_pkt.button_bits & 0x01u) == 0u))
+    if ((Board_Rx_Info.shoot_pkt.shoot_level == 0u) &&
+        ((Board_Rx_Info.remote_cmd_pkt.button_bits & 0x01u) == 0u))
     {
-        launcher_keyboard_press_ready = 1u;
+        launcher_input_armed = 1u;
+        launcher_keyboard_press_ready = 0u;
+        if (launcher_dial.wait_single == 0u) launcher_press_authorized = 0u;
+    }
+    if (fric_on == 0u)
+    {
+        launcher_dial.wait_single = 0u;
+        launcher_keyboard_press_ready = 0u;
+        launcher_press_authorized = 0u;
     }
 }
 
@@ -1629,6 +1870,8 @@ void Launcher_Work(void)
     uint8_t continuous;
     uint8_t vehicle_on;
     uint8_t hole_hold_allowed;
+    uint8_t keyboard;
+    uint8_t raw_rising;
     uint8_t last_feed_allowed = launcher_dial.feed_allowed;
     int32_t current_angle = Launcher_DialAngle();
 
@@ -1639,10 +1882,12 @@ void Launcher_Work(void)
 
     vehicle_on = ((Board_HeartBeat.status == DEV_ONLINE) &&
                   (Board_Rx_Info.state_pkt.car_state != 0u)) ? 1u : 0u;
-    if (launcher.state == LAUNCHER_FAULT)
-    {
-        launcher.fault = 1u;
-    }
+    if ((launcher.state == LAUNCHER_FAULT) && (launcher_protection.active == 0u) &&
+        (launcher.fault != 0u)) Launcher_ProtectStop(4u, now);
+    Launcher_ProtectionUpdate(now, vehicle_on, shoot_level);
+    Launcher_RecoveryUpdate(now, ((vehicle_on != 0u) && (launcher.fault == 0u) &&
+        (hole_hold_allowed != 0u) && (LAUNCHER_DIAL_ENABLE != 0u)) ? 1u : 0u);
+    keyboard = (Board_Rx_Info.remote_cmd_pkt.ctrl_source == 1u);
     fric_on = ((vehicle_on != 0u) && (launcher.fault == 0u) &&
                (Board_Rx_Info.shoot_pkt.launch_state != 0u) &&
                (Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
@@ -1656,7 +1901,7 @@ void Launcher_Work(void)
         (launcher.dial_online != 0u) &&
         (dail_motor.KT_motor_info.rx_info.encoder_sum_ready != 0u) &&
         (hole_hold_allowed != 0u) &&
-        (launcher.fault == 0u)) ? 1u : 0u;
+        (launcher.fault == 0u) && (launcher_protection.recovery_phase == 2u)) ? 1u : 0u;
 #else
     launcher_dial.hold_allowed = 0u;
     shoot_level = 0u;
@@ -1676,18 +1921,69 @@ void Launcher_Work(void)
         launcher_speed_runtime.press_single_started = 0u;
         launcher_dial.trigger_ready = 1u;
     }
-    single_rising = ((shoot_level != 0u) &&
-                     (launcher.last_shoot_level == 0u) &&
-                     (shoot_mode == 0u)) ? 1u : 0u;
+    raw_rising = ((shoot_level != 0u) && (launcher.last_shoot_level == 0u));
+    single_rising = 0u;
+    if (keyboard != 0u)
+    {
+        if ((raw_rising != 0u) && (launcher_input_armed != 0u) &&
+            (fric_on != 0u) && (hole_hold_allowed != 0u) && (launcher.fault == 0u))
+        {
+            launcher_input_armed = 0u;
+            launcher_press_authorized = 1u;
+            launcher_keyboard_press_ready = 1u;
+            if (launcher_dial.wait_single == 0u)
+            {
+                launcher_dial.wait_single = 1u;
+                launcher_dial.wait_tick = now;
+            }
+        }
+        if ((Board_Rx_Info.shoot_pkt.launch_state == 0u) || (vehicle_on == 0u) ||
+            (hole_hold_allowed == 0u) || (launcher.fault != 0u) ||
+            (launcher_speed.guard_latched != 0u) ||
+            (launcher_speed_runtime.fault != LAUNCHER_SPEED_OK))
+        {
+            launcher_dial.wait_single = 0u;
+            launcher_press_authorized = 0u;
+            launcher_keyboard_press_ready = 0u;
+        }
+        if ((launcher_dial.wait_single != 0u) &&
+            ((now - launcher_dial.wait_tick) >= LAUNCHER_CLICK_WAIT_MS))
+        {
+            launcher_dial.wait_single = 0u;
+            launcher_press_authorized = 0u;
+            Launcher_DialReject(LAUNCHER_DIAL_REJECT_WAIT);
+        }
+        if ((launcher_dial.wait_single != 0u) && (launcher.fric_ready != 0u) &&
+            (launcher_dial.feed_allowed != 0u) && (launcher_speed.feed_ready != 0u) &&
+            (launcher_heat.ready != 0u) && (launcher_heat.blocked == 0u) &&
+            (launcher_dial.state == LAUNCHER_READY))
+        {
+            launcher_dial.wait_single = 0u;
+            if ((shoot_level != 0u) && (shoot_mode != 0u))
+            {
+                launcher_keyboard_press_ready = 1u;
+            }
+            else
+            {
+                launcher_dial.trigger_ready = 1u;
+                single_rising = 1u;
+            }
+        }
+    }
+    else
+    {
+        launcher_dial.wait_single = 0u;
+        single_rising = ((raw_rising != 0u) && (shoot_mode == 0u));
+    }
     launcher.last_shoot_level = shoot_level;
     continuous = ((launcher_dial.feed_allowed != 0u) &&
-                  (((Board_Rx_Info.remote_cmd_pkt.ctrl_source == 1u) ?
-                    launcher_keyboard_press_ready : launcher_dial.trigger_ready) != 0u) &&
+                  (launcher_dial.wait_single == 0u) &&
+                  (((keyboard != 0u) ? launcher_press_authorized : launcher_dial.trigger_ready) != 0u) &&
                   (shoot_level != 0u) && (shoot_mode != 0u) &&
                   (launcher_speed.feed_ready != 0u) &&
-                  (launcher_heat.ready != 0u) &&
-                  (launcher_heat.blocked == 0u) &&
+                  (launcher_heat.ready != 0u) && (launcher_heat.blocked == 0u) &&
                   (launcher_heat.target_rate > 0.0f)) ? 1u : 0u;
+    if ((keyboard != 0u) && (continuous != 0u)) launcher_keyboard_press_ready = 1u;
 
     /* 摩擦轮停机不覆盖拨盘阶段 */
     if (launcher.fault != 0u)

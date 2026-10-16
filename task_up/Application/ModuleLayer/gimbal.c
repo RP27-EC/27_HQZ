@@ -7,10 +7,24 @@
 #include "board_remote_config.h"
 #include "rp_math.h"
 #include <math.h> 
+#include <string.h>
 
 gimbal_t Gimbal;
 
 gimbal_tune_t gimbal_tune;
+
+typedef struct
+{
+    float speed_rad_s; // Pitch滤波速度，rad/s
+    float dt_s; // 本次控制间隔，s
+    float hold_i_dps; // 保持积分修正，deg/s
+    uint32_t sample_tick; // 滤波更新时刻，ms
+    uint32_t stable_tick; // 积分稳定起点，ms
+    uint8_t valid; // 滤波基准有效，0/1
+    uint8_t stable; // 积分条件成立，0/1
+} gimbal_pitch_runtime_t;
+
+static gimbal_pitch_runtime_t gimbal_pitch_runtime;
 
 static float gimbal_abs(float value)
 {
@@ -638,6 +652,8 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     uint8_t pitch_zero_hold = Lift_IsPitchZeroHoldActive();
     uint8_t pitch_zero_transition =
         (pitch_zero_hold != gimbal->feedforward.pitch_zero_hold_last);
+    float yaw_integral_before;
+    float yaw_limit;
 
     if (pitch_zero_transition != 0u)
     {
@@ -657,6 +673,8 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
 
     if (gimbal->feedforward.manual_source_changed != 0u)
     {
+        gimbal_pitch_runtime.hold_i_dps = 0.0f;
+        gimbal_pitch_runtime.stable = 0u;
         gimbal_yaw_release_reset(gimbal);
         gimbal->feedforward.yaw_hold_angle_deg = gimbal->base_info.yaw_imu_angle;
         if ((pitch_zero_hold == 0u) && (pitch_zero_transition == 0u))
@@ -758,7 +776,23 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     /* 保持环：角度误差 -> 角速度修正量 */
     gimbal->pid_info.yaw_hold.err = gimbal_wrap_deg(
         gimbal->feedforward.yaw_hold_angle_deg - gimbal->base_info.yaw_imu_angle);
+    yaw_integral_before = gimbal->pid_info.yaw_hold.integral;
     single_pid_ctrl(&gimbal->pid_info.yaw_hold);
+    yaw_limit = (yaw_mag <= gimbal_tune.rate_hold_enter_deg_s) ?
+                GIMBAL_YAW_RECOVER_MAX_DPS : gimbal_tune.yaw_manual_rate_max_deg_s;
+    if ((((yaw_cmd + yaw_blend * gimbal->pid_info.yaw_hold.out) *
+           gimbal->pid_info.yaw_hold.err > 0.0f) &&
+         (gimbal_abs(yaw_cmd + yaw_blend * gimbal->pid_info.yaw_hold.out) >= yaw_limit)) ||
+        ((gimbal_abs(gimbal->base_info.output_gimbal_y) >= GIMBAL_TORQUE_LIMIT) &&
+         (gimbal->base_info.output_gimbal_y * gimbal->pid_info.yaw_hold.err > 0.0f)))
+    {
+        gimbal->pid_info.yaw_hold.integral = yaw_integral_before;
+        gimbal->pid_info.yaw_hold.iout = gimbal->pid_info.yaw_hold.ki * yaw_integral_before;
+        gimbal->pid_info.yaw_hold.out = gimbal_clamp(
+            gimbal->pid_info.yaw_hold.pout + gimbal->pid_info.yaw_hold.iout +
+            gimbal->pid_info.yaw_hold.dout,
+            -gimbal->pid_info.yaw_hold.out_max, gimbal->pid_info.yaw_hold.out_max);
+    }
 
     /*
      * Pitch 保持环用编码器机械角，不用 IMU 欧拉角。
@@ -769,12 +803,49 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
         gimbal->feedforward.pitch_hold_angle_deg - gimbal->base_info.pitch_mec_angle;
     single_pid_ctrl(&gimbal->pid_info.pitch_hold);
 
+    if ((GIMBAL_PITCH_HOLD_I_ENABLE != 0u) &&
+        (pitch_mag <= gimbal_tune.rate_hold_enter_deg_s) &&
+        (pitch_cmd == 0.0f) && (pitch_zero_transition == 0u) &&
+        (gimbal_abs(gimbal->pid_info.pitch_hold.err) >= GIMBAL_PITCH_HOLD_I_MIN_DEG) &&
+        (gimbal_abs(gimbal->pid_info.pitch_hold.err) <= GIMBAL_PITCH_HOLD_I_MAX_DEG) &&
+        (gimbal_abs(gimbal_pitch_runtime.speed_rad_s * GIMBAL_RAD_TO_DEG) < 2.0f) &&
+        (gimbal->base_info.pitch_mec_angle > GIMBAL_PITCH_MIN_DEG) &&
+        (gimbal->base_info.pitch_mec_angle < GIMBAL_PITCH_MAX_DEG) &&
+        (gimbal_abs(gimbal->base_info.output_gimbal_p) < GIMBAL_TORQUE_LIMIT) &&
+        (gimbal_abs(gimbal->pid_info.pitch_hold.out + gimbal_pitch_runtime.hold_i_dps) <
+         gimbal_tune.pitch_manual_rate_max_deg_s))
+    {
+        uint32_t now = HAL_GetTick();
+        if (gimbal_pitch_runtime.stable == 0u)
+        {
+            gimbal_pitch_runtime.stable = 1u;
+            gimbal_pitch_runtime.stable_tick = now;
+        }
+        if ((now - gimbal_pitch_runtime.stable_tick) >= GIMBAL_PITCH_HOLD_I_STABLE_MS)
+        {
+            float blend = gimbal_clamp((float)(now - gimbal_pitch_runtime.stable_tick -
+                GIMBAL_PITCH_HOLD_I_STABLE_MS) / GIMBAL_PITCH_HOLD_I_RAMP_MS, 0.0f, 1.0f);
+            gimbal_pitch_runtime.hold_i_dps = gimbal_clamp(
+                gimbal_pitch_runtime.hold_i_dps + blend * GIMBAL_PITCH_HOLD_I_GAIN *
+                gimbal->pid_info.pitch_hold.err * gimbal_pitch_runtime.dt_s,
+                -GIMBAL_PITCH_HOLD_I_MAX_DPS, GIMBAL_PITCH_HOLD_I_MAX_DPS);
+        }
+    }
+    else
+    {
+        gimbal_pitch_runtime.stable = 0u;
+        if ((GIMBAL_PITCH_HOLD_I_ENABLE == 0u) || (pitch_cmd != 0.0f) ||
+            (pitch_zero_transition != 0u) || (gimbal->feedforward.manual_source_changed != 0u))
+        {
+            gimbal_pitch_runtime.hold_i_dps = 0.0f;
+        }
+    }
+
     gimbal->feedforward.yaw_rate_target_deg_s = gimbal_clamp(
         yaw_cmd + yaw_blend * gimbal->pid_info.yaw_hold.out,
-        -gimbal_tune.yaw_manual_rate_max_deg_s,
-        gimbal_tune.yaw_manual_rate_max_deg_s);
+        -yaw_limit, yaw_limit);
     gimbal->feedforward.pitch_rate_target_deg_s = gimbal_clamp(
-        pitch_cmd + pitch_blend * gimbal->pid_info.pitch_hold.out,
+        pitch_cmd + pitch_blend * (gimbal->pid_info.pitch_hold.out + gimbal_pitch_runtime.hold_i_dps),
         -gimbal_tune.pitch_manual_rate_max_deg_s,
         gimbal_tune.pitch_manual_rate_max_deg_s);
 }
@@ -1261,7 +1332,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          &gimbal->pid_info.pitch_gyro_inner,
                          gimbal->feedforward.pitch_rate_target_deg_s,
                          0.0f,
-                         gimbal->base_info.pitch_mec_speed,
+                         gimbal_pitch_runtime.speed_rad_s,
                          0.0f,
                          GIMBAL_RAD_TO_DEG,
                          0) + gravity;
@@ -1337,7 +1408,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
                          &gimbal->pid_info.pitch_gyro_inner,
                          gimbal->feedforward.pitch_rate_target_deg_s,
                          0.0f,
-                         gimbal->base_info.pitch_mec_speed,
+                         gimbal_pitch_runtime.speed_rad_s,
                          0.0f,
                          GIMBAL_RAD_TO_DEG,
                          0) + gravity;
@@ -1388,6 +1459,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
 /* 初始化调参、电机绑定、归中参数和 PID */
 void Gimbal_Init(gimbal_t *gimbal)
 {
+    memset(&gimbal_pitch_runtime, 0, sizeof(gimbal_pitch_runtime));
     if (gimbal == NULL) return;
 
     /* Runtime tuning defaults. These can be edited in Keil Watch. */
@@ -1511,16 +1583,35 @@ void Gimbal_Init(gimbal_t *gimbal)
 void Gimbal_Work(gimbal_t *gimbal)
 {
     gimbal_mode_e selected_mode;
+    uint32_t now = HAL_GetTick();
+    uint32_t elapsed;
 
     if (gimbal == NULL) return;
 
     //  采集更新
     gimbal_info_update(gimbal);
+    elapsed = now - gimbal_pitch_runtime.sample_tick;
+    gimbal_pitch_runtime.dt_s = (float)((elapsed > 20u) ? 20u : elapsed) * 0.001f;
+    if ((gimbal_pitch_runtime.valid == 0u) || (elapsed > 20u))
+    {
+        gimbal_pitch_runtime.speed_rad_s = gimbal->base_info.pitch_mec_speed;
+        gimbal_pitch_runtime.valid = 1u;
+    }
+    else if (elapsed != 0u)
+    {
+        float alpha = (float)elapsed / (GIMBAL_PITCH_SPEED_TAU_MS + (float)elapsed);
+        gimbal_pitch_runtime.speed_rad_s += alpha *
+            (gimbal->base_info.pitch_mec_speed - gimbal_pitch_runtime.speed_rad_s);
+    }
+    gimbal_pitch_runtime.sample_tick = now;
     selected_mode = gimbal_select_mode(gimbal);
 
     //  模式切换保护
     if (selected_mode != gimbal->gimbal_mode)
     {
+        gimbal_pitch_runtime.hold_i_dps = 0.0f;
+        gimbal_pitch_runtime.stable = 0u;
+        gimbal_pitch_runtime.speed_rad_s = gimbal->base_info.pitch_mec_speed;
         gimbal_yaw_release_reset(gimbal);
         gimbal_mec_yaw_ff_blend = 0.0f;
         gimbal_mec_yaw_chassis_rate_lpf = 0.0f;
@@ -1563,6 +1654,9 @@ void Gimbal_Work(gimbal_t *gimbal)
     //  休眠下电置零
     if (gimbal->gimbal_mode == G_SLEEP)
     {
+        gimbal_pitch_runtime.valid = 0u;
+        gimbal_pitch_runtime.hold_i_dps = 0.0f;
+        gimbal_pitch_runtime.stable = 0u;
         gimbal->feedforward.pitch_zero_hold_last = 0u;
         gimbal->base_info.output_gimbal_p = 0.0f;
         gimbal->base_info.output_gimbal_y = 0.0f;

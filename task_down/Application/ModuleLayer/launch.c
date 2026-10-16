@@ -21,7 +21,8 @@ static uint8_t launch_s2_stable_ticks;
 static uint8_t launch_keyboard_active; // 上拍键鼠模式，0/1
 static uint8_t launch_keyboard_fric_on; // 键鼠摩擦轮使能，0/1
 static uint8_t launch_keyboard_last_g; // 上拍G键电平，0/1
-static uint8_t launch_keyboard_mouse_ready; // 开轮后左键已释放，0/1
+static uint8_t launch_keyboard_mouse_ready; // 新按下已解锁，0/1
+static uint8_t launch_keyboard_last_mouse; // 上拍左键电平，0/1
 
 /* 发射机构全局对象 */
 
@@ -92,6 +93,7 @@ static void Launch_Init(Launch_t *launch)
     launch_keyboard_fric_on = 0u;
     launch_keyboard_last_g = 0u;
     launch_keyboard_mouse_ready = 0u;
+    launch_keyboard_last_mouse = 0u;
 }
 
 /* 根据键鼠或遥控拨杆更新发射状态与模式 */
@@ -114,34 +116,33 @@ static void Launch_Data_Update(Launch_t *launch)
             launch_keyboard_fric_on = 0u;
             launch_keyboard_last_g = g_now;
             launch_keyboard_mouse_ready = 0u;
+            launch_keyboard_last_mouse = mouse_down;
         }
+        if (mouse_down == 0u) launch_keyboard_mouse_ready = 1u;
         if ((g_now != 0u) && (launch_keyboard_last_g == 0u))
         {
             launch_keyboard_fric_on ^= 1u;
             launch_keyboard_mouse_ready = 0u;
         }
+        else if ((mouse_down != 0u) && (launch_keyboard_last_mouse == 0u) &&
+                 (launch_keyboard_mouse_ready != 0u))
+        {
+            launch_keyboard_fric_on = 1u;
+        }
         launch_keyboard_last_g = g_now;
-        if (launch_keyboard_fric_on == 0u)
-        {
-            launch_keyboard_mouse_ready = 0u;
-        }
-        else if (mouse_down == 0u)
-        {
-            launch_keyboard_mouse_ready = 1u;
-        }
+        launch_keyboard_last_mouse = mouse_down;
         launch->state = (launch_keyboard_fric_on != 0u) ? L_UNLOCK : L_LOCK;
-
-        // NOTE: 开轮后先释放左键
-        if ((mouse_down != 0u) && (launch_keyboard_mouse_ready != 0u))
+        if ((mouse_down != 0u) && (launch_keyboard_mouse_ready != 0u) &&
+            (launch_keyboard_fric_on != 0u))
         {
             launch->mode = (rc_dev.info->mouse_btn_l.status == long_press) ?
                            REPEAT_SHOT : SINGLE_SHOT;
-            launch->shoot_level = 1u; /* 触发发射 */
+            launch->shoot_level = 1u;
         }
         else
         {
-            launch->mode = SINGLE_SHOT; /* 松开回单发 */
-            launch->shoot_level = 0u;   /* 取消触发 */
+            launch->mode = SINGLE_SHOT;
+            launch->shoot_level = 0u;
         }
 
         return;

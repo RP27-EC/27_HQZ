@@ -51,38 +51,29 @@ typedef struct KT_motor_pid_t
 }KT_motor_pid_t;
 
 typedef struct KT_motor_rx_info_t
-{	
-	int32_t 	accel;						 //加速度 1dps/s
-	
-	uint16_t 	encoder;					 //编码器位置             （0~16383 * 4）
-	int32_t  	encoder_sum;			 //编码器累加角度（有符号，单位 count，65536 count = 一圈）
-	uint16_t 	last_encoder;		 //上一次编码器值
-	uint8_t  	encoder_sum_ready;		 //累加基准是否已建立（首个反馈帧只建基准）
-	uint16_t 	encoderRaw;				 //编码器原始位置         （0~16383 * 4）
-	uint16_t 	encoderOffset;		 //编码器零偏             （0~16383 * 4）
-	
-	int8_t    temperature;       //温度    1°C/LSB
-	uint16_t  voltage;					 //电压    1V
-  uint8_t		errorState;				 //高四位无效    低四位0xx0都正常；0xx1温度正常+低压保护；1xx0过温保护+电压正常；1001过温保护+低压保护
-	
-	int16_t   current;           //转矩电流    返回的值无单位说明   -2048 ~ 2048  （-33~33A）
-	int16_t   speed;             //电机转速    1dps/LSB
-	
-	int16_t 	current_A;				 //ABC三相电流数据     1A/64LSB
-	int16_t 	current_B;
-	int16_t 	current_C;
-		
-	int16_t   powerControl;      //输出功率（-1000~1000）  无单位说明
-	
-	int64_t   motorAngle;        //电机多圈角度   0.01°/LSB  （-2^63~2^63）    顺时针增加，逆时针减少
-	
-	uint32_t  circleAngle;       //电机单圈角度   0.01°/LSB  （ 0~36000 * 减速比-1） 
-															 //以编码零点作为起始点，顺时针增加，再次到达零点时数值变为0
-	
-
-
-	int16_t   angle_add;         //-4096~4096
-	
+{
+    int32_t accel; // 加速度，deg/s2
+    uint16_t encoder; // 单圈位置，0~65535
+    int32_t encoder_sum; // 累计位置，count
+    uint16_t last_encoder; // 上帧单圈位置，count
+    uint8_t encoder_sum_ready; // 累计基准有效，0/1
+    uint16_t encoderRaw; // 原始位置，count
+    uint16_t encoderOffset; // 零偏位置，count
+    int8_t temperature; // 驱动温度，摄氏度
+    uint16_t voltage; // 母线电压，协议原始值
+    uint8_t errorState; // 驱动错误位，0~255
+    int16_t current; // 转矩电流，协议raw
+    int16_t speed; // 机械速度，deg/s
+    int16_t current_A; // A相电流，1/64 A
+    int16_t current_B; // B相电流，1/64 A
+    int16_t current_C; // C相电流，1/64 A
+    int16_t powerControl; // 功率指令，-1000~1000
+    int64_t motorAngle; // 多圈位置，0.01deg
+    uint32_t circleAngle; // 单圈位置，0.01deg
+    int16_t angle_add; // 增量位置，协议raw
+    uint32_t feedback_tick; // 运动反馈时刻，ms
+    uint32_t feedback_seq; // 运动反馈序号，循环
+    uint32_t rebase_count; // 断帧重建次数，次
 }KT_motor_rx_info_t;
 
 

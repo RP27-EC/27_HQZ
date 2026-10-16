@@ -18,7 +18,6 @@
 
 chassis_follow_state_t chassis_follow; /* 底盘跟随状态 */
 
-static float follow_last_yaw_rot; /* 上拍云台实际相对角（含符号），rad */
 static float follow_last_wz; /* 上拍输出角速度 */
 static uint8_t follow_have_last_yaw; /* 1 = 已有上拍 Yaw */
 static uint8_t follow_last_selected; /* 上拍是否选中跟随 */
@@ -26,6 +25,23 @@ static uint8_t follow_last_spin_selected;
 static uint8_t follow_stable_timing;
 static uint32_t follow_stable_since_ms;
 static uint32_t follow_recovery_since_ms;
+static uint8_t follow_valid_tracking; // 连续有效采样，0/1
+static uint32_t follow_valid_since_ms; // 有效窗口起点，ms
+static uint32_t follow_sample_tick; // 最近反馈时间，ms
+static float follow_sample_yaw; // 最近有效机械角，rad
+
+static void Chassis_Follow_LatchFault(uint8_t reason)
+{
+    if (chassis_follow.fault_latched == 0u) chassis_follow.fault_count++;
+    chassis_follow.fault_reason = reason;
+    chassis_follow.fault_latched = 1u;
+    chassis_follow.active = 0u;
+    chassis_follow.turn_direction = 0;
+    chassis_follow.blend = 0.0f;
+    follow_last_wz = 0.0f;
+    follow_have_last_yaw = 0u;
+    follow_valid_tracking = 0u;
+}
 
 static void Chassis_Follow_ResetRecovery(void)
 {
@@ -308,9 +324,11 @@ void Chassis_Follow_Init(void)
     chassis_follow.data_valid = 0u;
     chassis_follow.active = 0u;
     chassis_follow.fault_latched = 0u;
+    chassis_follow.fault_reason = 0u;
+    chassis_follow.fault_count = 0u;
+    follow_valid_tracking = 0u;
     chassis_follow.turn_direction = 0;
 
-    follow_last_yaw_rot = 0.0f;
     follow_last_wz = 0.0f;
     follow_have_last_yaw = 0u;
     follow_last_selected = 0u;
@@ -328,7 +346,6 @@ void Chassis_Follow_UpdateMode(void)
 
     if ((rc_ready == 0u) || (rc_dev.info->s1.value != RC_SW_UP))
     {
-        chassis_follow.fault_latched = 0u; /* 退出后清故障 */
         chassis_follow.turn_direction = 0;
         follow_have_last_yaw = 0u;
     }
@@ -359,18 +376,39 @@ void Chassis_Follow_UpdateMode(void)
     if (selected == 0u)
     {
         chassis_follow.turn_direction = 0;
+        follow_valid_tracking = 0u;
         return;
     }
 
     if ((Chassis_Follow_DataValid() == 0u) ||
         (Chassis_Follow_YawValid(board.rx_meg->gimbal_meg.yaw_mec) == 0u))
     {
-        chassis_follow.fault_latched = 1u; /* 锁存故障 */
-        chassis_follow.turn_direction = 0;
-        follow_have_last_yaw = 0u;
+        Chassis_Follow_LatchFault(1u);
         return;
     }
 
+    if ((follow_valid_tracking != 0u) &&
+        (board.status->gimbal_rx_time_ms != follow_sample_tick) &&
+        (fabsf(Chassis_Follow_WrapPi(board.rx_meg->gimbal_meg.yaw_mec - follow_sample_yaw)) >
+         CHASSIS_FOLLOW_YAW_JUMP_LIMIT_DEG * CHASSIS_FOLLOW_DEG_TO_RAD))
+    {
+        Chassis_Follow_LatchFault(2u);
+        return;
+    }
+    if (follow_valid_tracking == 0u)
+    {
+        follow_valid_tracking = 1u;
+        follow_valid_since_ms = board.status->gimbal_rx_time_ms;
+    }
+    follow_sample_tick = board.status->gimbal_rx_time_ms;
+    follow_sample_yaw = board.rx_meg->gimbal_meg.yaw_mec;
+    if ((chassis_follow.fault_latched != 0u) &&
+        ((follow_sample_tick - follow_valid_since_ms) >= CHASSIS_FOLLOW_RECOVER_MS))
+    {
+        chassis_follow.fault_latched = 0u;
+        follow_last_selected = 0u;
+        Chassis_Follow_ResetRecovery();
+    }
     chassis_follow.data_valid = 1u; /* 云台数据有效 */
 
     if (chassis_follow.fault_latched == 0u)
@@ -466,6 +504,12 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     center_changed = ((follow_have_last_yaw != 0u) &&
                       (fabsf(Chassis_Follow_WrapPi(center_rad - chassis_follow.center_rad)) >
                        CHASSIS_FOLLOW_BLEND_EPS)) ? 1u : 0u;
+    if (center_changed != 0u)
+    {
+        chassis_follow.turn_direction = 0;
+        follow_last_wz = 0.0f;
+        Chassis_Follow_ResetRecovery();
+    }
     yaw_rot = Chassis_Follow_WrapPi( /* 平移旋转角：始终按实际相对角 */
         CHASSIS_FOLLOW_YAW_ANGLE_SIGN * yaw_mec);
     yaw_error = Chassis_Follow_WrapPi( /* 跟随误差 = 旋转角 - 中心 */
@@ -476,33 +520,6 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     chassis_follow.command_ff = command_ff;
     cmd->source = CHASSIS_SRC_RC_FOLLOW; /* 标记跟随源 */
 
-    if (follow_have_last_yaw != 0u)
-    {
-        /* 跳变判据排除软件基准。 */
-        float yaw_delta = Chassis_Follow_WrapPi(yaw_rot - follow_last_yaw_rot);
-
-        /* 跳变过大说明反馈异常，锁存故障 */
-        if (fabsf(yaw_delta) >
-              (CHASSIS_FOLLOW_YAW_JUMP_LIMIT_DEG * CHASSIS_FOLLOW_DEG_TO_RAD))
-        {
-            Chassis_Follow_ResetRecovery();
-            chassis_follow.fault_latched = 1u;
-            chassis_follow.active = 0u;
-            chassis_follow.data_valid = 0u;
-            cmd->vx = 0.0f;
-            cmd->vy = 0.0f;
-            cmd->wz = 0.0f;
-            cmd->valid = 0u;
-            follow_last_wz = 0.0f;
-            chassis_follow.manual_yaw_rate = 0.0f;
-            chassis_follow.command_ff = 0.0f;
-            chassis_follow.turn_direction = 0;
-            follow_have_last_yaw = 0u;
-            return;
-        }
-    }
-
-    follow_last_yaw_rot = yaw_rot; /* 缓存上拍实际相对角 */
     follow_have_last_yaw = 1u;
     chassis_follow.yaw_mec_rad = yaw_mec;
     chassis_follow.yaw_error_rad = yaw_error;
@@ -542,35 +559,11 @@ void Chassis_Follow_Update(chassis_cmd_t *cmd)
     }
     else
     {
-        float abs_error = fabsf(yaw_error); /* 误差幅值 */
         int8_t error_direction = (yaw_error >= 0.0f) ? 1 : -1; /* 误差方向 */
 
-        /* 大误差锁定转向，小误差释放，抑制中心抖动 */
-        if (abs_error >
-            (CHASSIS_FOLLOW_TURN_LOCK_DEG * CHASSIS_FOLLOW_DEG_TO_RAD))
-        {
-            if (chassis_follow.turn_direction == 0)
-            {
-                chassis_follow.turn_direction = error_direction;
-            }
-        }
-        else if (abs_error <
-                 (CHASSIS_FOLLOW_TURN_UNLOCK_DEG * CHASSIS_FOLLOW_DEG_TO_RAD))
-        {
-            chassis_follow.turn_direction = 0;
-        }
-
-        if (chassis_follow.turn_direction != 0)
-        {
-            feedback_wz = (float)chassis_follow.turn_direction *
-                          ((CHASSIS_FOLLOW_KP * abs_error) + CHASSIS_FOLLOW_FRICTION_FF);
-        }
-        else
-        {
-            feedback_wz = (CHASSIS_FOLLOW_KP * yaw_error) +
-                          (CHASSIS_FOLLOW_FRICTION_FF * (float)error_direction);
-        }
-
+        chassis_follow.turn_direction = 0;
+        feedback_wz = (CHASSIS_FOLLOW_KP * yaw_error) +
+                      (CHASSIS_FOLLOW_FRICTION_FF * (float)error_direction);
     }
 
     chassis_follow.recovery_ff = Chassis_Follow_RecoveryFeedforward(yaw_error);

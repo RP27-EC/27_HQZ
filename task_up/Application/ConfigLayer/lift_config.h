@@ -30,10 +30,10 @@
 #define LIFT_POS_KD                     0.0f     // 微分增益，按周期差分
 #define LIFT_POS_INTEGRAL_MAX           0.0f     // 误差累加限幅，count·周期
 #define LIFT_POS_OUT_MAX_RPM            9549.0f  // 位置环输出上限，rpm
-#define LIFT_POS_MIN_SPEED_RPM          95.5f    // 最低运动速度，rpm
+#define LIFT_POS_MIN_SPEED_RPM          95.5f    // 兼容保留参数，rpm
 #define LIFT_MOVE_SPEED_RPM             9549.0f  // 运动速度上限，rpm
 
-#define LIFT_SPEED_KP                   20.0f    // 比例增益，原始量/rpm
+#define LIFT_SPEED_KP                   20.0f    // 比例增益，raw/(rad/s)
 #define LIFT_SPEED_KI                   10.0f    // 积分增益，按周期累加
 #define LIFT_SPEED_KD                   0.0f     // 微分增益，按周期差分
 #define LIFT_SPEED_INTEGRAL_MAX         0.0f     // 误差累加限幅，rpm·周期
@@ -53,7 +53,21 @@
 
 #define LIFT_ALIGN_TOL_DEG              5.0f     // 云台对齐误差，deg
 #define LIFT_FRONT_TOL_DEG              10.0f    // 前向角度容差，deg
-#define LIFT_OVERTRAVEL_COUNTS          40.0f    // 允许越程，count
+#define LIFT_OVERTRAVEL_COUNTS          8192.0f // 严重越程余量，count
+#define LIFT_OVERTRAVEL_CONFIRM_MS      100u // 严重越程确认，ms
+#define LIFT_BRAKE_COUNTS               (20.0f * 8192.0f) // 制动距离，count
+#define LIFT_ACCEL_TIME_MS              250.0f // 升速时间，ms
+#define LIFT_TERMINAL_KP                0.3f // 末段增益，rpm/count
+#define LIFT_HOLD_OUTPUT_MAX_RAW        2222.0f // 保持输出上限，raw
+#define LIFT_HOLD_SPEED_MAX_RPM         955.0f // 保持纠偏上限，rpm
+#define LIFT_HOLD_SPEED_KI              0.2f // 保持积分，raw/(rad/s·拍)
+#define LIFT_HOLD_I_MAX_RAW             1111.0f // 保持积分力矩上限，raw
+#define LIFT_STALL_OUTPUT_MIN_RAW       500.0f // 堵转有效输出，raw
+#define LIFT_STALL_START_GRACE_MS       250u // 运动启动宽限，ms
+#define LIFT_PAUSE_COOLDOWN_MS          1000u // 停机恢复间隔，ms
+#define LIFT_HOLD_CURRENT_RAW           2000.0f // 保持高流阈值，raw
+#define LIFT_HOLD_CONFIRM_MS            1000u // 保持高流确认，ms
+#define LIFT_FEEDBACK_TIMEOUT_MS        50u // 升降反馈超时，ms
 
 #define LIFT_DEBUG_OUTPUT_MAX_RAW       1500.0f  // 手动输出上限，原始量
 #define LIFT_ALIGN_SPEED_RAD_S          0.2f     // 对齐速度上限，rad/s

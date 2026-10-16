@@ -73,6 +73,8 @@
 #define CHASSIS_FOLLOW_TORQUE_LIMIT_NM    4.0f  // 跟随力矩上限，N·m
 #define CHASSIS_FOLLOW_YAW_JUMP_LIMIT_DEG 30.0f // 单拍角跳变上限，°
 #define CHASSIS_FOLLOW_TIMEOUT_MS         50u  // 云台反馈超时，ms
+#define CHASSIS_FOLLOW_RECOVER_MS         100u // 有效反馈恢复，ms
+#define CHASSIS_YAW_NEAREST_HYST_DEG      5.0f // 前后选择滞回，deg
 #define CHASSIS_FOLLOW_BLEND_TIME_MS      10u  // 接管融合时间，ms
 #define CHASSIS_FOLLOW_BLEND_STEP         ((float)CHASSIS_CONTROL_PERIOD_MS / (float)CHASSIS_FOLLOW_BLEND_TIME_MS) // 融合比例/周期，0~1
 

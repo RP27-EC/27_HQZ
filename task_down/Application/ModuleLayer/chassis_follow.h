@@ -25,6 +25,8 @@ typedef struct
     uint8_t data_valid;   /* 1 = 云台反馈有效 */
     uint8_t active;       /* 1 = 跟随环已接管 */
     uint8_t fault_latched;/* 1 = 跟随故障锁定 */
+    uint8_t fault_reason; // 最近故障：1超时2跳变
+    uint32_t fault_count; // 故障累计次数，次
     uint8_t correction_stopped; /* 1 = 停止角度纠偏 */
     uint8_t disturbance_armed;  /* 1 = 已确认对齐停稳 */
     uint8_t recovery_pending;   /* 1 = 等待旋转交接 */

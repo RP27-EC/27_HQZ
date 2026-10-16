@@ -95,6 +95,21 @@
 #define LAUNCHER_DIAL_JAM_SPEED_DPS       10 // 堵转速度上限，deg/s
 #define LAUNCHER_DIAL_JAM_CONFIRM_TICKS   200u // 堵转确认，1ms周期
 #define LAUNCHER_DIAL_SAFE_STOP_RETRY_MS  50u // 失能停机重发间隔，ms
+#define LAUNCHER_PROTECT_ENABLE          1u // 堵转停机使能，0/1
+#define LAUNCHER_FEEDBACK_TIMEOUT_MS     150u // 运动反馈超时，ms
+#define LAUNCHER_RECOVER_POLL_MS         50u // 状态读取间隔，ms
+#define LAUNCHER_RECOVER_RETRY_MS        50u // 恢复发送间隔，ms
+#define LAUNCHER_PROTECT_START_MS        100u // 拨盘启动宽限，ms
+#define LAUNCHER_PROTECT_CONFIRM_MS      200u // 堵转确认时间，ms
+#define LAUNCHER_PROTECT_PROGRESS_MS     300u // 无进展观察窗，ms
+#define LAUNCHER_PROTECT_PROGRESS_COUNTS 100.0f // 最小运动进展，count
+#define LAUNCHER_PROTECT_OUTPUT_RAW      600.0f // 有效驱动输出，raw
+#define LAUNCHER_PROTECT_COOLDOWN_MS     1000u // 保护停机冷却，ms
+#define LAUNCHER_PROTECT_HOLD_MS         1000u // 保持过载确认，ms
+#define LAUNCHER_PROTECT_FRIC_START_MS   1000u // 摩擦轮启动宽限，ms
+#define LAUNCHER_PROTECT_FRIC_RPM        100.0f // 摩擦轮低速阈值，rpm
+#define LAUNCHER_PROTECT_FRIC_CURRENT_RAW 3000.0f // 单轮高流阈值，raw
+#define LAUNCHER_CLICK_WAIT_MS           2000u // 一键待发上限，ms
 
 /* 制动后保持停止位置 */
 #define LAUNCHER_DIAL_BRAKE_KP            0.1f // 制动增益，原始量/(deg/s)

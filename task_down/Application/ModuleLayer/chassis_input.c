@@ -37,6 +37,8 @@ static uint8_t uturn_stable_started;
 static volatile uint8_t uturn_handoff_cycles;
 static volatile uint8_t uturn_handoff_tx_started;
 static volatile uint32_t uturn_handoff_tx_tick;
+static uint8_t yaw_manual_override; // R键中心锁定，0/1
+static uint32_t yaw_override_tick; // R键锁定起点，ms
 
 /* 遥控通道归一化，含死区 */
 static float Chassis_RcAxisValue(int16_t axis)
@@ -94,7 +96,10 @@ static void Chassis_Input_KeyboardModeUpdate(const rc_data_t *rc)
         {
             keyboard_chassis_mode = CHASSIS_KEY_MODE_MECH;
         }
-        else if ((c_pressed != 0u) && (last_c_pressed == 0u))
+        else if ((c_pressed != 0u) && (last_c_pressed == 0u) &&
+                 (board_hole_request == 0u) && (board_hole_exit_pending == 0u) &&
+                 (board.rx_meg->state_meg.is_down == 2u) &&
+                 (rc->B.value == 0u))
         {
             keyboard_chassis_mode = CHASSIS_KEY_MODE_SPIN;
         }
@@ -111,10 +116,35 @@ chassis_key_mode_e Chassis_Input_GetKeyboardChassisMode(void)
     return keyboard_chassis_mode;
 }
 
+void Chassis_Input_CancelSpin(void)
+{
+    if (keyboard_chassis_mode == CHASSIS_KEY_MODE_SPIN)
+    {
+        keyboard_chassis_mode = CHASSIS_KEY_MODE_FOLLOW;
+    }
+}
+
 /* 将角度归一化到 [-pi, pi] */
 static float Chassis_Input_WrapPi(float angle)
 {
     return atan2f(sinf(angle), cosf(angle));
+}
+
+uint8_t Chassis_Input_SelectNearestYaw(float yaw_rad, uint8_t rear)
+{
+    float front_error = fabsf(Chassis_Input_WrapPi(yaw_rad - BOARD_MEC_YAW_FRONT_RAD));
+    float boundary = (90.0f + ((rear != 0u) ?
+        -CHASSIS_YAW_NEAREST_HYST_DEG : CHASSIS_YAW_NEAREST_HYST_DEG)) *
+        CHASSIS_INPUT_DEG_TO_RAD;
+
+    if ((yaw_rad != yaw_rad) || (fabsf(yaw_rad) > CHASSIS_INPUT_PI + 0.01f)) return rear;
+    return (front_error > boundary) ? 1u : 0u;
+}
+
+void Chassis_Input_SetYawRear(uint8_t rear)
+{
+    yaw_rear = (rear != 0u) ? 1u : 0u;
+    yaw_reference_rad = Chassis_Input_GetKeyboardYawTargetRad();
 }
 
 float Chassis_Input_GetYawReferenceRad(void)
@@ -137,6 +167,7 @@ static void Chassis_Input_CancelUturn(void)
 void Chassis_Input_ResetYawReference(void)
 {
     Chassis_Input_CancelUturn();
+    yaw_manual_override = 0u;
     yaw_reference_rad = BOARD_MEC_YAW_FRONT_RAD;
     yaw_rear = 0u;
 }
@@ -221,7 +252,7 @@ static void Chassis_Input_UturnUpdate(const rc_data_t *rc)
     }
 
     if ((board_hole_request != 0u) || (board_hole_exit_pending != 0u) ||
-        ((rc->s2.value == RC_SW_MID) && (rc->B.value != 0u)))
+        (rc->B.value != 0u))
     {
         Chassis_Input_CancelUturn();
         return;
@@ -246,9 +277,22 @@ static void Chassis_Input_UturnUpdate(const rc_data_t *rc)
             (r_edge != 0u) && (was_active == 0u))
         {
             yaw_rear ^= 1u;
+            yaw_manual_override = 1u;
+            yaw_override_tick = now;
         }
         if (keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH)
         {
+            if ((data_valid != 0u) && (yaw_manual_override != 0u) &&
+                ((fabsf(Chassis_Input_WrapPi(Chassis_Input_GetKeyboardYawTargetRad() - yaw_mec)) <=
+                  CHASSIS_KEY_UTURN_TOL_DEG * CHASSIS_INPUT_DEG_TO_RAD) ||
+                 ((now - yaw_override_tick) >= CHASSIS_KEY_UTURN_TIMEOUT_MS)))
+            {
+                yaw_manual_override = 0u;
+            }
+            if ((data_valid != 0u) && (yaw_manual_override == 0u))
+            {
+                yaw_rear = Chassis_Input_SelectNearestYaw(yaw_mec, yaw_rear);
+            }
             yaw_reference_rad = Chassis_Input_GetKeyboardYawTargetRad();
         }
         return;
@@ -335,6 +379,10 @@ static void Chassis_Input_UturnUpdate(const rc_data_t *rc)
     {
         uturn_state = CHASSIS_UTURN_IDLE;
         uturn_stable_started = 0u;
+    }
+    if ((uturn_state == CHASSIS_UTURN_IDLE) && (r_edge == 0u))
+    {
+        Chassis_Input_SetYawRear(Chassis_Input_SelectNearestYaw(yaw_mec, yaw_rear));
     }
 }
 

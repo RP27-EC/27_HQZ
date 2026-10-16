@@ -126,19 +126,19 @@
 | `GIMBAL_PITCH_MIN_DEG / GIMBAL_PITCH_MAX_DEG` | -7.5 / 30 | Pitch 目标角范围，deg |
 | `GIMBAL_TORQUE_LIMIT` | 6 | 两轴默认最终力矩幅值上限，N·m |
 | `GIMBAL_GRAVITY_K_NM / GIMBAL_GRAVITY_B_NM` | 1.1 / 0 | 重力补偿幅值/偏置，N·m |
-| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S / GIMBAL_MEC_YAW_DECEL_RAD_S2` | 300 / 25 | 普通机械 Yaw 速度上限 deg/s / 制动减速度 rad/s² |
+| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S / GIMBAL_MEC_YAW_DECEL_RAD_S2` | 360 / 25 | 普通机械 Yaw 速度上限 deg/s / 制动减速度 rad/s² |
 | `GIMBAL_MEC_YAW_TORQUE_STEP_NM` | 0.08 | 机械 Yaw 每轮力矩斜坡步进，N·m |
-| `GIMBAL_MEC_HOLD_DEADZONE_DEG / GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS` | 0.3 / 10 | 机械 Yaw 位置软死区 deg / 速度反馈死区 deg/s |
+| `GIMBAL_MEC_HOLD_DEADZONE_DEG / GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS` | 0.3 / 3 | 机械 Yaw 位置软死区 deg / 速度反馈死区 deg/s |
 | `GIMBAL_MEC_YAW_FF_OFF_DPS / GIMBAL_MEC_YAW_FF_FULL_DPS` | 25 / 35 | 底盘速率前馈渐入窗口，deg/s |
 | `GIMBAL_MEC_YAW_FF_MAX_GAIN / GIMBAL_MEC_YAW_FF_FILTER_ALPHA` | 0.90 / 0.05 | 前馈最大倍率 / 一阶滤波更新系数 |
 | `GIMBAL_R_TURN_YAW_RAMP_DEG_PER_MS / GIMBAL_R_TURN_YAW_MAX_RATE_DEG_S` | 1.5 / 1000 | R 掉头目标斜坡 deg/ms / 速度上限 deg/s；实际速度还受反馈和限矩约束 |
 | `GIMBAL_INIT_YAW_HOME_DEG / GIMBAL_INIT_PITCH_HOME_DEG` | 0 / 0 | 归中目标，deg |
 | `GIMBAL_INIT_TIMEOUT_MS / GIMBAL_INIT_STABLE_MS` | 6000 / 30 | 初始化超时/到位确认，ms；超时也会置初始化标志 |
 | `GIMBAL_INIT_SPEED_LIMIT_ENABLE` | 0 | 归中速度规划关闭，相关速度参数不可当作始终生效的限制 |
-| `GIMBAL_YAW_HOLD_KP / GIMBAL_YAW_HOLD_KI` | 20 / 0.003 | 速控松杆 Yaw 保持环增益 |
+| `GIMBAL_YAW_HOLD_KP / GIMBAL_YAW_HOLD_KI` | 18 / 0.003 | 速控松杆 Yaw 保持环增益 |
 | `GIMBAL_PITCH_HOLD_KP / GIMBAL_PITCH_HOLD_KI` | 50 / 0 | 速控松杆 Pitch 保持环增益 |
 
-当前速控速度 PID 在 `gimbal_pid_init()` 中直接赋值：Yaw `KP/KI/KD=0.04/0/0`，Pitch `0.03/0/0`。机械 Yaw 的有效位置/速度参数来自 `gimbal_tune` 和 `gimbal_mec_yaw_calc()`，不能将初始化函数中旧 `yaw_mec_outer/inner` 的参数误当成当前定位律参数。`GIMBAL_MEC_HOLD_KP_NM_PER_DEG=1.5` 虽含单位名称，当前实际作为计数域位置环增益使用，讲解须按消费函数解释。
+当前速控速度 PID 在 `gimbal_pid_init()` 中直接赋值：Yaw `KP/KI/KD=0.06/0/0`，Pitch `0.03/0/0`。机械 Yaw 的有效位置/速度参数来自 `gimbal_tune` 和 `gimbal_mec_yaw_calc()`，不能将初始化函数中旧 `yaw_mec_outer/inner` 的参数误当成当前定位律参数。`GIMBAL_MEC_HOLD_KP_NM_PER_DEG=1.5` 虽含单位名称，当前实际作为计数域位置环增益使用，讲解须按消费函数解释。
 
 #### 升降、发射和热量
 
@@ -149,9 +149,9 @@
 | `LIFT_TRAVEL_TURNS / LIFT_TRAVEL_COUNTS` | 280 / 2293760 | 电机圈 / 编码器 count，相对找顶零点 |
 | `LIFT_AUTO_HOME_DELAY_MS / LIFT_HOME_CONFIRM_MS` | 2000 / 500 | 自动找顶延时 / 顶部条件连续确认，ms |
 | `LIFT_HOME_SPEED_RPM / LIFT_HOME_CURRENT_RAW` | 2865 / 520 | 找顶速度 rpm / 电流反馈原始阈值 |
-| `LIFT_RETRACT_COUNTS` | 40960 | 上端目标距顶部零点的 5 圈偏移，count；当前找顶完成不自动执行回退分支 |
-| `LIFT_POS_KP / LIFT_MOVE_SPEED_RPM` | 0.0064 / 9549 | 位置比例增益 rpm/count / 运动速度上限 rpm |
-| `LIFT_SPEED_KP / LIFT_SPEED_KI / LIFT_SPEED_OUT_MAX_RAW` | 20 / 10 / 4444 | 速度环增益及协议原始输出限幅；积分上限为 0，当前积分项被钳为 0 |
+| `LIFT_RETRACT_COUNTS` | 40960 | 上端目标距顶部零点的 5 圈偏移，count；找顶完成实际执行回退后保持 |
+| `LIFT_POS_KP / LIFT_MOVE_SPEED_RPM` | 0.0064 / 9549 | 保持位置增益 rpm/count / 轨迹速度上限 rpm |
+| `LIFT_SPEED_KP / LIFT_SPEED_KI / LIFT_SPEED_OUT_MAX_RAW` | 20 / 10 / 4444 | 速度环增益及协议原始输出限幅；远程运动积分上限0；末端/保持局部KI=0.2，积分贡献≤1111 raw |
 | `LIFT_POS_TOL_COUNTS / LIFT_SPEED_TOL_RPM / LIFT_STABLE_CONFIRM_MS` | 200 / 1 / 100 | 到位位置误差 count / 速度误差 rpm / 确认时间 ms |
 | `LIFT_HOME_TIMEOUT_MS / LIFT_MOVE_TIMEOUT_MS` | 90000 / 90000 | 找顶/单次运动超时，ms |
 | `LIFT_DOWN_OVER_CURRENT_RAW / LIFT_UP_OVER_CURRENT_RAW` | 75 / 520 | 下行/上行过流阈值，协议原始量，不能当 A |
@@ -388,8 +388,20 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 | 上下板心跳丢失/车辆失能 | 上板云台选择 `G_SLEEP` 并将力矩清零；MonitorTask 更新设备离线状态 |
 | 任一底盘轮离线或控制量非法 | 四轮在线门槛失败后调用 `Chassis_Control_Stop()`，写零力矩并发送组帧 |
 | 裁判数据缺失/过期 | D3 的有效位分开表示参数/热量有效；上板热量来源状态未就绪时禁止供弹；功率预算改用 45 W 回退值 |
-| 升降行程/超时/堵转异常 | 升降状态机进入 `LIFT_FAULT` 或 `LIFT_STALL_STOP`，力矩清零；C1 b1 回报状态 |
+| 升降行程/超时/堵转异常 | 升降进入 `LIFT_FAULT` 或 `LIFT_PAUSED`，力矩清零；冷却1 s后接受新请求或Watch恢复；C1 b1 回报状态 |
 | 电机力矩/输出超限 | 云台、底盘、拨盘路径分别有力矩/原始输出限幅；电机温度反馈可读，但本仓库不能据此推断所有电机都有统一软件超温切断 |
 | HAL 初始化失败 | `Error_Handler()` 关闭中断并停在死循环；源码没有统一错误灯码 |
 
 首次上电前卸除弹丸、架空底盘并确保升降/云台行程无障碍；限制电源和机构运动范围，先逐个验证方向、编码器、离线保护及 CAN 心跳，再验证闭环。任何 PID、角度符号、机械行程或限矩变更都要按板级模块说明人工台架确认。编译通过不等于实机验收。
+
+## 回中、保护与一键射击更新
+
+- IMU模式锁定云台世界朝向，底盘按机械角就近选前/后中心，85°/95°滞回；R动作优先，机械模式使用同一前后选择。跟随失效后连续有效反馈100 ms恢复，原因和计数保留。
+- Yaw保持Kp=18，受扰回正独立限速220°/s，手动输入限速150°/s不变；机械回中360°/s、近区增益15、反馈速度死区3°/s。
+- Pitch速度反馈低通时间常数3 ms；初始I/D仍关闭，受控保持积分由 `GIMBAL_PITCH_HOLD_I_ENABLE=0` 保留人工启用入口。
+- 左键新按下自动开轮并最多等待2 s达速；短按松开仍执行该次单发，长按可转连发，G关闭取消待发；上电、重连须先释放左键。
+- 拨盘/摩擦轮堵转停机保护默认开启，自动反转默认关闭；拨盘电流600 raw、两轮各3000 raw均是待人工核对的候选门限。停机至少1 s且已释放后，新按下可恢复。
+- KT每50 ms独立读取状态，恢复运行后等待新运动反馈再接管当前位置；只含运动数据的回复更新累计编码器，新鲜度上限150 ms。
+- 升降保持9549 rpm/4444 raw运动上限，改为250 ms加速与末端20圈制动；实际回退5圈后顶部保持。上下端保持限幅2222 raw，局部速度积分贡献≤1111 raw。
+- 键鼠B不再依赖S2中位；升降取消小陀螺请求，期间C不排队，升起后需重新按C；软限位、可恢复暂停、故障原因详见[升降说明](task_up/docs/lift.md)。
+- 未新增CAN ID或板间字段；上下板源码需配套使用。本次未编译、未烧录、未执行硬件验证。

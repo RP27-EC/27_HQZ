@@ -60,11 +60,11 @@ flowchart LR
 
 | 参数 | 当前值 | 作用/单位 |
 | --- | ---: | --- |
-| `GIMBAL_MANUAL_YAW_RATE_DEG_S` / `...PITCH...` | 200 / 150 deg/s | 摇杆满量程映射到的速率上限 |
+| `GIMBAL_MANUAL_YAW_RATE_DEG_S` / `...PITCH...` | 150 / 150 deg/s | 摇杆满量程映射到的速率上限 |
 | `GIMBAL_RC_AXIS_MAX` / `GIMBAL_RC_AXIS_DEADBAND` | 660 / 20 | 摇杆归一化满量程和死区 |
 | `GIMBAL_MOUSE_YAW/PITCH_DEG_PER_COUNT` | 0.04 / 0.04 deg/count | 鼠标位移到目标角增量 |
 | `GIMBAL_RATE_CMD_RAMP_DEG_S_PER_MS` | 6 deg/s/ms | 速率命令斜坡变化限制 |
-| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S` | 300 deg/s | 机械 Yaw 运动目标限速 |
+| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S` | 360 deg/s | 机械 Yaw 运动目标限速 |
 | `GIMBAL_MEC_YAW_FRICTION_FF_NM` | 0.3 N·m | 保留调参值；当前统一机械定位函数未消费此项 |
 | `GIMBAL_YAW_HOLD_KP/KI` | 15 / 0.003 | Yaw 位置保持 PI；输出 deg/s |
 | `GIMBAL_PITCH_HOLD_KP/KI` | 50 / 0 | Pitch 位置保持 PI；输出 deg/s |
@@ -141,3 +141,10 @@ IMU 离线时该定位函数清 PID 并返回零；恢复首轮对齐误差历�
 | 初始化两轴 | 机械角归中目标 | 机械速度 | [gimbal_init_config.h](../Application/ConfigLayer/gimbal_init_config.h) |
 
 可用于讲解：“云台按模式使用不同目标和反馈，机械 Yaw 是编码器位置外环加 IMU 速度内环；速控时操作输入与松杆保持共同生成目标速度，Pitch 再加重力补偿。”
+
+## 回正与Pitch局部滤波
+
+- Yaw保持增益18；受扰保持独立限速220°/s，人工输入限速150°/s。积分抗饱和同时检查最终速度限制和上拍最终力矩限制。
+- 机械Yaw近区增益15、最大360°/s、速度反馈死区3°/s；速度内环增益0.1、力矩上限6 N·m保持。
+- G_MEC/G_RATE的Pitch速度反馈采用3 ms一阶低通，按实际控制间隔更新；归中分支仍使用原始机械速度。
+- 默认Pitch角度保持I=0、速度环I/D=0；额外保持积分默认关闭。启用后须误差0.2°～2°、低速稳定100 ms、无饱和/限位，再经200 ms缓入，修正限制±5°/s。

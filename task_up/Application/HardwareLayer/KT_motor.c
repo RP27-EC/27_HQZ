@@ -1,6 +1,7 @@
 /* KT_motor.c - KT 鐢垫満椹卞姩 */
 
 #include "KT_motor.h"
+#include "launcher_config.h"
 extern CAN_HandleTypeDef hcan1;
 extern CAN_HandleTypeDef hcan2;
 void KT_motor_class_heartbeat(KT_motor_t *motor);
@@ -54,6 +55,7 @@ void KT_motor_class_init(KT_motor_t *motor)
 		return;
 	
 	memset ( (uint8_t*)motor->tx_buff, 0, 8 ); /* clear tx frame */
+    memset(&motor->KT_motor_info.rx_info, 0, sizeof(motor->KT_motor_info.rx_info));
 	memset ( &motor->KT_motor_info.tx_info, 0, 8); /* clear tx data */
 	
 	motor->KT_motor_info.state_info.init_flag         = M_INIT; /* init done */
@@ -86,7 +88,6 @@ void KT_motor_class_init(KT_motor_t *motor)
 /* 绂荤嚎妫€娴� */
 void KT_motor_class_heartbeat(KT_motor_t *motor)
 {	
-	static int16_t current_last; /* last current feedback */
 	if(motor == NULL)	
 		return;
 			
@@ -99,13 +100,10 @@ void KT_motor_class_heartbeat(KT_motor_t *motor)
 	}
 		
 	state_info->offline_cnt++; /* heartbeat counter */
-	// 鐢垫祦闀挎椂闂翠笉鍙樺垽瀹氫负鍫佃浆, 瑙﹀彂鑷繚鎶�
-	if(motor->KT_motor_info.rx_info.current==current_last)
-	{
-		state_info->selfprotect_cnt++; /* current stuck count */
-	}
-	current_last=motor->KT_motor_info.rx_info.current;
-	
+    // NOTE: 堵转由业务层判定
+    state_info->selfprotect_cnt = 0u;
+    state_info->selfprotect_flag = M_PROTECT_OFF;
+
 	if(state_info->offline_cnt > state_info->offline_cnt_max) 
 	{
 		state_info->offline_cnt = state_info->offline_cnt_max;
@@ -117,21 +115,7 @@ void KT_motor_class_heartbeat(KT_motor_t *motor)
 			state_info->work_state = M_ONLINE;
 	}
 	
-	if(state_info->selfprotect_cnt > state_info->selfprotect_cnt_max) 
-	{
-		state_info->selfprotect_cnt = state_info->selfprotect_cnt_max;
-		state_info->selfprotect_flag = M_PROTECT_ON; /* protect latched */
-	//	motor->tx_W_cmd(motor,MOTOR_RUN_ID);
-	}
-	else 
-	{
-		if(state_info->selfprotect_flag == M_PROTECT_ON)
-		{
-			state_info->selfprotect_flag = M_PROTECT_OFF;
-			state_info->selfprotect_cnt =0;
-		}
-			
-	}
+
 }
 
 
@@ -694,7 +678,19 @@ void get_kt_motor_info(KT_motor_t *motor, uint8_t *rxBuf)
 			break;
 	}
 
-    KT_Encoder_Sum_Cal(motor);
+    if ((ID == STATE2_ID) || ((ID >= TORQUE_CLOSE_LOOP_ID) && (ID <= POSI_CLOSE_LOOP_ID6)))
+    {
+        uint32_t now = HAL_GetTick();
+        if ((rx_info->feedback_seq != 0u) &&
+            ((now - rx_info->feedback_tick) > LAUNCHER_FEEDBACK_TIMEOUT_MS))
+        {
+            rx_info->last_encoder = rx_info->encoder;
+            rx_info->rebase_count++;
+        }
+        KT_Encoder_Sum_Cal(motor);
+        rx_info->feedback_tick = now;
+        rx_info->feedback_seq++;
+    }
 
 	
 }

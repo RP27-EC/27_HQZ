@@ -46,6 +46,9 @@ float Chassis_Input_GetKeyboardYawTargetRad(void);
 float Chassis_Input_GetYawReferenceRad(void);
 /* 过洞回零必须同步取消掉头 */
 void Chassis_Input_ResetYawReference(void);
+uint8_t Chassis_Input_SelectNearestYaw(float yaw_rad, uint8_t rear);
+void Chassis_Input_SetYawRear(uint8_t rear);
+void Chassis_Input_CancelSpin(void);
 /* 包含预发送及恢复，期间屏蔽 Yaw 和自动跟转 */
 uint8_t Chassis_Input_IsUturnActive(void);
 chassis_uturn_state_e Chassis_Input_GetUturnState(void);

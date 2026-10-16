@@ -95,12 +95,14 @@ typedef enum
     LAUNCHER_DIAL_REJECT_TIMEOUT, // 单发未完成，值6
     LAUNCHER_DIAL_REJECT_FRIC, // 摩擦轮未达速，值7
     LAUNCHER_DIAL_REJECT_SPEED, // 弹速反馈或保护，值8
+    LAUNCHER_DIAL_REJECT_PROTECT, // 堵转保护，值9
+    LAUNCHER_DIAL_REJECT_WAIT, // 开轮等待超时，值10
 } launcher_dial_reject_e;
 
 typedef struct
 {
     launcher_state_e state; // 拨盘独立阶段，0~9
-    launcher_dial_reject_e reject_reason; // 最近拒绝原因，0~8
+    launcher_dial_reject_e reject_reason; // 最近拒绝原因，0~10
     int64_t target_angle; // 累计目标，count
     int64_t target_error; // 目标减反馈，count
     float speed_target_dps; // 最近速度目标，deg/s
@@ -121,6 +123,8 @@ typedef struct
     uint32_t pending_tick; // 等待启动起点，ms
     uint32_t settle_tick; // 到位确认起点，ms
     uint8_t settling; // 正在确认到位，0/1
+    uint8_t wait_single; // 等待达速单发，0/1
+    uint32_t wait_tick; // 一键请求时刻，ms
 } launcher_dial_t;
 
 extern launcher_dial_t launcher_dial;
@@ -159,6 +163,18 @@ typedef struct
 } launcher_heat_t;
 
 extern launcher_heat_t launcher_heat;
+
+typedef struct
+{
+    uint8_t reason; // 最近保护，0~4
+    uint8_t active; // 保护停机有效，0/1
+    uint8_t recovery_phase; // 0读状态1启机2就绪
+    uint8_t released; // 保护后已松开，0/1
+    uint32_t count; // 保护累计次数，次
+    uint32_t fault_tick; // 保护触发时刻，ms
+} launcher_protection_t;
+
+extern launcher_protection_t launcher_protection;
 
 void Launcher_Init(void);
 void Launcher_Work(void);
