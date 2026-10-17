@@ -12,6 +12,7 @@
 #include "gimbal_init_config.h"
 #include "gimbal_turn_config.h"
 #include "gimbal_rate_config.h"
+#include "gimbal_mec_config.h"
 
 /*
  * 云台控制层对外接口。
@@ -40,7 +41,6 @@
 #define GIMBAL_MEC_OUTER_KD              0.1f
 #define GIMBAL_MEC_OUTER_D_FILTER_ALPHA  0.85f
 #define GIMBAL_MEC_ERR_DEADBAND_DEG      0.2f
-#define GIMBAL_MEC_YAW_MAX_RATE_DEG_S    360.0f // 机械回正上限，deg/s
 #define GIMBAL_MEC_YAW_DECEL_RAD_S2      25.0f
 #define GIMBAL_MEC_YAW_TORQUE_STEP_NM    0.08f
 
@@ -50,7 +50,6 @@
 #define GIMBAL_MEC_YAW_FF_FALL_STEP      0.10f
 #define GIMBAL_MEC_YAW_FF_FILTER_ALPHA   0.05f
 #define GIMBAL_MEC_YAW_FF_MAX_GAIN       0.90f
-#define GIMBAL_MEC_YAW_NEAR_RATE_KP      15.0f // 近区速度增益，s^-1
 /* 静摩擦补偿只在误差死区外生效。 */
 #define GIMBAL_MEC_YAW_FRICTION_FF_NM    0.3f
 /* 速度反馈低通滤波系数，0~1。 */
@@ -85,14 +84,9 @@
 #define GIMBAL_MEC_HOLD_RATE_KD_NM_PER_DPS  0.0f
 #define GIMBAL_MEC_HOLD_RATE_KI_LIMIT       0.0f
 #define GIMBAL_MEC_HOLD_RATE_OUT_MAX_NM     6.0f
-#define GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS   3.0f // 速度反馈死区，deg/s
 
 /* 位置保持的死区与退出阈值，单位 deg。 */
 #define GIMBAL_MEC_HOLD_DEADZONE_DEG     0.3f
-#define GIMBAL_MEC_YAW_HOLD_EXIT_DEG     0.5f
-
-/* 静止卸力开关；默认关闭，避免死区内丢失保持力。 */
-#define GIMBAL_MEC_YAW_HARD_HOLD_ENABLE  0
 
 /* 旧机械 Yaw 参数，保留结构兼容。 */
 #define GIMBAL_MEC_YAW_HOLD_KD_NM_PER_RAD_S 12.0f
@@ -248,59 +242,57 @@ typedef struct
 /* Runtime tuning values. Edit these in Keil Watch without reflashing. */
 typedef struct
 {
-    volatile uint8_t gravity_enable;
-    volatile float gravity_k_nm;
-    volatile float gravity_b_nm;
-    volatile float gravity_sign;
-    volatile float gravity_middle_deg;
-    volatile float pitch_torque_limit_nm;
-    volatile float yaw_torque_limit_nm;
+    volatile uint8_t gravity_enable;           // 重力补偿使能，0/1
+    volatile float gravity_k_nm;               // 重力余弦幅值，N·m
+    volatile float gravity_b_nm;               // 重力固定偏置，N·m
+    volatile float gravity_sign;               // 重力补偿方向，±1
+    volatile float gravity_middle_deg;         // 重力参考角，deg
+    volatile float pitch_torque_limit_nm;      // Pitch力矩上限，N·m
+    volatile float yaw_torque_limit_nm;        // Yaw力矩上限，N·m
     /* 速控松杆保持环：两轴独立 PI，Keil Watch 在线可改 */
-    volatile float yaw_hold_kp;
-    volatile float yaw_hold_ki;
-    volatile float yaw_hold_integral_max;
-    volatile float yaw_hold_out_max;
-    volatile float pitch_hold_kp;
-    volatile float pitch_hold_ki;
-    volatile float pitch_hold_integral_max;
-    volatile float pitch_hold_out_max;
+    volatile float yaw_hold_kp;                // 航向保持比例，s^-1
+    volatile float yaw_hold_ki;                // 航向积分增益，1/(s·拍)
+    volatile float yaw_hold_integral_max;      // 航向积分上限，deg·拍
+    volatile float yaw_hold_out_max;           // 航向保持限速，deg/s
+    volatile float pitch_hold_kp;              // 俯仰保持比例，s^-1
+    volatile float pitch_hold_ki;              // 俯仰积分增益，1/(s·拍)
+    volatile float pitch_hold_integral_max;    // 俯仰积分上限，deg·拍
+    volatile float pitch_hold_out_max;         // 俯仰保持限速，deg/s
     /* 保持环与操作手指令的交接区间 */
-    volatile float rate_hold_enter_deg_s;
-    volatile float rate_hold_exit_deg_s;
-    volatile float pitch_manual_rate_max_deg_s;
-    volatile float yaw_manual_rate_max_deg_s;
-    volatile float manual_pitch_sign;
-    volatile float manual_yaw_sign;
-    volatile float mouse_yaw_deg_per_count;
-    volatile float mouse_pitch_deg_per_count;
-    volatile float mouse_yaw_sign;
-    volatile float mouse_pitch_sign;
-    volatile float mouse_rate_ff_dps_per_count;
-    volatile float mouse_deadband_count;
+    volatile float rate_hold_enter_deg_s;      // 全保持输入阈值，deg/s
+    volatile float rate_hold_exit_deg_s;       // 退出保持输入阈值，deg/s
+    volatile float pitch_manual_rate_max_deg_s; // 手动俯仰限速，deg/s
+    volatile float yaw_manual_rate_max_deg_s;   // 手动航向限速，deg/s
+    volatile float manual_pitch_sign;          // 俯仰输入方向，±1
+    volatile float manual_yaw_sign;            // 航向输入方向，±1
+    volatile float mouse_yaw_deg_per_count;    // 航向灵敏度，deg/count
+    volatile float mouse_pitch_deg_per_count;  // 俯仰灵敏度，deg/count
+    volatile float mouse_yaw_sign;             // 鼠标航向方向，±1
+    volatile float mouse_pitch_sign;           // 鼠标俯仰方向，±1
+    volatile float mouse_rate_ff_dps_per_count; // 速率前馈，°/(s·count)
+    volatile float mouse_deadband_count;       // 鼠标位移死区，count
     /* 机械模式 Yaw：只作用于 G_MEC 的 yaw 轴，Keil Watch 在线可改 */
-    volatile float mec_yaw_hold_kp_nm_per_deg;   /* 已并入 mec_hold_kp，保留兼容 */
-    volatile float mec_yaw_hold_kd_nm_per_rad_s; /* 已废弃（改 IMU 内环） */
-    volatile float mec_yaw_max_rate_deg_s;
-    volatile float mec_yaw_decel_rad_s2;
-    volatile float mec_yaw_deadband_deg;
-    volatile float mec_yaw_torque_step_nm;
-    volatile float mec_yaw_friction_ff_nm;       /* 已废弃（改位置环积分） */
-    volatile float mec_hold_full_err_deg;
-    volatile float mec_hold_enter_err_deg;
-    /* 机械 Yaw 双环（照搬参考工程 cloud_control_yaw_mechanical）：
-     * 位置外环用编码器相对角出目标角速度，速度内环用 IMU 角速度出力矩。 */
-    volatile float mec_hold_kp_nm_per_deg;       /* 位置外环 kp（码域，参考原值） */
-    volatile float mec_hold_ki_nm_per_deg;       /* 位置外环 ki */
-    volatile float mec_hold_kd_nm_per_deg;       /* 位置外环 kd（秒） */
-    volatile float mec_hold_ki_limit;            /* 位置外环积分累加限幅（码·秒） */
-    volatile float mec_hold_deadzone_count;      /* 连续软死区（编码器计数） */
-    volatile float mec_hold_rate_kp_nm_per_dps;  /* 速度内环 kp（IMU，deg/s） */
-    volatile float mec_hold_rate_ki_nm_per_dps;  /* 速度内环 ki */
-    volatile float mec_hold_rate_kd_nm_per_dps;  /* 速度内环 kd */
-    volatile float mec_hold_rate_ki_limit;       /* 速度内环积分限幅 */
-    volatile float mec_hold_rate_out_max_nm;     /* 速度内环输出限幅 */
-    volatile float mec_hold_rate_deadband_dps;   /* 速度内环速率死区（deg/s） */
-    volatile float mec_yaw_gyro_direction;       /* IMU 与编码器同向 +1，反向 -1 */
+    volatile float mec_yaw_hold_kp_nm_per_deg;   // 旧比例保留，N·m/deg
+    volatile float mec_yaw_hold_kd_nm_per_rad_s; // 旧阻尼保留，N·m·s/rad
+    volatile float mec_yaw_max_rate_deg_s;      // 普通回正限速，deg/s
+    volatile float mec_yaw_decel_rad_s2;        // 机械制动减速度，rad/s²
+    volatile float mec_yaw_deadband_deg;        // 旧机械死区保留，deg
+    volatile float mec_yaw_torque_step_nm;      // 每拍力矩步进，N·m
+    volatile float mec_yaw_friction_ff_nm;      // 旧摩擦补偿保留，N·m
+    volatile float mec_hold_full_err_deg;       // 旧全保持阈值保留，deg
+    volatile float mec_hold_enter_err_deg;      // 旧保持阈值保留，deg
+    volatile float mec_hold_kp_nm_per_deg;      // 位置比例，°/(s·码)
+    volatile float mec_hold_ki_nm_per_deg;      // 位置积分，°/(s²·码)
+    volatile float mec_hold_kd_nm_per_deg;      // 位置微分，°/码
+    volatile float mec_hold_ki_limit;           // 位置积分上限，码·s
+    volatile float mec_hold_deadzone_count;     // 位置软死区，码
+    volatile float mec_hold_rate_kp_nm_per_dps; // 速度比例，N·m·s/deg
+    volatile float mec_hold_rate_ki_nm_per_dps; // 速度积分，N·m/deg
+    volatile float mec_hold_rate_kd_nm_per_dps; // 速度微分，N·m·s²/deg
+    volatile float mec_hold_rate_ki_limit;      // 速度积分上限，deg
+    volatile float mec_hold_rate_out_max_nm;    // 速度环限矩，N·m
+    volatile float mec_hold_rate_deadband_dps;  // 保持误差软死区，deg/s
+    volatile float mec_yaw_gyro_direction;      // IMU反馈方向，±1
 } gimbal_tune_t;
 
 /* 目标角与 8 路串级 PID */

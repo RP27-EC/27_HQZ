@@ -9,17 +9,26 @@ uint32_t haltick = 0;
  */
 uint32_t micros(void)
 {
-	register uint32_t ms, us;
-	
-	ms = HAL_GetTick();
-	/* TIM2 作为 HAL 时基 */
-	/* Freq:1MHz => 1Tick = 1us */
-	/* Period:1ms */
-	us = TIM2->CNT;
-	
-    haltick = ms*1000 + us;
-    
-	return haltick;
+    uint32_t irq = __get_PRIMASK();
+    uint32_t ms;
+    uint32_t us;
+    uint32_t pending;
+    uint32_t tick;
+
+    __disable_irq();
+    ms = HAL_GetTick();
+    do
+    {
+        pending = TIM2->SR & TIM_SR_UIF;
+        us = TIM2->CNT;
+    } while (pending != (TIM2->SR & TIM_SR_UIF));
+
+    // NOTE: 补偿尚未服务的溢出
+    if (pending != 0u) ms++;
+    tick = ms * 1000u + us;
+    haltick = tick;
+    __set_PRIMASK(irq);
+    return tick;
 }
 
 void delay_us(uint32_t us)

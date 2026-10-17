@@ -117,7 +117,7 @@
 
 #### 上板云台
 
-参数文件：[gimbal.h](task_up/Application/ModuleLayer/gimbal.h)、[gimbal_init_config.h](task_up/Application/ConfigLayer/gimbal_init_config.h)、[gimbal_turn_config.h](task_up/Application/ConfigLayer/gimbal_turn_config.h)；实际 PID 初始化和路径选择看 [gimbal.c](task_up/Application/ModuleLayer/gimbal.c)。
+参数文件：[gimbal.h](task_up/Application/ModuleLayer/gimbal.h)、[gimbal_init_config.h](task_up/Application/ConfigLayer/gimbal_init_config.h)、[gimbal_turn_config.h](task_up/Application/ConfigLayer/gimbal_turn_config.h)、[gimbal_mec_config.h](task_up/Application/ConfigLayer/gimbal_mec_config.h)、[imu_calibration_config.h](task_up/Application/ConfigLayer/imu_calibration_config.h)；实际 PID 初始化和路径选择看 [gimbal.c](task_up/Application/ModuleLayer/gimbal.c)。
 
 | 参数 | 当前默认值 | 单位/含义 |
 | --- | --- | --- |
@@ -126,9 +126,13 @@
 | `GIMBAL_PITCH_MIN_DEG / GIMBAL_PITCH_MAX_DEG` | -7.5 / 30 | Pitch 目标角范围，deg |
 | `GIMBAL_TORQUE_LIMIT` | 6 | 两轴默认最终力矩幅值上限，N·m |
 | `GIMBAL_GRAVITY_K_NM / GIMBAL_GRAVITY_B_NM` | 1.1 / 0 | 重力补偿幅值/偏置，N·m |
-| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S / GIMBAL_MEC_YAW_DECEL_RAD_S2` | 360 / 25 | 普通机械 Yaw 速度上限 deg/s / 制动减速度 rad/s² |
+| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S / GIMBAL_MEC_YAW_DECEL_RAD_S2` | 1000 / 25 | 普通机械 Yaw 速度上限 deg/s / 制动减速度 rad/s² |
 | `GIMBAL_MEC_YAW_TORQUE_STEP_NM` | 0.08 | 机械 Yaw 每轮力矩斜坡步进，N·m |
-| `GIMBAL_MEC_HOLD_DEADZONE_DEG / GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS` | 0.3 / 3 | 机械 Yaw 位置软死区 deg / 速度反馈死区 deg/s |
+| `GIMBAL_MEC_HOLD_DEADZONE_DEG / GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS` | 0.3 / 0.5 | 机械 Yaw 位置软死区 deg / 保持阶段速度误差软死区 deg/s |
+| `GIMBAL_MEC_YAW_NEAR_RATE_KP / GIMBAL_R_TURN_YAW_NEAR_RATE_KP` | 20 / 15 | 普通回正 / R 掉头近区限速增益，s⁻¹ |
+| `GIMBAL_MEC_YAW_HOLD_ENTER_DEG / GIMBAL_MEC_YAW_HOLD_EXIT_DEG` | 0.3 / 0.5 | 保持进入 / 退出角误差，deg |
+| `GIMBAL_MEC_YAW_HOLD_ENTER_DPS / GIMBAL_MEC_YAW_HOLD_EXIT_DPS` | 3 / 6 | 保持进入 / 退出相对机械速度，deg/s；进入需连续稳定50 ms |
+| `IMU_CALI_SAMPLE_COUNT / IMU_CALI_GYRO_MAX_RAD_S` | 2000 / 0.05 | 连续静止样本数 / 三轴角速度模长上限 rad/s；加速度模长须在9.80665±0.5 m/s²内 |
 | `GIMBAL_MEC_YAW_FF_OFF_DPS / GIMBAL_MEC_YAW_FF_FULL_DPS` | 25 / 35 | 底盘速率前馈渐入窗口，deg/s |
 | `GIMBAL_MEC_YAW_FF_MAX_GAIN / GIMBAL_MEC_YAW_FF_FILTER_ALPHA` | 0.90 / 0.05 | 前馈最大倍率 / 一阶滤波更新系数 |
 | `GIMBAL_R_TURN_YAW_RAMP_DEG_PER_MS / GIMBAL_R_TURN_YAW_MAX_RATE_DEG_S` | 1.5 / 1000 | R 掉头目标斜坡 deg/ms / 速度上限 deg/s；实际速度还受反馈和限矩约束 |
@@ -397,7 +401,9 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 ## 回中、保护与一键射击更新
 
 - IMU模式锁定云台世界朝向，底盘按机械角就近选前/后中心，85°/95°滞回；R动作优先，机械模式使用同一前后选择。跟随失效后连续有效反馈100 ms恢复，原因和计数保留。
-- Yaw保持Kp=18，受扰回正独立限速220°/s，手动输入限速150°/s不变；机械回中360°/s、近区增益15、反馈速度死区3°/s。
+- Yaw保持Kp=18，受扰回正独立限速220°/s，手动输入限速150°/s不变；机械回中上限1000°/s、普通近区增益20、R近区增益15；保持阶段仅对速度误差施加0.5°/s连续软死区。
+- IMU需连续2000次静止采样完成校准后才允许Yaw/Pitch归中；运动打断后重计，不改360°归一化或按圈补偿。微秒时基对TIM2待服务溢出进行补偿。
+- 遥控断联立即锁定；重连后S2稳定中位重新待发，再上拨才触发。升降互锁期间继续消抖，上拨不排队，解除互锁时仍须中位。真实故障不由重连自动清除。
 - Pitch速度反馈低通时间常数3 ms；初始I/D仍关闭，受控保持积分由 `GIMBAL_PITCH_HOLD_I_ENABLE=0` 保留人工启用入口。
 - 左键新按下自动开轮并最多等待2 s达速；短按松开仍执行该次单发，长按可转连发，G关闭取消待发；上电、重连须先释放左键。
 - 拨盘/摩擦轮堵转停机保护默认开启，自动反转默认关闭；拨盘电流600 raw、两轮各3000 raw均是待人工核对的候选门限。停机至少1 s且已释放后，新按下可恢复。

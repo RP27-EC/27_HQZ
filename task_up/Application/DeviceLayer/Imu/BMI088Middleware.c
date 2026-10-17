@@ -2,6 +2,7 @@
 
 #include "BMI088Middleware.h"
 #include "main.h"
+#include "drv_tick.h"
 
 extern SPI_HandleTypeDef hspi1;
 
@@ -20,15 +21,8 @@ uint32_t btick = 0;
 
 uint32_t bmi2_micros(void)
 {
-	register uint32_t bms, bus;
-
-	bms = HAL_GetTick();
-
-	bus = TIM2->CNT;
-	
-  btick = bms*1000 + bus;
-    
-	return btick;
+    btick = micros();
+    return btick;
 } 
 
 void BMI088_delay_ms(uint16_t ms)

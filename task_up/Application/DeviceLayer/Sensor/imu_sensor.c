@@ -3,6 +3,11 @@
 #include "imu_sensor.h"
 #include "drv_gpio.h"
 #include "drv_tick.h"
+#include "imu_calibration_config.h"
+#include <math.h>
+
+static uint16_t imu_cnt;
+static imu_offset_t imu_cali_sum;
 
 #if IMU_USE_EKF == 1
 #include "bmi_EKF.h"
@@ -53,8 +58,11 @@ uint8_t init_cnt = 200;
  */
 void imu_init(struct imu_dev *self)
 {
-	uint32_t tickstart = HAL_GetTick();
-
+	imu_cnt = 0u;
+	imu_cali_sum.gx_offset = 0.0f;
+	imu_cali_sum.gy_offset = 0.0f;
+	imu_cali_sum.gz_offset = 0.0f;
+	self->work_state.cali_end = 0u;
 	self->work_state.dev_state = DEV_OFFLINE;
 	self->work_state.init_code = BMI088_init();
 
@@ -75,7 +83,6 @@ void imu_init(struct imu_dev *self)
 	{
 		self->work_state.dev_state = DEV_ONLINE;
 		
-//		self->work_state.err_cnt = 0;
 		self->info->init_flag = 1;
 		
 #if IMU_USE_MAHONY == 1
@@ -86,16 +93,15 @@ void imu_init(struct imu_dev *self)
 #if IMU_USE_EKF == 1
 		/* EKF初始化 */
 		imu_frame_init(&ekf_imu_frame);
-		// float init_quaternion[4] = {0.999019921, -0.0315267481, -0.0310692526};
 		float init_quaternion[4] = {0};
 		InitQuaternion(init_quaternion);
 		ekf_init(init_quaternion, 10, 0.001, 8000000, 1);
 #endif //IMU_USE_EKF
 		
-		self->work_state.err_code = IMU_E_CALI;//开启陀螺仪校正使用IMU_DATA_CALI，关闭使用IMU_NONE_ERR
-		imu_dev.info->offset_info.gx_offset = 0.f;
-		imu_dev.info->offset_info.gy_offset = 0.f;
-		imu_dev.info->offset_info.gz_offset = 0.f;
+		self->work_state.err_code = IMU_E_CALI;
+		self->info->offset_info.gx_offset = 0.0f;
+		self->info->offset_info.gy_offset = 0.0f;
+		self->info->offset_info.gz_offset = 0.0f;
 	}
 	else
 	{
@@ -154,12 +160,47 @@ static float accx, accy, accz;
 static float gyrox_, gyroy_, gyroz_;
 static float accx_, accy_, accz_;
 static float gyro[3], accel[3], temp;
-static int16_t imu_cnt = 0;
 #if IMU_USE_EKF == 1
 // 采样时间
 static float imu_dt;
 static uint32_t imu_tick_now, imu_tick_last;
 #endif
+
+static void imu_calibration_update(imu_dev_t *self, float gx, float gy, float gz,
+                                   float ax, float ay, float az)
+{
+    float gyro_norm = sqrtf(gx * gx + gy * gy + gz * gz);
+    float accel_norm = sqrtf(ax * ax + ay * ay + az * az);
+
+    self->work_state.cali_end = 0u;
+    if (!((gyro_norm < IMU_CALI_GYRO_MAX_RAD_S) &&
+          (fabsf(accel_norm - IMU_CALI_GRAVITY_M_S2) < IMU_CALI_ACCEL_TOL_M_S2)))
+    {
+        // NOTE: 运动打断连续静止窗口
+        imu_cnt = 0u;
+        imu_cali_sum.gx_offset = 0.0f;
+        imu_cali_sum.gy_offset = 0.0f;
+        imu_cali_sum.gz_offset = 0.0f;
+        return;
+    }
+
+    imu_cali_sum.gx_offset += gx;
+    imu_cali_sum.gy_offset += gy;
+    imu_cali_sum.gz_offset += gz;
+    imu_cnt++;
+    if (imu_cnt >= IMU_CALI_SAMPLE_COUNT)
+    {
+        self->info->offset_info.gx_offset =
+            -imu_cali_sum.gx_offset / (float)IMU_CALI_SAMPLE_COUNT;
+        self->info->offset_info.gy_offset =
+            -imu_cali_sum.gy_offset / (float)IMU_CALI_SAMPLE_COUNT;
+        self->info->offset_info.gz_offset =
+            -imu_cali_sum.gz_offset / (float)IMU_CALI_SAMPLE_COUNT;
+        self->work_state.err_code = IMU_E_NONE;
+        self->work_state.cali_end = 1u;
+    }
+}
+
 void imu_update(imu_dev_t *imu_sen)
 {
 
@@ -182,32 +223,13 @@ void imu_update(imu_dev_t *imu_sen)
 	/* 陀螺仪校正 */
 	if (imu_sen->work_state.err_code == IMU_E_CALI)
 	{
-		if (imu_cnt < 2000)
-		{
-			imu_data->offset_info.gx_offset -= gyrox * 0.0005f;
-			imu_data->offset_info.gy_offset -= gyroy * 0.0005f;
-			imu_data->offset_info.gz_offset -= gyroz * 0.0005f;
-			imu_cnt++;
-		}
-		else
-		{
-			imu_cnt = 0;
-			imu_sen->work_state.err_code = IMU_E_NONE;
-			
-			if (abs(imu_data->offset_info.gx_offset) > 0.005f)
-				imu_data->offset_info.gx_offset = 0;
-			if (abs(imu_data->offset_info.gy_offset) > 0.005f)
-				imu_data->offset_info.gy_offset = 0;
-			if (abs(imu_data->offset_info.gz_offset) > 0.005f)
-				imu_data->offset_info.gz_offset = 0;
-			imu_sen->work_state.cali_end = 1;
-		}
+		imu_calibration_update(imu_sen, gyrox, gyroy, gyroz, accx, accy, accz);
 	}
-	else
+	if (imu_sen->work_state.cali_end != 0u)
 	{
 #if IMU_USE_EKF == 1
 
-			gyroz += imu_data->offset_info.gz_offset;//只对gyroz作修正
+			gyroz += imu_data->offset_info.gz_offset;
 #endif
 
 #if IMU_USE_MAHONY == 1
