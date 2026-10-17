@@ -59,6 +59,7 @@
 #define LIFT_ACCEL_TIME_MS              250.0f // 升速时间，ms
 #define LIFT_TERMINAL_KP                0.3f // 末段增益，rpm/count
 #define LIFT_HOLD_OUTPUT_MAX_RAW        2222.0f // 保持输出上限，raw
+#define LIFT_BOTTOM_HOLD_KP             0.02f // 底部保持增益，rpm/count
 #define LIFT_HOLD_SPEED_MAX_RPM         955.0f // 保持纠偏上限，rpm
 #define LIFT_HOLD_SPEED_KI              0.2f // 保持积分，raw/(rad/s·拍)
 #define LIFT_HOLD_I_MAX_RAW             1111.0f // 保持积分力矩上限，raw

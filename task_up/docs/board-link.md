@@ -8,7 +8,7 @@
 
 | ID | 方向 | 解码字段 | 上板实际使用 |
 | --- | --- | --- | --- |
-| `0xD1` | 下→上 | b0：car state、gimbal mode、vision mode、game start、color；b1–4：vx/vy 定点值；b5：launch/mode/trigger/is_hole | 车辆使能、云台模式、发射输入和升降请求 |
+| `0xD1` | 下→上 | b0：car state、gimbal mode、vision mode、game start、color；b1–4：vx/vy 定点值；b5：launch/mode/trigger/is_hole/r_turn/feed_permit | 车辆使能、云台模式、发射输入和升降请求 |
 | `0xD2` | 下→上 | 4 个 uint16 大端：Pitch IMU、Yaw IMU、Pitch 机械、Yaw 机械 | 缓存模式目标；各控制模式选择使用对应目标 |
 | `0xD3` | 下→上 | b0–1 热量上限、b2–3 当前热量、b4–5 冷却率；b6 序号；b7 bit0 参数有效、bit1 热量有效 | 发射热量数据及独立新鲜度检查 |
 | `0xD4` | 下→上 | 保留 8 字节 | 当前只清心跳计数，不消费血量字段 |
@@ -24,7 +24,7 @@ D1 b1–4 的速度字段映射范围为 [-8000,8000]；D2/C2 的 IMU 角映射 
 | 帧/字节 | 位或编码 | 上板解析结果 | 消费边界 |
 | --- | --- | --- | --- |
 | D1 b0 | bit0–1 car_state；bit2 gimbal_mode；bit3–5 vision_mode；bit6 game_start；bit7 my_color | 上板解码车辆状态与模式 | 当前云台选择只按 `gimbal_mode` 的 0/非0 分支选择 MEC/RATE；vision 字段不会自动启用视觉控制 |
-| D1 b5 | bit0 launch_state；bit1 shoot_mode；bit2 shoot_level；bit3 is_hole；bit4 r_turn_active | 发射许可/模式/触发/升降请求及R掉头状态 | bit4只在机械Yaw控制中选择R专用斜坡及最大速度；需同步更新上下板 |
+| D1 b5 | bit0 launch_state；bit1 shoot_mode；bit2 shoot_level；bit3 is_hole；bit4 r_turn_active；bit5 feed_permit | 发射许可/模式/触发/升降请求及R掉头状态 | bit4选择机械Yaw的R参数；bit5为独立供弹许可，未置位禁发；两板须配套更新 |
 | D2 b0–7 | 四个 uint16，大端 | Pitch IMU、Yaw IMU、Pitch mec、Yaw mec | IMU 区间 [-360,360] deg；机械角区间 [-4,4] rad；超范围编码会饱和 |
 | D3 b0–5 | heat_limit、barrel_heat、cooling_rate 各 uint16 大端 | 裁判量与冷却率快照 | b7 bit0 参数有效、bit1 热量有效；收帧只刷新 `rx_tick`，不会替发送端保证其数据有效 |
 | D5 b0 | bit0 valid；bit1 source；bit2 cmd_type | 角速度或鼠标增量类型选择 | 仅 `source=键鼠 && cmd_type=鼠标` 时按鼠标计数解释 b2–5；其他情况按 0.1 deg/s/LSB |
@@ -46,7 +46,7 @@ D1 b1–4 的速度字段映射范围为 [-8000,8000]；D2/C2 的 IMU 角映射 
 - D6 首发心跳为零弹速/零序号/零年龄、类型1/机构1，只证明裁判在线，不参与学习。源年龄65535表示离线；在线年龄最多65534。
 - 记录每个事件首收时刻和首收年龄。相同序号重发仅刷新链路与源状态，不刷新样本采样时刻，避免旧数据被当作新发射。
 - 弹速源不代替D1/D2整车心跳。D6超过300 ms未到达会禁止新发射；单发等待1000 ms、三发均值修正和保护条件见[发射模块](launcher.md#单发弹速闭环)。
-- 两板需同步更新；D1/D3布局保持原样。模式切换及恢复隔离期间的旧事件不参与学习。
+- 两板需同步更新；D3布局不变；D1 b5 bit5新增独立供弹许可。模式切换及恢复隔离期间的旧事件不参与学习。
 
 ## 数据排查
 

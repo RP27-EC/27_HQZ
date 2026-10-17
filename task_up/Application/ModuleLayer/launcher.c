@@ -5,6 +5,7 @@
 
 #include "communicate.h"
 #include "launcher_config.h"
+#include "lift.h"
 #include "main.h"
 #include "motor.h"
 #include "pid.h"
@@ -1125,6 +1126,8 @@ static void Launcher_ProtectionUpdate(uint32_t now, uint8_t vehicle_on, uint8_t 
         uint8_t mouse_down = Board_Rx_Info.remote_cmd_pkt.button_bits & 0x01u;
         if ((shoot_level == 0u) && (mouse_down == 0u)) launcher_protection.released = 1u;
         if ((vehicle_on != 0u) && (fresh != 0u) &&
+            (Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
+            (Launcher_FricOnline(SHOOT_FRIC_R) != 0u) &&
             (launcher_protection.released != 0u) && (shoot_level != 0u) &&
             (launcher.last_shoot_level == 0u) &&
             ((now - launcher_protection.fault_tick) >= LAUNCHER_PROTECT_COOLDOWN_MS) &&
@@ -1836,7 +1839,9 @@ static void Launcher_KeyboardPressUpdate(uint8_t fric_on)
         (Board_Rx_Info.remote_cmd_pkt.ctrl_source != 1u) ||
         (Board_HeartBeat.offline_cnt_5 >= Board_HeartBeat.offline_cnt_max) ||
         (Board_HeartBeat.status != DEV_ONLINE) || (Board_Rx_Info.state_pkt.car_state == 0u) ||
-        (Board_Rx_Info.shoot_pkt.is_hole != 0u) || (launcher.fault != 0u))
+        (Board_Rx_Info.shoot_pkt.is_hole != 0u) ||
+        (Board_Rx_Info.shoot_pkt.feed_permit == 0u) ||
+        (lift.state != LIFT_READY_UP) || (launcher.fault != 0u))
     {
         launcher_input_armed = 0u;
         launcher_press_authorized = 0u;
@@ -1872,7 +1877,6 @@ void Launcher_Work(void)
     uint8_t hole_hold_allowed;
     uint8_t keyboard;
     uint8_t raw_rising;
-    uint8_t last_feed_allowed = launcher_dial.feed_allowed;
     int32_t current_angle = Launcher_DialAngle();
 
     launcher.dial_angle = current_angle;
@@ -1908,10 +1912,16 @@ void Launcher_Work(void)
     shoot_mode = 0u;
 #endif
     launcher_dial.feed_allowed = ((launcher_dial.hold_allowed != 0u) &&
-        (fric_on != 0u) && (Board_Rx_Info.shoot_pkt.is_hole == 0u)) ? 1u : 0u;
+        (fric_on != 0u) && (Board_Rx_Info.shoot_pkt.is_hole == 0u) &&
+        (Board_Rx_Info.shoot_pkt.feed_permit != 0u) &&
+        (lift.state == LIFT_READY_UP)) ? 1u : 0u;
+    launcher.feed_block_reason = (vehicle_on == 0u) ? 3u :
+        ((launcher.fault != 0u) ? 4u :
+         (((Board_Rx_Info.shoot_pkt.feed_permit == 0u) ||
+           (lift.state != LIFT_READY_UP)) ? 2u :
+          ((Board_Rx_Info.shoot_pkt.launch_state == 0u) ? 1u : 0u)));
     Launcher_KeyboardPressUpdate(fric_on);
-    if ((launcher_dial.hold_allowed == 0u) ||
-        ((last_feed_allowed != 0u) && (launcher_dial.feed_allowed == 0u)))
+    if (launcher_dial.feed_allowed == 0u)
     {
         launcher_speed_runtime.press_single_started = 0u;
         launcher_dial.trigger_ready = 0u;
@@ -1938,6 +1948,7 @@ void Launcher_Work(void)
             }
         }
         if ((Board_Rx_Info.shoot_pkt.launch_state == 0u) || (vehicle_on == 0u) ||
+            (Board_Rx_Info.shoot_pkt.feed_permit == 0u) ||
             (hole_hold_allowed == 0u) || (launcher.fault != 0u) ||
             (launcher_speed.guard_latched != 0u) ||
             (launcher_speed_runtime.fault != LAUNCHER_SPEED_OK))

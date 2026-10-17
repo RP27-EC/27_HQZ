@@ -37,7 +37,7 @@ typedef struct
     uint8_t pending_valid; // 待处理请求有效，0/1
     uint8_t control_is_hole; // 有效下降请求，0/1
     uint8_t pitch_zero_hold; // 俯仰锁零请求，0/1
-    uint8_t fault_code; // 最近保护原因，0~7
+    uint8_t fault_code; // 最近保护记录，0~7
     uint8_t home_valid; // 行程标定有效，0/1
 
     uint32_t state_enter_tick; // 阶段起点，ms
@@ -62,6 +62,8 @@ typedef struct
     uint32_t hold_current_ms; // 保持高流持续，ms
     uint32_t fault_count; // 保护累计次数，次
     volatile uint8_t recover_request; // Watch恢复请求，0/1
+    uint8_t hold_overload; // 底部持续受载，0/1
+    uint8_t limit_recovery; // 向内恢复，0无1下2上
 } lift_t;
 
 extern lift_t lift;

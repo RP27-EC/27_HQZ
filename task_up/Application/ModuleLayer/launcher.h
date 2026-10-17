@@ -21,7 +21,7 @@ typedef enum
 
 typedef struct
 {
-    launcher_state_e state;    /* 当前运行阶段 */
+    launcher_state_e state;    // 当前运行阶段，0~9
     uint32_t state_tick;       /* 阶段进入时刻，ms */
     uint32_t last_repeat_tick; /* 上次连发时刻，ms */
     uint32_t jam_tick;         /* 堵转确认计数，ms */
@@ -30,17 +30,18 @@ typedef struct
     float fric_l_speed_rpm; /* 左轮反馈转速，rpm */
     float fric_r_speed_rpm; /* 右轮反馈转速，rpm */
 
-    int32_t dial_angle;        /* 累计角度，count */
+    int32_t dial_angle;        // 累计角度，count
     int32_t dial_target_angle; /* 目标角度，count */
     int32_t dial_zero_angle;   /* 上电零点，count */
 
-    uint8_t enabled;          /* 1 = 机构使能 */
-    uint8_t fric_ready;       /* 1 = 摩擦轮达速 */
-    uint8_t dial_online;      /* 1 = 拨盘在线 */
-    uint8_t last_shoot_level; /* 上周期发射电平 */
-    uint8_t fault;            /* 1 = 机构故障 */
-    float fric_l_output_raw; // 左轮最终电流指令，原始量
-    float fric_r_output_raw; // 右轮最终电流指令，原始量
+    uint8_t enabled;          // 机构使能，0/1
+    uint8_t fric_ready;       // 摩擦轮达速，0/1
+    uint8_t dial_online;      // 拨盘在线，0/1
+    uint8_t last_shoot_level; // 上拍发射电平，0/1
+    uint8_t fault;            // 机构故障锁存，0/1
+    float fric_l_output_raw; // 左轮最终电流指令，raw
+    float fric_r_output_raw; // 右轮最终电流指令，raw
+    uint8_t feed_block_reason; // 许可拦截，0~4见文档
 } launcher_t;
 
 extern launcher_t launcher;

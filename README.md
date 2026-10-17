@@ -72,7 +72,7 @@
 
 **发射**：下板生成许可、单发/连发模式和触发电平，上板执行闭环。单发只认触发上升沿，目标在前一次目标上累加 65536 count；到位并低速稳定后回保持。连发按热量许可生成拨盘速度。退出供弹后进入制动/保持，机构失能或离线则卸力。待发保持 PID 仍每轮计算，只在稳定 100 ms 后将拨盘力矩发送从 1 ms 降至 10 ms。
 
-当前 `Launcher_Work()` 以 D1 `launch_state` 和左右摩擦轮在线等条件生成 `fric_on`，再结合拨盘/过洞条件生成 `feed_allowed`；`fric_ready` 要求达到最终目标±100 rpm并持续100 ms，作为新单发受理及连发启动门槛。新增D6逐发弹速控制：6000 rpm基准、22 m/s目标、三发均值修正、正常范围5400～6000 rpm、24 m/s锁止及25 m/s越限计数。键鼠左键长按选择连发，连发以6000 rpm启动，同目标三条有效反馈均值修正独立目标；缺少弹速仅清空学习，链路、热量、高弹速和供弹许可仍约束发射。详见[单发弹速闭环](task_up/docs/launcher.md#单发弹速闭环)。
+当前 `Launcher_Work()` 以 D1 `launch_state` 和左右摩擦轮在线等条件生成 `fric_on`，再结合拨盘、过洞、D1 `feed_permit` 和本地升降顶部状态生成 `feed_allowed`；`fric_ready` 要求达到最终目标±100 rpm并持续100 ms，作为新单发受理及连发启动门槛。新增D6逐发弹速控制：6000 rpm基准、22 m/s目标、三发均值修正、正常范围5400～6000 rpm、24 m/s锁止及25 m/s越限计数。键鼠左键长按选择连发，连发以6000 rpm启动，同目标三条有效反馈均值修正独立目标；缺少弹速仅清空学习，链路、热量、高弹速和供弹许可仍约束发射。详见[单发弹速闭环](task_up/docs/launcher.md#单发弹速闭环)。
 
 源码重点：[lift.c](task_up/Application/ModuleLayer/lift.c)、[launch.c](task_down/Application/ModuleLayer/launch.c)、[launcher.c](task_up/Application/ModuleLayer/launcher.c)。
 
@@ -126,7 +126,7 @@
 | `GIMBAL_PITCH_MIN_DEG / GIMBAL_PITCH_MAX_DEG` | -7.5 / 30 | Pitch 目标角范围，deg |
 | `GIMBAL_TORQUE_LIMIT` | 6 | 两轴默认最终力矩幅值上限，N·m |
 | `GIMBAL_GRAVITY_K_NM / GIMBAL_GRAVITY_B_NM` | 1.1 / 0 | 重力补偿幅值/偏置，N·m |
-| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S / GIMBAL_MEC_YAW_DECEL_RAD_S2` | 360 / 25 | 普通机械 Yaw 速度上限 deg/s / 制动减速度 rad/s² |
+| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S / GIMBAL_MEC_YAW_DECEL_RAD_S2` | 600 / 25 | 普通机械 Yaw 速度上限 deg/s / 制动减速度 rad/s² |
 | `GIMBAL_MEC_YAW_TORQUE_STEP_NM` | 0.08 | 机械 Yaw 每轮力矩斜坡步进，N·m |
 | `GIMBAL_MEC_HOLD_DEADZONE_DEG / GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS` | 0.3 / 3 | 机械 Yaw 位置软死区 deg / 速度反馈死区 deg/s |
 | `GIMBAL_MEC_YAW_FF_OFF_DPS / GIMBAL_MEC_YAW_FF_FULL_DPS` | 25 / 35 | 底盘速率前馈渐入窗口，deg/s |
@@ -348,7 +348,7 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 
 | ID | 方向 | Byte 定义（下标从 0 开始） | 说明 |
 | --- | --- | --- | --- |
-| `0xD1` | 下→上 | b0：car_state[1:0]、gimbal_mode[2]、vision_mode[5:3]、game_start[6]、my_color[7]；b1–2 `v_x`；b3–4 `v_y`；b5 bit0 发射许可、bit1 模式、bit2 触发、bit3 过洞、bit4 R掉头进行中 | 速度字段线性映射 [-8000,8000]；R专用限速需同步更新上下板 |
+| `0xD1` | 下→上 | b0：car_state[1:0]、gimbal_mode[2]、vision_mode[5:3]、game_start[6]、my_color[7]；b1–2 `v_x`；b3–4 `v_y`；b5 bit0 摩擦轮使能、bit1 模式、bit2 触发、bit3 过洞、bit4 R掉头进行中、bit5 供弹许可 | 速度字段线性映射 [-8000,8000]；供弹许可需配套更新上下板 |
 | `0xD2` | 下→上 | b0–1 Pitch IMU；b2–3 Yaw IMU；b4–5 Pitch 机械角；b6–7 Yaw 机械角 | IMU 映射 [-360,360] deg；机械映射 [-4,4] rad |
 | `0xD3` | 下→上 | b0–1 热量上限；b2–3 枪管热量；b4–5 冷却率；b6 源序号；b7 bit0 参数有效、bit1 热量有效 | 热量单位按裁判系统；当前周期 10 ms；无效位不会因收到 CAN 帧而自动变有效 |
 | `0xD4` | 下→上 | b0–7 血量字节 | 默认 `BOARD_COMM_D4_ENABLE=0`；上板目前仅更新该 ID 心跳 |
@@ -397,9 +397,10 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 ## 回中、保护与一键射击更新
 
 - IMU模式锁定云台世界朝向，底盘按机械角就近选前/后中心，85°/95°滞回；R动作优先，机械模式使用同一前后选择。跟随失效后连续有效反馈100 ms恢复，原因和计数保留。
-- Yaw保持Kp=18，受扰回正独立限速220°/s，手动输入限速150°/s不变；机械回中360°/s、近区增益15、反馈速度死区3°/s。
+- Yaw保持Kp=20，受扰回正上限360°/s并按25 rad/s²制动；手动输入限速150°/s不变。普通机械回正600°/s、近区增益20、速度反馈滤波3 ms；R保留原速度及近区增益15。
 - 遥控断联立即锁定；重连后S2稳定中位重新待发，再上拨才触发。升降互锁期间继续消抖，上拨不排队，解除互锁时仍须中位。真实故障不由重连自动清除。
 - 键鼠回归恢复：上板云台、IMU校准和微秒时基恢复为ef87e88；保留下板发射重连修复。累计角度偏差、机械停机震荡及回正速度优化暂时撤回，后续分别处理；恢复效果待人工验证。
+- 2026-10-17本轮重新实施Yaw停机与回正优化、摩擦轮独立许可和底部保持/向内恢复；以上参数表为当前配置，前条保留为回退历史。仅静态审查，实机效果待人工验证。
 - Pitch速度反馈低通时间常数3 ms；初始I/D仍关闭，受控保持积分由 `GIMBAL_PITCH_HOLD_I_ENABLE=0` 保留人工启用入口。
 - 左键新按下自动开轮并最多等待2 s达速；短按松开仍执行该次单发，长按可转连发，G关闭取消待发；上电、重连须先释放左键。
 - 拨盘/摩擦轮堵转停机保护默认开启，自动反转默认关闭；拨盘电流600 raw、两轮各3000 raw均是待人工核对的候选门限。停机至少1 s且已释放后，新按下可恢复。

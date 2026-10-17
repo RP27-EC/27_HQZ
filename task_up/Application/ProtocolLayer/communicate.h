@@ -54,10 +54,11 @@ typedef struct
 /* 发射控制报文 */
 typedef struct
 {
-    uint8_t launch_state; /* 发射机构使能 */
-    uint8_t shoot_mode;   /* 0 = 单发，1 = 连发 */
-    uint8_t shoot_level;  /* 发射触发电平 */
-    uint8_t is_hole;      /* 1 = 进入狗洞并压低 */
+    uint8_t launch_state; // 摩擦轮使能，0/1
+    uint8_t shoot_mode; // 单发或连发，0/1
+    uint8_t shoot_level; // 发射触发电平，0/1
+    uint8_t is_hole; // 过洞下降请求，0/1
+    uint8_t feed_permit; // 独立供弹许可，0/1
 } Board_Shoot_Pkt_t;
 
 typedef struct

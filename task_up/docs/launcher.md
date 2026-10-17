@@ -132,8 +132,8 @@ HAL 成功仅表示 CAN 驱动接纳发送，不能证明电机执行。目标�
 
 | 文件与函数 | 输入 | 输出/关键动作 |
 | --- | --- | --- |
-| [下板 launch.c](../../task_down/Application/ModuleLayer/launch.c) `Launch_Data_Update()` | RC 在线、档位、鼠标按键状态 | 单发/连发模式和触发；键鼠分支提前返回，不经过后方遥控升降判据 |
-| 同文件 `Launch_Cmd_Transmit()` | 下板发射对象 | 写入 D1 `launch_state/shoot_mode/shoot_level` |
+| [下板 launch.c](../../task_down/Application/ModuleLayer/launch.c) `Launch_Data_Update()` | RC 在线、档位、鼠标按键状态 | 单发/连发模式和触发；摩擦轮请求独立于升降；两种输入源均生成供弹互锁 |
+| 同文件 `Launch_Cmd_Transmit()` | 下板发射对象 | 写入 D1 `launch_state/shoot_mode/shoot_level/feed_permit` |
 | [上板 launcher.c](../Application/ModuleLayer/launcher.c) `Launcher_Work()` | D1、总线在线、电机在线/故障 | 分别生成摩擦轮使能、拨盘保持/供弹许可和触发边沿 |
 | `Launcher_HeatUpdate()` / `Launcher_HeatRefreshRate()` | D3、时间差、拨盘编码器进展 | 热量来源、估计、余量、阻塞和连发目标射频 |
 | `Launcher_DialUpdate()` | 单发上升沿/连发条件、许可、热量 | 请求接受/拒绝、启动等待、运动、制动和保持阶段 |
@@ -166,3 +166,15 @@ HAL 成功仅表示 CAN 驱动接纳发送，不能证明电机执行。目标�
 - `launcher_protection`观察原因、次数、停机时间和恢复阶段（0读状态、1等待启动反馈、2就绪）。原因1拨盘堵转、2保持过载、3摩擦轮堵转、4其他锁存故障。
 - `reject_reason`新增9堵转保护、10达速等待超时；`wait_single/wait_tick`观察达速等待。上电、断联恢复后先释放左键，再接受新按下。
 - 仅做源码静态核对；未编译、未烧录、未执行硬件验收。
+
+
+## 断联恢复与升降供弹互锁
+
+- D1 b5 bit0仅请求摩擦轮，bit5独立许可供弹。下板板间/遥控离线立即清请求；重连后须重新操作S2或G，按住触发不补射。
+- 摩擦轮请求不依赖升降顶部状态。供弹要求下板无过洞请求、C1摘要为2；上板再检查本地 `lift.state==LIFT_READY_UP`，避免WAIT也报告2造成误放行。
+- 互锁期间继续采样S2和按键历史；解除后须释放再触发。供弹阻断期间不累积trigger_ready，取消待发请求；拨盘原有过洞停机和退出延时保留。
+- `launch.block_reason`（下板）：0无上述拦截、1未解锁、2升降互锁、3遥控/板间离线、4档位禁止、5等待释放。
+- `launcher.feed_block_reason`（上板）：0无上述拦截、1未请求开轮、2升降互锁、3整车/板间失效、4保护锁存。值0不代表达速、热量、拨盘恢复等全部条件满足；继续看fric_ready、launcher_dial和launcher_speed。
+- 真实保护仍按1秒冷却、释放再触发、电流回落和驱动错误解除恢复；恢复新增要求双摩擦轮反馈在线且新鲜。不因重连清除故障。
+- 两板必须配套更新。旧下板bit5恒0会使新上板禁止供弹；旧上板不消费bit5，不能作为兼容运行组合。
+- 本次只做源码回读和静态审查，未编译、未烧录、未实机验证。

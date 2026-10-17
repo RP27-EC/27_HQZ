@@ -780,6 +780,15 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     single_pid_ctrl(&gimbal->pid_info.yaw_hold);
     yaw_limit = (yaw_mag <= gimbal_tune.rate_hold_enter_deg_s) ?
                 GIMBAL_YAW_RECOVER_MAX_DPS : gimbal_tune.yaw_manual_rate_max_deg_s;
+    if ((gimbal->gimbal_mode == G_RATE) &&
+        (yaw_mag <= gimbal_tune.rate_hold_enter_deg_s) &&
+        (gimbal->feedforward.yaw_release.phase == GIMBAL_YAW_RELEASE_HOLD))
+    {
+        float remaining = gimbal_abs(gimbal->pid_info.yaw_hold.err);
+        float brake_limit = sqrtf(2.0f * GIMBAL_YAW_RECOVER_DECEL_RAD_S2 *
+                                  remaining * GIMBAL_DEG_TO_RAD) * GIMBAL_RAD_TO_DEG;
+        yaw_limit = fminf(yaw_limit, brake_limit);
+    }
     if ((((yaw_cmd + yaw_blend * gimbal->pid_info.yaw_hold.out) *
            gimbal->pid_info.yaw_hold.err > 0.0f) &&
          (gimbal_abs(yaw_cmd + yaw_blend * gimbal->pid_info.yaw_hold.out) >= yaw_limit)) ||
@@ -960,6 +969,8 @@ static pid_ctrl_t gimbal_mec_yaw_pos_pid;
 static pid_ctrl_t gimbal_mec_yaw_rate_pid;
 static float gimbal_mec_yaw_ff_blend;
 static float gimbal_mec_yaw_chassis_rate_lpf;
+static float gimbal_mec_yaw_rate_lpf; // 内环滤波速度，deg/s
+static uint8_t gimbal_mec_yaw_rate_valid; // 滤波初值有效，0/1
 static uint8_t gimbal_mec_yaw_hard_hold;
 
 /*
@@ -1103,6 +1114,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
         gimbal_mec_yaw_ff_blend = 0.0f;
         gimbal_mec_yaw_chassis_rate_lpf = 0.0f;
         gimbal_mec_yaw_hard_hold = 0u;
+        gimbal_mec_yaw_rate_valid = 0u;
         gyro_was_online = 0u;
         return 0.0f;
     }
@@ -1136,7 +1148,8 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     {
         speed_limit = brake_limit;
     }
-    near_rate_limit = GIMBAL_MEC_YAW_NEAR_RATE_KP *
+    near_rate_limit = ((Board_Rx_Info.state_pkt.r_turn_active != 0u) ?
+                      GIMBAL_R_TURN_YAW_NEAR_RATE_KP : GIMBAL_MEC_YAW_NEAR_RATE_KP) *
                       gimbal_abs(control_target_count) * GIMBAL_COUNT_TO_DEG;
     if (speed_limit > near_rate_limit)
     {
@@ -1174,13 +1187,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     relative_rate = gimbal->base_info.yaw_mec_speed * GIMBAL_RAD_TO_DEG;
     chassis_rate = rate_measure - relative_rate;
 
-    /* WARNING: 速率死区【不能】加在 rate_measure 上！
-     * rate_measure 后面还要参与 chassis_rate = rate_measure - relative_rate，
-     * 一旦在它上面做死区，chassis_rate 会在阈值附近反复跳变，进而让
-     * ff_blend 抖动、hard_hold 状态来回翻转 —— 每次翻转都会 reset PID 并
-     * 输出 0 力矩，结果就是震动比不加死区还厉害。
-     * 所以死区只加在【喂给速度内环 PID 的那份反馈】上，见下面 rate_feedback。 */
-
+    // NOTE: 前馈使用原始速度差
     gimbal_mec_yaw_chassis_rate_lpf += GIMBAL_MEC_YAW_FF_FILTER_ALPHA *
         (chassis_rate - gimbal_mec_yaw_chassis_rate_lpf);
     ff_target = gimbal_clamp(
@@ -1217,8 +1224,7 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
         return 0.0f;
     }
 #else
-    /* 静止卸力已关闭：静止附近交给位置环软死区 + 速率死区，
-     * 保留保持力，避免"卸力后漂出去再满力抓回来"的阶跃抽动。 */
+    // NOTE: 到位仍保留闭环阻尼
     gimbal_mec_yaw_hard_hold = 0u;
 #endif
 
@@ -1228,16 +1234,19 @@ static float gimbal_mec_yaw_calc(gimbal_t *gimbal)
     gimbal_mec_yaw_rate_pid.integral_max = gimbal_tune.mec_hold_rate_ki_limit;
     gimbal_mec_yaw_rate_pid.out_max = gimbal_tune.mec_hold_rate_out_max_nm;
 
-    /* 速率死区：只作用在【喂给速度内环 PID】这一份反馈上。
-     * 静止时陀螺测到的微小抖动被当作 0，内环不再对它反复出反向力矩 ——
-     * 这是"停下来后嗡嗡震动"的直接来源。运动段完全不受影响
-     * （60 deg/s 时仍是 0.1*60 = 6 N·m，照旧满力刹车）。
-     * rate_measure 本身保持原始值，供上面 chassis_rate / FF / hard_hold 使用。 */
-    rate_feedback = rate_measure;
-    if (gimbal_abs(rate_feedback) < gimbal_tune.mec_hold_rate_deadband_dps)
+    // NOTE: 连续反馈保留末端阻尼
+    if (gimbal_mec_yaw_rate_valid == 0u)
     {
-        rate_feedback = 0.0f;
+        gimbal_mec_yaw_rate_lpf = rate_measure;
+        gimbal_mec_yaw_rate_valid = 1u;
     }
+    else
+    {
+        float dt_ms = GIMBAL_CONTROL_PERIOD_S * 1000.0f;
+        float alpha = dt_ms / (GIMBAL_MEC_YAW_RATE_TAU_MS + dt_ms);
+        gimbal_mec_yaw_rate_lpf += alpha * (rate_measure - gimbal_mec_yaw_rate_lpf);
+    }
+    rate_feedback = gimbal_mec_yaw_rate_lpf;
 
     /* 陀螺仪恢复沿：重置两个 PID 并把位置环 last_err 对齐当前误差，
      * 避免微分项把恢复瞬间当成突变（参考 cloud_terrace.c:524-530, 542-546）。 */
@@ -1319,6 +1328,7 @@ static void gimbal_calc_output(gimbal_t *gimbal)
     case G_MEC: /* 机械模式：Pitch 复用速控通路，Yaw 走统一定位律 */
     {
         float yaw_out;
+        float torque_step;
 
         /*
          * Pitch 与 G_RATE 分支是同一段逻辑：操作手角速度前馈 + 松杆保持环
@@ -1348,10 +1358,13 @@ static void gimbal_calc_output(gimbal_t *gimbal)
         }
 #endif
         yaw_out = gimbal_mec_yaw_calc(gimbal);
+        torque_step = ((yaw_out * gimbal->base_info.output_gimbal_y < 0.0f) ||
+                       (gimbal_abs(yaw_out) < gimbal_abs(gimbal->base_info.output_gimbal_y))) ?
+                      GIMBAL_MEC_YAW_BRAKE_STEP_NM : gimbal_tune.mec_yaw_torque_step_nm;
         gimbal->base_info.output_gimbal_y = gimbal_ramp(
             gimbal->base_info.output_gimbal_y,
             yaw_out,
-            gimbal_tune.mec_yaw_torque_step_nm);
+            torque_step);
         break;
     }
     case G_GYRO:
@@ -1577,6 +1590,7 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_mec_yaw_ff_blend = 0.0f;
     gimbal_mec_yaw_chassis_rate_lpf = 0.0f;
     gimbal_mec_yaw_hard_hold = 0u;
+    gimbal_mec_yaw_rate_valid = 0u;
 }
 
 /* 主执行入口，放control任务中 */
@@ -1616,6 +1630,7 @@ void Gimbal_Work(gimbal_t *gimbal)
         gimbal_mec_yaw_ff_blend = 0.0f;
         gimbal_mec_yaw_chassis_rate_lpf = 0.0f;
         gimbal_mec_yaw_hard_hold = 0u;
+        gimbal_mec_yaw_rate_valid = 0u;
         gimbal->gimbal_mode = selected_mode;
         gimbal_clear_all_pid(gimbal);
         gimbal->last_gimbal_mode = selected_mode;

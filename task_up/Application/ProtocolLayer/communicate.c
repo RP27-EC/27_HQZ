@@ -72,6 +72,7 @@ static void Board_Rx_Pkt_01(uint8_t *rxbuf)
     Board_Rx_Info.shoot_pkt.shoot_mode = (rxbuf[5] >> 1) & 0x01;  /* 发射模式 */
     Board_Rx_Info.shoot_pkt.shoot_level = (rxbuf[5] >> 2) & 0x01; /* 触发电平 */
     Board_Rx_Info.shoot_pkt.is_hole = (rxbuf[5] >> 3) & 0x01;     /* 过洞标志 */
+    Board_Rx_Info.shoot_pkt.feed_permit = (rxbuf[5] >> 5) & 0x01; // 供弹许可，0/1
     Board_Rx_Info.state_pkt.r_turn_active = (rxbuf[5] >> 4) & 0x01; /* R掉头，0/1 */
 }
 

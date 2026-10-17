@@ -10,6 +10,7 @@
 #define GIMBAL_TURN_YAW_RAMP_DEG_PER_MS        0.5f // 目标斜坡，deg/ms
 #define GIMBAL_R_TURN_YAW_RAMP_DEG_PER_MS      1.5f // R目标斜坡，deg/ms
 #define GIMBAL_R_TURN_YAW_MAX_RATE_DEG_S       1000.0f // R角速度上限，deg/s
+#define GIMBAL_R_TURN_YAW_NEAR_RATE_KP         15.0f // R近区速度增益，s^-1
 #define GIMBAL_TURN_SPEED_LIMIT_ENABLE        GIMBAL_INIT_SPEED_LIMIT_ENABLE // 速度规划开关，0/1
 #define GIMBAL_TURN_YAW_MAX_RATE_DEG_S        GIMBAL_INIT_YAW_MAX_RATE_DEG_S // 最大角速度，deg/s
 #define GIMBAL_TURN_YAW_DECEL_RAD_S2          GIMBAL_INIT_YAW_DECEL_RAD_S2 // 制动减速度，rad/s^2
