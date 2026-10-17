@@ -106,6 +106,7 @@ static float gimbal_axis_to_rate(int16_t axis, float max_rate)
 static void gimbal_manual_input_update(gimbal_t *gimbal)
 {
     float yaw_rate = 0.0f;
+    float yaw_limit = gimbal_tune.yaw_manual_rate_max_deg_s;
     float pitch_rate = 0.0f;
     uint8_t source = GIMBAL_INPUT_RC;
 
@@ -128,9 +129,10 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
         }
         else
         {
+            if (Board_Rx_Info.remote_cmd_pkt.ctrl_source == 1u)
+                yaw_limit = gimbal_tune.keyboard_yaw_rate_max_deg_s;
             yaw_rate = gimbal_clamp(Board_Rx_Info.remote_cmd_pkt.yaw_rate_deg_s,
-                                    -gimbal_tune.yaw_manual_rate_max_deg_s,
-                                    gimbal_tune.yaw_manual_rate_max_deg_s);
+                                    -yaw_limit, yaw_limit);
             pitch_rate = gimbal_clamp(Board_Rx_Info.remote_cmd_pkt.pitch_rate_deg_s,
                                       -gimbal_tune.pitch_manual_rate_max_deg_s,
                                       gimbal_tune.pitch_manual_rate_max_deg_s);
@@ -171,6 +173,7 @@ static void gimbal_manual_input_update(gimbal_t *gimbal)
     }
 
     gimbal->feedforward.yaw_rate_cmd_deg_s = yaw_rate;
+    gimbal->feedforward.manual_yaw_limit_deg_s = yaw_limit;
     gimbal->feedforward.pitch_rate_cmd_deg_s = pitch_rate;
 }
 
@@ -800,7 +803,7 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     yaw_integral_before = gimbal->pid_info.yaw_hold.integral;
     single_pid_ctrl(&gimbal->pid_info.yaw_hold);
     yaw_limit = (yaw_mag <= gimbal_tune.rate_hold_enter_deg_s) ?
-                GIMBAL_YAW_RECOVER_MAX_DPS : gimbal_tune.yaw_manual_rate_max_deg_s;
+                GIMBAL_YAW_RECOVER_MAX_DPS : gimbal->feedforward.manual_yaw_limit_deg_s;
     if ((gimbal->gimbal_mode == G_RATE) &&
         (yaw_mag <= gimbal_tune.rate_hold_enter_deg_s) &&
         (gimbal->feedforward.yaw_release.phase == GIMBAL_YAW_RELEASE_HOLD))
@@ -1516,6 +1519,7 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal_tune.rate_hold_exit_deg_s = GIMBAL_RATE_HOLD_EXIT_DEG_S;
     gimbal_tune.pitch_manual_rate_max_deg_s = GIMBAL_MANUAL_PITCH_RATE_DEG_S;
     gimbal_tune.yaw_manual_rate_max_deg_s = GIMBAL_MANUAL_YAW_RATE_DEG_S;
+    gimbal_tune.keyboard_yaw_rate_max_deg_s = GIMBAL_KEYBOARD_YAW_RATE_DEG_S;
     gimbal_tune.manual_pitch_sign = GIMBAL_MANUAL_PITCH_SIGN;
     gimbal_tune.manual_yaw_sign = GIMBAL_MANUAL_YAW_SIGN;
     gimbal_tune.mouse_yaw_deg_per_count = GIMBAL_MOUSE_YAW_DEG_PER_COUNT;
@@ -1588,6 +1592,7 @@ void Gimbal_Init(gimbal_t *gimbal)
     gimbal->init_info.pitch_gravity_middle_deg = GIMBAL_INIT_PITCH_GRAVITY_MIDDLE_DEG;
 
     gimbal->feedforward.yaw_rate_cmd_deg_s = 0.0f;
+    gimbal->feedforward.manual_yaw_limit_deg_s = GIMBAL_MANUAL_YAW_RATE_DEG_S;
     gimbal->feedforward.pitch_rate_cmd_deg_s = 0.0f;
     gimbal->feedforward.yaw_rate_target_deg_s = 0.0f;
     gimbal->feedforward.pitch_rate_target_deg_s = 0.0f;

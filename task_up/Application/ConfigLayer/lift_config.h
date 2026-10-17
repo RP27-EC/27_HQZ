@@ -13,7 +13,7 @@
 #define LIFT_HOME_SPEED_RPM             2865.0f  // 找顶速度，rpm
 #define LIFT_HOME_CURRENT_RAW           520.0f   // 找顶电流阈值，原始量
 #define LIFT_HOME_STALL_SPEED_RPM       1.0f     // 顶部低速阈值，rpm
-#define LIFT_HOME_SPEED_GRACE_MS        0u       // 找顶启动宽限，ms
+#define LIFT_HOME_SPEED_GRACE_MS        1000u    // 找顶启动宽限，ms
 #define LIFT_AUTO_HOME_DELAY_MS         2000u    // 自动找顶延时，ms
 #define LIFT_HOME_STATIONARY_WINDOW_MS  500u     // 位置观察窗，ms
 #define LIFT_HOME_STATIONARY_COUNTS     40.0f    // 窗内最大位移，count
@@ -65,7 +65,11 @@
 #define LIFT_HOLD_SPEED_KI              0.2f // 保持积分，raw/(rad/s·拍)
 #define LIFT_HOLD_I_MAX_RAW             1111.0f // 保持积分力矩上限，raw
 #define LIFT_STALL_OUTPUT_MIN_RAW       500.0f // 堵转有效输出，raw
-#define LIFT_STALL_START_GRACE_MS       250u // 运动启动宽限，ms
+#define LIFT_STALL_START_GRACE_MS       1000u // 运动启动宽限，ms
+#define LIFT_START_SPEED_MAX_RPM        955.0f // 起步速度上限，rpm
+#define LIFT_START_OUTPUT_MAX_RAW       4444.0f // 起步输出上限，raw
+#define LIFT_START_PROGRESS_COUNTS      40.0f // 起步最小正向位移，count
+#define LIFT_START_CONFIRM_MS           100u // 起步运动确认，ms
 #define LIFT_PAUSE_COOLDOWN_MS          1000u // 停机恢复间隔，ms
 #define LIFT_HOLD_CURRENT_RAW           2000.0f // 保持高流阈值，raw
 #define LIFT_HOLD_CONFIRM_MS            1000u // 保持高流确认，ms

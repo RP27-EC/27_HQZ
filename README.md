@@ -66,13 +66,13 @@
 
 ### 升降与发射状态机怎样讲
 
-**升降**：`WAIT → HOMING_UP → READY_UP → ALIGN_DOWN → MOVING_DOWN → READY_DOWN`；撤销请求后 `MOVING_UP → READY_UP`。当前找顶用电流阈值结合低速或位置停滞，连续确认后记录 `top_zero`、生成上下目标并直接进入 `READY_UP`。代码保留 `RETRACT_DOWN` 分支和 5 圈回退参数，但当前正常找顶完成路径没有进入回退分支，不能介绍为“找顶后必定自动回退 5 圈”。
+**升降**：`WAIT → HOMING_UP → RETRACT_DOWN → READY_UP → ALIGN_DOWN → MOVING_DOWN → READY_DOWN`；撤销请求后经 `START_UP → MOVING_UP → READY_UP`。找顶在1000 ms启动宽限后用电流与低速/位置停滞连续确认，记录零点、生成上下目标并实际回退5圈。已标定且反馈有效的负载异常转 `LOAD_HOLD=12` 限流保持，新B序号请求向上恢复；受限起步为状态13。
 
-下端目标按 `top_zero - direction·280·8192` 计算；280 圈是相对找顶零点的电机编码器行程。上端目标由零点减去 5 圈生成，两目标间差值为 275 圈；这些量均不能直接换算为机构毫米。正常下行涉及云台对齐；`LIFT_WAIT` 中已有零点且收到有效下行控制时也存在直接进入 `MOVING_DOWN` 的分支，不能宣称每种恢复路径都必经对齐。异常通过 `fault_code` 区分找顶超时、运动超时、越程、过流和无进展。
+下端目标按 `top_zero - direction·280·8192` 计算；280圈是相对找顶零点的电机编码器行程。上端目标距零点5圈，两目标间差275圈，均不能直接换算为机构毫米。正常下行先对齐；已标定重连后等待新B再上升。`fault_code` 保留最近保护原因，`active_fault_code` 区分当前原因，不能单看历史故障码判断正在卸力。
 
 **发射**：下板生成许可、单发/连发模式和触发电平，上板执行闭环。单发只认触发上升沿，目标在前一次目标上累加 65536 count；到位并低速稳定后回保持。连发按热量许可生成拨盘速度。退出供弹后进入制动/保持，机构失能或离线则卸力。待发保持 PID 仍每轮计算，只在稳定 100 ms 后将拨盘力矩发送从 1 ms 降至 10 ms。
 
-当前 `Launcher_Work()` 以 D1 `launch_state` 和左右摩擦轮在线等条件生成 `fric_on`，再结合拨盘、过洞、D1 `feed_permit` 和本地升降顶部状态生成 `feed_allowed`；`fric_ready` 要求达到最终目标±100 rpm并持续100 ms，作为新单发受理及连发启动门槛。新增D6逐发弹速控制：6000 rpm基准、22 m/s目标、三发均值修正、正常范围5400～6000 rpm、24 m/s锁止及25 m/s越限计数。键鼠左键长按选择连发，连发以6000 rpm启动，同目标三条有效反馈均值修正独立目标；缺少弹速仅清空学习，链路、热量、高弹速和供弹许可仍约束发射。详见[单发弹速闭环](task_up/docs/launcher.md#单发弹速闭环)。
+当前 `Launcher_Work()` 以 D1 `launch_state` 和左右摩擦轮在线等条件生成 `fric_on`，再结合拨盘、过洞、D1 `feed_permit` 生成 `feed_allowed`；供弹不依赖升降顶部或故障状态。`fric_ready` 要求达到最终目标±100 rpm并持续100 ms，作为新单发受理及连发启动门槛。新增D6逐发弹速控制：6000 rpm基准、22 m/s目标、三发均值修正、正常范围5400～6000 rpm、24 m/s锁止及25 m/s越限计数。键鼠左键长按选择连发，连发以6000 rpm启动，同目标三条有效反馈均值修正独立目标；缺少弹速仅清空学习，链路、热量、高弹速和供弹许可仍约束发射。详见[单发弹速闭环](task_up/docs/launcher.md#单发弹速闭环)。
 
 源码重点：[lift.c](task_up/Application/ModuleLayer/lift.c)、[launch.c](task_down/Application/ModuleLayer/launch.c)、[launcher.c](task_up/Application/ModuleLayer/launcher.c)。
 
@@ -184,7 +184,9 @@
 | `BOARD_FEEDBACK_PERIOD_MS` | 5 | 每类 C1/C2 最短反馈发送间隔，ms |
 | `BOARD_HEAT_LIMIT_TIMEOUT_MS / BOARD_HEAT_VALUE_TIMEOUT_MS` | 1500 / 300 | 下板裁判参数/热量有效期，ms；区别于上板 D3 的 100 ms 超时 |
 | `BOARD_D5_RATE_LSB_DEG_S` | 0.1 | 有符号角速度定点量化步长，deg/s/LSB |
-| `BOARD_D5_YAW_RATE_MAX_DEG_S / BOARD_D5_PITCH_RATE_MAX_DEG_S` | 200 / 150 | D5 角速度幅值上限，deg/s |
+| `BOARD_D5_YAW_RATE_MAX_DEG_S / BOARD_D5_PITCH_RATE_MAX_DEG_S` | 150 / 150 | D5 遥控角速度幅值上限，deg/s |
+| `BOARD_D5_MOUSE_YAW_GAIN / BOARD_D5_KEYBOARD_YAW_MAX_DEG_S` | 7.5 / 300 | 键鼠Yaw增益 deg/s/count / 上限 deg/s；上板键鼠限幅同步300 |
+| `CHASSIS_KEY_MECH_MOUSE_WZ_GAIN / CHASSIS_KEY_MECH_MOUSE_WZ_MAX` | 10 / 15 | 机械鼠标增益 rad/s/count / 上限 rad/s |
 | `BOARD_D5_MOUSE_YAW_GAIN / BOARD_D5_MOUSE_PITCH_GAIN` | 5 / -3 | 下板鼠标计数到角速度的增益，(deg/s)/count |
 | `BOARD_LAUNCH_S2_DEBOUNCE_TICKS` | 15 | S2 连续稳定采样门限，控制周期计数；不是独立定时器 |
 
@@ -348,7 +350,7 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 
 | ID | 方向 | Byte 定义（下标从 0 开始） | 说明 |
 | --- | --- | --- | --- |
-| `0xD1` | 下→上 | b0：car_state[1:0]、gimbal_mode[2]、vision_mode[5:3]、game_start[6]、my_color[7]；b1–2 `v_x`；b3–4 `v_y`；b5 bit0 摩擦轮使能、bit1 模式、bit2 触发、bit3 过洞、bit4 R掉头进行中、bit5 供弹许可、bit6 S2中位、bit7 同帧输入源 | 速度字段线性映射 [-8000,8000]；供弹许可及拨盘复位字段需配套更新上下板 |
+| `0xD1` | 下→上 | b0：car_state[1:0]、gimbal_mode[2]、vision_mode[5:3]、game_start[6]、my_color[7]；b1–2 `v_x`；b3–4 `v_y`；b5 bit0 摩擦轮使能、bit1 模式、bit2 触发、bit3 过洞、bit4 R掉头进行中、bit5 供弹许可、bit6 S2中位、bit7 同帧输入源；b6 B操作序号；b7 0xA5 | 速度字段线性映射 [-8000,8000]；升降恢复、供弹许可及拨盘复位字段需配套更新上下板 |
 | `0xD2` | 下→上 | b0–1 Pitch IMU；b2–3 Yaw IMU；b4–5 Pitch 机械角；b6–7 Yaw 机械角 | IMU 映射 [-360,360] deg；机械映射 [-4,4] rad |
 | `0xD3` | 下→上 | b0–1 热量上限；b2–3 枪管热量；b4–5 冷却率；b6 源序号；b7 bit0 参数有效、bit1 热量有效 | 热量单位按裁判系统；当前周期 10 ms；无效位不会因收到 CAN 帧而自动变有效 |
 | `0xD4` | 下→上 | b0–7 血量字节 | 默认 `BOARD_COMM_D4_ENABLE=0`；上板目前仅更新该 ID 心跳 |
@@ -388,7 +390,7 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 | 上下板心跳丢失/车辆失能 | 上板云台选择 `G_SLEEP` 并将力矩清零；MonitorTask 更新设备离线状态 |
 | 任一底盘轮离线或控制量非法 | 四轮在线门槛失败后调用 `Chassis_Control_Stop()`，写零力矩并发送组帧 |
 | 裁判数据缺失/过期 | D3 的有效位分开表示参数/热量有效；上板热量来源状态未就绪时禁止供弹；功率预算改用 45 W 回退值 |
-| 升降行程/超时/堵转异常 | 升降进入 `LIFT_FAULT` 或 `LIFT_PAUSED`，力矩清零；冷却1 s后接受新请求或Watch恢复；C1 b1 回报状态 |
+| 升降行程/超时/堵转异常 | 已标定且反馈有效时进入 `LIFT_LOAD_HOLD=12` 限流保持，新B序号请求向上起步；反馈失效等硬故障仍卸力并保留1 s冷却；C1 b1 回报状态 |
 | 电机力矩/输出超限 | 云台、底盘、拨盘路径分别有力矩/原始输出限幅；电机温度反馈可读，但本仓库不能据此推断所有电机都有统一软件超温切断 |
 | HAL 初始化失败 | `Error_Handler()` 关闭中断并停在死循环；源码没有统一错误灯码 |
 
@@ -397,7 +399,7 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 ## 回中、保护与一键射击更新
 
 - IMU模式锁定云台世界朝向，底盘按机械角就近选前/后中心，85°/95°滞回；R动作优先，机械模式使用同一前后选择。跟随失效后连续有效反馈100 ms恢复，原因和计数保留。
-- Yaw保持Kp=30，受扰回正与保持环输出上限均为1000°/s并按25 rad/s²制动；手动输入限速150°/s不变。普通机械回正上限与R共用1000°/s、近区增益30、速度反馈滤波3 ms；R保留原速度及近区增益15。
+- Yaw保持Kp=30，受扰回正与保持环输出上限均为1000°/s并按25 rad/s²制动；遥控Yaw限速150°/s、键鼠Yaw限速300°/s。机械鼠标恢复增益10、上限15 rad/s。普通机械回正上限与R共用1000°/s、近区增益30、速度反馈滤波3 ms；R保留原速度及近区增益15。
 - 遥控断联立即锁定；重连后S2稳定中位重新待发，再上拨才触发。升降互锁期间继续消抖，上拨不排队，解除互锁时仍须中位。真实故障不由重连自动清除。
 - 键鼠回归恢复：上板云台、IMU校准和微秒时基恢复为ef87e88；保留下板发射重连修复。累计角度偏差、机械停机震荡及回正速度优化暂时撤回，后续分别处理；恢复效果待人工验证。
 - 2026-10-17本轮重新实施Yaw停机与回正优化、摩擦轮独立许可和底部保持/向内恢复；以上参数表为当前配置，前条保留为回退历史。仅静态审查，实机效果待人工验证。

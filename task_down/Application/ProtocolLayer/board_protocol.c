@@ -4,6 +4,7 @@
 #include "judge.h"
 #include "board_comm_config.h"
 #include "rc_sensor.h"
+#include "rc_protocol.h"
 #include "string.h"
 #include <stdbool.h>
 #include "drv_can.h"
@@ -156,6 +157,13 @@ uint8_t pkt_05[8]; /* D5 遥控控制发送缓存 */
 
 void Board_Tx_Pkt_01(Board_t* board)
 {
+    uint32_t primask = __get_PRIMASK();
+    uint8_t lift_cmd_seq;
+    uint8_t is_hole;
+    __disable_irq();
+    lift_cmd_seq = board->tx_pkt->gimbal_target_pkt.lift_cmd_seq;
+    is_hole = board->tx_pkt->gimbal_target_pkt.is_hole;
+    __set_PRIMASK(primask);
 	board->status->gimbal_d1_tx_ok = 0u;
 	board->status->gimbal_d2_tx_ok = 0u;
 	memset(pkt_01, 0, 8); /* 清空缓存 */
@@ -180,11 +188,13 @@ void Board_Tx_Pkt_01(Board_t* board)
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.launch_state & 0x01) << 0; /* 发射许可 */
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_mode & 0x01) << 1; /* 发射模式 */
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.shoot_level & 0x01) << 2; /* 触发电平 */
-	pkt_01[5] |= (board->tx_pkt->gimbal_target_pkt.is_hole & 0x01) << 3; /* 过洞标志 */
+	pkt_01[5] |= (is_hole & 0x01) << 3; /* 过洞标志 */
 	pkt_01[5] |= (board->tx_pkt->car_pkt.r_turn_active & 0x01) << 4; /* R掉头，0/1 */
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.feed_permit & 0x01) << 5; /* 供弹许可，0/1 */
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.s2_mid & 0x01) << 6; // S2中位，0/1
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.ctrl_source & 0x01) << 7; // 输入源，0/1
+    pkt_01[6] = lift_cmd_seq;
+    pkt_01[7] = BOARD_LIFT_CMD_TAG;
 	
 
 	board->status->gimbal_d1_tx_ok =
@@ -342,8 +352,8 @@ void Board_Tx_Pkt_05(Board_t* board)
             else
             {
                 yaw_rate = constrain(rc_dev.info->mouse_x * BOARD_D5_MOUSE_YAW_GAIN,
-                                     -BOARD_D5_YAW_RATE_MAX_DEG_S,
-                                     BOARD_D5_YAW_RATE_MAX_DEG_S);
+                                     -BOARD_D5_KEYBOARD_YAW_MAX_DEG_S,
+                                     BOARD_D5_KEYBOARD_YAW_MAX_DEG_S);
             }
             pitch_rate = constrain(rc_dev.info->mouse_y * BOARD_D5_MOUSE_PITCH_GAIN,
                                    -BOARD_D5_PITCH_RATE_MAX_DEG_S,
@@ -389,6 +399,11 @@ void Board_Tx_Pkt_05(Board_t* board)
 
     yaw_raw = (int16_t)(yaw_rate / BOARD_D5_RATE_LSB_DEG_S);
     board_manual_yaw_rate_deg_s = (valid != 0u) ? yaw_rate : 0.0f;
+    rc_mouse_debug.d5_keyboard = ((valid != 0u) &&
+        (ctrl_source == BOARD_D5_CTRL_KEYBOARD)) ? 1u : 0u;
+    rc_mouse_debug.d5_yaw_rate = (rc_mouse_debug.d5_keyboard != 0u) ?
+        (float)yaw_raw * BOARD_D5_RATE_LSB_DEG_S : 0.0f;
+    rc_mouse_debug.d5_tick = HAL_GetTick();
     pitch_raw = (int16_t)(pitch_rate / BOARD_D5_RATE_LSB_DEG_S);
 
     memset(pkt_05, 0, 8);

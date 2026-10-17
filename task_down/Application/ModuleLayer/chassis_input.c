@@ -9,6 +9,7 @@
 #include "control_task.h"
 #include "main.h"
 #include "rc_sensor.h"
+#include "rc_protocol.h"
 #include "rp_math.h"
 
 #define CHASSIS_INPUT_PI      3.14159265358979323846f /* 圆周率 */
@@ -455,6 +456,11 @@ static void Chassis_Input_Keyboard(chassis_cmd_t *cmd, const rc_data_t *rc)
         cmd->wz += CHASSIS_KEY_MECH_MOUSE_WZ_SIGN * wz_key;
     }
 
+    rc_mouse_debug.mech_wz = CHASSIS_KEY_MECH_MOUSE_WZ_SIGN * wz_key;
+    rc_mouse_debug.input_wz = cmd->wz;
+    rc_mouse_debug.keyboard_active = 1u;
+    rc_mouse_debug.chassis_mode = (uint8_t)keyboard_chassis_mode;
+
     cmd->valid = 1u;
     cmd->source = CHASSIS_SRC_KEYBOARD;
 }
@@ -500,6 +506,12 @@ void Chassis_Input_Update(void)
     chassis_cmd_t cmd;                 /* 本周期输出 */
     const rc_data_t *rc = rc_dev.info; /* 遥控数据源 */
     uint8_t f_pressed = 0u;            /* F 键当前状态 */
+
+    rc_mouse_debug.input_tick = HAL_GetTick();
+    rc_mouse_debug.mech_wz = 0.0f;
+    rc_mouse_debug.input_wz = 0.0f;
+    rc_mouse_debug.keyboard_active = 0u;
+    rc_mouse_debug.chassis_mode = (uint8_t)CHASSIS_KEY_MODE_FOLLOW;
 
     cmd.vx = 0.0f;
     cmd.vy = 0.0f;

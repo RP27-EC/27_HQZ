@@ -5,7 +5,6 @@
 
 #include "communicate.h"
 #include "launcher_config.h"
-#include "lift.h"
 #include "main.h"
 #include "motor.h"
 #include "pid.h"
@@ -1986,7 +1985,7 @@ void Launcher_Init(void)
     launcher_dial_hold_speed_pid.kd = LAUNCHER_DIAL_HOLD_SPEED_KD;
 }
 
-static void Launcher_KeyboardPressUpdate(uint8_t fric_on)
+static void Launcher_KeyboardPressUpdate(uint8_t fric_on, uint8_t hole_hold_allowed)
 {
     if ((Board_Rx_Info.remote_cmd_pkt.valid == 0u) ||
         (Board_Rx_Info.remote_cmd_pkt.ctrl_source != 1u) ||
@@ -1994,7 +1993,8 @@ static void Launcher_KeyboardPressUpdate(uint8_t fric_on)
         (Board_HeartBeat.status != DEV_ONLINE) || (Board_Rx_Info.state_pkt.car_state == 0u) ||
         (Board_Rx_Info.shoot_pkt.is_hole != 0u) ||
         (Board_Rx_Info.shoot_pkt.feed_permit == 0u) ||
-        (lift.state != LIFT_READY_UP) || (launcher_dial.jam_locked != 0u) ||
+        (hole_hold_allowed == 0u) ||
+        (launcher_dial.jam_locked != 0u) ||
         (launcher.fault != 0u))
     {
         launcher_input_armed = 0u;
@@ -2069,15 +2069,15 @@ void Launcher_Work(void)
 #endif
     launcher_dial.feed_allowed = ((launcher_dial.hold_allowed != 0u) &&
         (fric_on != 0u) && (Board_Rx_Info.shoot_pkt.is_hole == 0u) &&
-        (Board_Rx_Info.shoot_pkt.feed_permit != 0u) &&
-        (lift.state == LIFT_READY_UP)) ? 1u : 0u;
+        (Board_Rx_Info.shoot_pkt.feed_permit != 0u)) ? 1u : 0u;
     launcher.feed_block_reason = (vehicle_on == 0u) ? 3u :
         ((launcher.fault != 0u) ? 4u :
          ((launcher_dial.jam_locked != 0u) ? 5u :
          (((Board_Rx_Info.shoot_pkt.feed_permit == 0u) ||
-           (lift.state != LIFT_READY_UP)) ? 2u :
+           (Board_Rx_Info.shoot_pkt.is_hole != 0u) ||
+           (hole_hold_allowed == 0u)) ? 2u :
           ((Board_Rx_Info.shoot_pkt.launch_state == 0u) ? 1u : 0u))));
-    Launcher_KeyboardPressUpdate(fric_on);
+    Launcher_KeyboardPressUpdate(fric_on, hole_hold_allowed);
     if (launcher_dial.feed_allowed == 0u)
     {
         launcher_speed_runtime.press_single_started = 0u;

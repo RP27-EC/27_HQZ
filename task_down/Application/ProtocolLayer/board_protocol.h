@@ -11,6 +11,8 @@
 #define BOARD_RC_AXIS_DEADBAND          20.0f  /* 摇杆死区 */
 #define BOARD_RC_AXIS_MAX               660.0f /* 摇杆幅值 */
 #define BOARD_D5_YAW_RATE_MAX_DEG_S     150.0f /* Yaw 最大角速度 */
+#define BOARD_D5_KEYBOARD_YAW_MAX_DEG_S 300.0f // 键鼠Yaw上限，deg/s
+#define BOARD_LIFT_CMD_TAG              0xA5u // 升降序号协议标识
 #define BOARD_D5_PITCH_RATE_MAX_DEG_S   150.0f /* Pitch 最大角速度 */
 #define BOARD_D5_RATE_LSB_DEG_S         0.1f   /* 角速度量化步长 */
 
@@ -20,7 +22,7 @@
 #define BOARD_D5_CMD_MOUSE_DELTA        1u  /* 鼠标增量控制量 */
 
 /* 鼠标计数值直通角速度；Pitch 符号保留当前修正方向。 */
-#define BOARD_D5_MOUSE_YAW_GAIN          5.0f
+#define BOARD_D5_MOUSE_YAW_GAIN          7.5f // 鼠标增益，deg/s/count
 #define BOARD_D5_MOUSE_PITCH_GAIN       -3.0f
 
 /* 下板发送报文 */
@@ -60,11 +62,12 @@ typedef struct{
 
 /* 云台目标，机械角单位 rad，IMU 角单位 deg */
 typedef struct{
-	float yaw_mec_tar;   /* Yaw 机械目标角 */
-	float yaw_imu_tar;   /* Yaw IMU 目标角 */
-	float pitch_mec_tar; /* Pitch 机械目标角 */
-	float pitch_imu_tar; /* Pitch IMU 目标角 */
-	uint8_t is_hole;     /* 1 = 请求进入狗洞 */
+	float yaw_mec_tar;   // Yaw机械目标，rad
+	float yaw_imu_tar;   // Yaw惯性目标，deg
+	float pitch_mec_tar; // Pitch机械目标，rad
+	float pitch_imu_tar; // Pitch惯性目标，deg
+	uint8_t is_hole;     // 过洞下降请求，0/1
+    uint8_t lift_cmd_seq; // B操作序号，0~255循环
 }Board_Gimbal_Target_Pkt_t;
 
 /* 发射控制 */

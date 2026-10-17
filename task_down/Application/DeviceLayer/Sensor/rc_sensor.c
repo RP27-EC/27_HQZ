@@ -1,6 +1,7 @@
 /* rc_sensor.c - 遥控器设备抽象 */
 #include "rc_sensor.h"
 #include "rp_math.h"
+#include "rc_protocol.h"
 
 extern void rc_init(rc_dev_t *rc_sen);
 extern void rc_update(rc_dev_t *rc_sen, uint8_t *rxBuf);
@@ -222,8 +223,7 @@ void rc_reset_data(rc_dev_t *rc)
 	rc->info->mouse_vx = 0;
 	rc->info->mouse_vy = 0;
 	rc->info->mouse_vz = 0;
-	rc->info->mouse_x = 0.f;
-	rc->info->mouse_y = 0.f;
+    rc_mouse_filter_reset(rc);
 	rc->info->mouse_z = 0.f;
 	rc->info->mouse_btn_l.value = 0;
 	rc->info->mouse_btn_r.value = 0;

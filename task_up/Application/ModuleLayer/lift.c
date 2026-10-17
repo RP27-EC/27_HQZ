@@ -5,6 +5,7 @@
 #include "communicate.h"
 #include "gimbal.h"
 #include "lift_config.h"
+#include "main.h"
 #include <math.h>
 
 lift_t lift;
@@ -72,6 +73,8 @@ static void lift_enter_state(lift_state_e state, uint32_t now)
 {
     float hold_i_raw = lift.speed_pid.iout;
     lift.state = state;
+    if ((state != LIFT_FAULT) && (state != LIFT_PAUSED) &&
+        (state != LIFT_STALL_STOP) && (state != LIFT_LOAD_HOLD)) lift.active_fault_code = 0u;
     lift.state_enter_tick = now;
     lift.homing_confirm_ms = 0u;
     lift.stable_confirm_ms = 0u;
@@ -89,10 +92,20 @@ static void lift_enter_state(lift_state_e state, uint32_t now)
         lift.limit_recovery = 0u;
         lift.hold_overload = 0u;
     }
-    if ((state == LIFT_READY_UP) || (state == LIFT_READY_DOWN) || (state == LIFT_ALIGN_DOWN))
+    if ((state == LIFT_READY_UP) || (state == LIFT_READY_DOWN) ||
+        (state == LIFT_ALIGN_DOWN) || (state == LIFT_BOTTOM_RECOVER) ||
+        (state == LIFT_LOAD_HOLD) || (state == LIFT_START_UP) || (state == LIFT_MOVING_UP))
     {
         lift.speed_pid.integral = lift_clamp(hold_i_raw, -LIFT_HOLD_I_MAX_RAW,
             LIFT_HOLD_I_MAX_RAW) / LIFT_HOLD_SPEED_KI;
+    }
+
+    if (state == LIFT_START_UP)
+    {
+        lift.start_count = lift.motor->rx_info->encoder_sum;
+        lift.start_direction = ((float)lift.top_target >= lift_encoder_units()) ? 1.0f : -1.0f;
+        lift.start_progress_counts = 0.0f;
+        lift.start_confirm_ms = 0u;
     }
 
     if (state == LIFT_HOMING_UP)
@@ -112,6 +125,8 @@ static void lift_output_speed(float target_rpm, float output_limit)
     float integral_before;
     float raw_output;
     uint8_t terminal = ((lift.state == LIFT_READY_UP) || (lift.state == LIFT_READY_DOWN) ||
+        (lift.state == LIFT_BOTTOM_RECOVER) || (lift.state == LIFT_LOAD_HOLD) ||
+        (lift.state == LIFT_START_UP) || (lift.limit_recovery != 0u) ||
         (lift.state == LIFT_ALIGN_DOWN) || (lift.state == LIFT_RETRACT_DOWN) ||
         ((lift.state == LIFT_MOVING_UP) &&
          (lift_abs((float)lift.top_target - lift_encoder_units()) <= LIFT_BRAKE_COUNTS)) ||
@@ -125,11 +140,17 @@ static void lift_output_speed(float target_rpm, float output_limit)
     lift.speed_pid.out_max = fminf(lift_tune.speed_out_max_raw, lift_abs(output_limit));
     if (lift.limit_recovery != 0u)
     {
-        output_limit = fminf(lift_abs(output_limit), LIFT_HOLD_OUTPUT_MAX_RAW);
+        float recovery_limit = (lift.state == LIFT_START_UP) ?
+            LIFT_START_OUTPUT_MAX_RAW : LIFT_HOLD_OUTPUT_MAX_RAW;
+        output_limit = fminf(lift_abs(output_limit), recovery_limit);
         lift.speed_pid.out_max = fminf(lift.speed_pid.out_max, output_limit);
         target_rpm = lift_clamp(target_rpm, -LIFT_HOLD_SPEED_MAX_RPM,
                                LIFT_HOLD_SPEED_MAX_RPM);
     }
+    if (((lift.limit_recovery == 1u) || (lift.state == LIFT_BOTTOM_RECOVER)) &&
+        (target_rpm * LIFT_UP_DIRECTION < 0.0f)) target_rpm = 0.0f;
+    if ((lift.limit_recovery == 2u) &&
+        (target_rpm * LIFT_UP_DIRECTION > 0.0f)) target_rpm = 0.0f;
 
     if ((lift.home_valid != 0u) && (lift.state != LIFT_HOMING_UP))
     {
@@ -164,6 +185,15 @@ static void lift_output_speed(float target_rpm, float output_limit)
     }
 
     output = lift.speed_pid.out * LIFT_OUTPUT_DIRECTION;
+    // NOTE: 越程只允许向内施力
+    if ((((lift.limit_recovery == 1u) || (lift.state == LIFT_BOTTOM_RECOVER)) &&
+         (output * LIFT_OUTPUT_DIRECTION * LIFT_UP_DIRECTION < 0.0f)) ||
+        ((lift.limit_recovery == 2u) &&
+         (output * LIFT_OUTPUT_DIRECTION * LIFT_UP_DIRECTION > 0.0f)))
+    {
+        output = 0.0f;
+        integral_to_zero(&lift.speed_pid);
+    }
     if ((lift.home_valid != 0u) && (lift.state != LIFT_HOMING_UP))
     {
         float position = lift_encoder_units();
@@ -187,7 +217,9 @@ static void lift_output_position_limited(int32_t target_count,
     float speed_target;
 
     lift.position_pid.kp = (lift.state == LIFT_RETRACT_DOWN) ? LIFT_TERMINAL_KP :
-        ((lift.state == LIFT_READY_DOWN) ? LIFT_BOTTOM_HOLD_KP : lift_tune.pos_kp);
+        (((lift.state == LIFT_READY_DOWN) || (lift.state == LIFT_BOTTOM_RECOVER) ||
+          ((lift.state == LIFT_LOAD_HOLD) && (target_count == lift.bottom_target))) ?
+         LIFT_BOTTOM_HOLD_KP : lift_tune.pos_kp);
     lift.position_pid.target = (float)target_count;
     lift.position_pid.measure = lift_encoder_units();
     lift.position_pid.err = lift.position_pid.target - lift.position_pid.measure;
@@ -197,7 +229,8 @@ static void lift_output_position_limited(int32_t target_count,
                               -lift_abs(speed_limit),
                               lift_abs(speed_limit));
     if ((lift.state == LIFT_READY_UP) || (lift.state == LIFT_READY_DOWN) ||
-        (lift.state == LIFT_ALIGN_DOWN))
+        (lift.state == LIFT_ALIGN_DOWN) || (lift.state == LIFT_BOTTOM_RECOVER) ||
+        (lift.state == LIFT_LOAD_HOLD))
     {
         float step = LIFT_HOLD_RATE_STEP_RPM_PER_MS * (float)lift_control_dt_ms;
         // NOTE: 保持纠偏避免速度阶跃
@@ -247,21 +280,87 @@ static uint8_t lift_alignment_ok(void)
     return 1u;
 }
 
+static int32_t lift_current_target(void)
+{
+    if (lift.state == LIFT_LOAD_HOLD) return lift.load_hold_target;
+    return ((lift.state == LIFT_MOVING_DOWN) || (lift.state == LIFT_READY_DOWN) ||
+            (lift.state == LIFT_BOTTOM_RECOVER)) ? lift.bottom_target : lift.top_target;
+}
+
+static void lift_update_recovery_direction(void)
+{
+    float travel = ((float)lift.top_zero - lift_encoder_units()) * LIFT_UP_DIRECTION;
+    lift.limit_recovery = (travel > LIFT_TRAVEL_COUNTS) ? 1u :
+                          ((travel < 0.0f) ? 2u : 0u);
+}
+
+static void lift_record_protection(uint8_t code, uint32_t now)
+{
+    lift.fault_code = code;
+    lift.active_fault_code = code;
+    lift.fault_state = lift.state;
+    lift.fault_position = (int32_t)lift_encoder_units();
+    lift.fault_target = lift_current_target();
+    lift.fault_tick = now;
+    lift.fault_output_raw = lift.motor->tx_info->torque;
+    lift.fault_current_raw = lift.motor->rx_info->torque_current_raw;
+    lift.fault_feedback_age_ms = now - lift.motor->rx_info->feedback_tick;
+    lift.fault_count++;
+}
+
+static uint8_t lift_can_hold(uint32_t now)
+{
+    return ((lift.home_valid != 0u) && (lift.motor->state->status == DEV_ONLINE) &&
+        (lift.motor->rx_info->feedback_seq != 0u) &&
+        ((now - lift.motor->rx_info->feedback_tick) <= LIFT_FEEDBACK_TIMEOUT_MS) &&
+        (Board_HeartBeat.status == DEV_ONLINE) &&
+        (Board_HeartBeat.offline_cnt_1 < Board_HeartBeat.offline_cnt_max) &&
+        (Board_Rx_Info.state_pkt.car_state != 0u)) ? 1u : 0u;
+}
+
+static void lift_load_hold(uint8_t code, uint32_t now)
+{
+    int32_t target = lift_current_target();
+    float previous_rate = lift.speed_target_rpm;
+    lift_record_protection(code, now);
+    lift.load_hold_target = target;
+    lift.recover_request = 0u;
+    lift.recover_force_up = 0u;
+    lift_enter_state(LIFT_LOAD_HOLD, now);
+    lift_update_recovery_direction();
+    // NOTE: 同向交接保留支撑速度
+    if (previous_rate * ((float)target - lift_encoder_units()) > 0.0f)
+        lift.speed_target_rpm = lift_clamp(previous_rate, -LIFT_HOLD_SPEED_MAX_RPM,
+                                         LIFT_HOLD_SPEED_MAX_RPM);
+    lift.pitch_zero_hold = 0u;
+    lift_output_position(target);
+}
+
 static void lift_fault(uint8_t code)
 {
+    uint32_t now = HAL_GetTick();
+    if ((code >= LIFT_FAULT_MOVE_TIMEOUT) && (code <= LIFT_FAULT_HOLD_CURRENT) &&
+        (lift_can_hold(now) != 0u))
+    {
+        lift_load_hold(code, now);
+        return;
+    }
+    lift_record_protection(code, now);
     lift.motor->tx_info->torque = 0.0f;
     lift.pitch_zero_hold = 0u;
-    lift.fault_code = code;
-    lift.fault_count++;
-    lift_enter_state(LIFT_FAULT, HAL_GetTick());
+    lift_enter_state(LIFT_FAULT, now);
 }
 
 static void lift_pause(uint8_t code, uint32_t now)
 {
+    if (lift_can_hold(now) != 0u)
+    {
+        lift_load_hold(code, now);
+        return;
+    }
+    lift_record_protection(code, now);
     lift.motor->tx_info->torque = 0.0f;
     lift.pitch_zero_hold = 0u;
-    lift.fault_code = code;
-    lift.fault_count++;
     lift_enter_state(LIFT_PAUSED, now);
 }
 
@@ -284,14 +383,21 @@ static uint8_t lift_move_stalled(uint32_t now, uint32_t dt, uint8_t moving_up)
     }
     if ((high_current != 0u) && (low_speed != 0u)) lift.overcurrent_confirm_ms += dt;
     else lift.overcurrent_confirm_ms = 0u;
-    if (lift.overcurrent_confirm_ms >= confirm) return 1u;
     if ((now - lift.stall_progress_tick) >= confirm)
     {
-        float progress = lift_abs((float)((int64_t)lift.motor->rx_info->encoder_sum -
-                                  lift.stall_progress_count));
+        float direction = ((moving_up != 0u) ? 1.0f : -1.0f) * LIFT_UP_DIRECTION;
+        float progress;
+        if (lift.state == LIFT_START_UP) direction = lift.start_direction;
+        progress = (float)((int64_t)lift.motor->rx_info->encoder_sum -
+                          lift.stall_progress_count) * direction / LIFT_POSITION_COUNTS_PER_UNIT;
+        lift.stall_progress_counts = progress;
         lift.stall_progress_tick = now;
         lift.stall_progress_count = lift.motor->rx_info->encoder_sum;
-        if ((progress < lift_tune.stall_progress_counts) && (low_speed != 0u)) return 2u;
+        if ((progress < lift_tune.stall_progress_counts) && (low_speed != 0u))
+        {
+            return (lift.overcurrent_confirm_ms >= confirm) ? 1u : 2u;
+        }
+        lift.overcurrent_confirm_ms = 0u;
     }
     return 0u;
 }
@@ -442,14 +548,83 @@ static void lift_move_update(uint32_t now, uint32_t dt, int32_t target,
     lift_output_speed(lift.speed_target_rpm, lift_tune.speed_out_max_raw);
 }
 
+static void lift_begin_up(uint32_t now)
+{
+    if (lift.state == LIFT_START_UP) return;
+    lift.control_is_hole = 0u;
+    lift.pending_valid = 0u;
+    lift.recover_request = 0u;
+    lift.recover_force_up = 0u;
+    lift.restart_required = 0u;
+    lift_update_recovery_direction();
+    if (lift_abs((float)lift.top_target - lift_encoder_units()) <= LIFT_POS_TOL_COUNTS)
+        lift_enter_state(LIFT_MOVING_UP, now);
+    else
+        lift_enter_state(LIFT_START_UP, now);
+}
+
+static void lift_start_up_update(uint32_t now, uint32_t dt)
+{
+    float error = (float)lift.top_target - lift_encoder_units();
+    float step = LIFT_HOLD_RATE_STEP_RPM_PER_MS * (float)dt;
+    float desired;
+    float speed_along = (float)lift.motor->rx_info->encoder_speed *
+        lift_tune.speed_direction_sign * lift.start_direction;
+    uint8_t stall;
+
+    if ((now - lift.state_enter_tick) >= LIFT_MOVE_TIMEOUT_MS)
+    {
+        lift_pause(LIFT_FAULT_MOVE_TIMEOUT, now);
+        return;
+    }
+    if (lift_abs(error) <= LIFT_POS_TOL_COUNTS)
+    {
+        lift_enter_state(LIFT_MOVING_UP, now);
+        lift_move_update(now, dt, lift.top_target, 1u);
+        return;
+    }
+    stall = lift_move_stalled(now, dt, 1u);
+    if (stall != 0u)
+    {
+        lift_pause((stall == 1u) ? LIFT_FAULT_STALL_CURRENT : LIFT_FAULT_STALL_PROGRESS, now);
+        return;
+    }
+    desired = lift_clamp(LIFT_TERMINAL_KP * error, -LIFT_START_SPEED_MAX_RPM,
+                         LIFT_START_SPEED_MAX_RPM);
+    lift.speed_target_rpm += lift_clamp(desired - lift.speed_target_rpm, -step, step);
+    lift_output_speed(lift.speed_target_rpm, LIFT_START_OUTPUT_MAX_RAW);
+    lift.start_progress_counts = (float)((int64_t)lift.motor->rx_info->encoder_sum -
+        lift.start_count) * lift.start_direction / LIFT_POSITION_COUNTS_PER_UNIT;
+    if ((lift.start_progress_counts >= LIFT_START_PROGRESS_COUNTS) &&
+        (speed_along > LIFT_SPEED_TOL_RPM)) lift.start_confirm_ms += dt;
+    else lift.start_confirm_ms = 0u;
+    if ((lift.start_confirm_ms >= LIFT_START_CONFIRM_MS) && (lift.limit_recovery == 0u))
+    {
+        float accepted_rate = lift.speed_target_rpm;
+        lift_enter_state(LIFT_MOVING_UP, now);
+        lift.speed_target_rpm = accepted_rate;
+    }
+}
+
 static uint8_t lift_check_limits(uint32_t now, uint32_t dt)
 {
     float travel = ((float)lift.top_zero - lift_encoder_units()) * LIFT_UP_DIRECTION;
-    uint8_t inward_recovery =
+    uint8_t inward_recovery;
+
+    // NOTE: 底部受压保持原目标
+    if ((lift.state == LIFT_READY_DOWN) &&
+        (travel > LIFT_TRAVEL_COUNTS + LIFT_POS_TOL_COUNTS))
+    {
+        lift_enter_state(LIFT_BOTTOM_RECOVER, now);
+        lift.limit_recovery = 1u;
+        lift.motor->tx_info->torque = 0.0f;
+    }
+    inward_recovery =
         (((lift.limit_recovery == 1u) && (travel > LIFT_TRAVEL_COUNTS)) ||
          ((lift.limit_recovery == 2u) && (travel < 0.0f))) &&
         ((lift.state == LIFT_MOVING_UP) || (lift.state == LIFT_MOVING_DOWN) ||
-         (lift.state == LIFT_ALIGN_DOWN));
+         (lift.state == LIFT_ALIGN_DOWN) || (lift.state == LIFT_BOTTOM_RECOVER) ||
+         (lift.state == LIFT_START_UP));
     if ((travel >= 0.0f) && (travel <= LIFT_TRAVEL_COUNTS))
     {
         lift.limit_recovery = 0u;
@@ -471,14 +646,15 @@ static uint8_t lift_check_limits(uint32_t now, uint32_t dt)
         }
     }
     else lift.overtravel_ms = 0u;
-    if (((lift.state == LIFT_READY_UP) || (lift.state == LIFT_READY_DOWN)) &&
+    if (((lift.state == LIFT_READY_UP) || (lift.state == LIFT_READY_DOWN) ||
+         (lift.state == LIFT_BOTTOM_RECOVER)) &&
         (lift_abs((float)lift.motor->rx_info->torque_current_raw) >= LIFT_HOLD_CURRENT_RAW))
     {
         lift.hold_current_ms += dt;
         if (lift.hold_current_ms >= LIFT_HOLD_CONFIRM_MS)
         {
             lift.hold_current_ms = LIFT_HOLD_CONFIRM_MS;
-            if (lift.state == LIFT_READY_DOWN)
+            if ((lift.state == LIFT_READY_DOWN) || (lift.state == LIFT_BOTTOM_RECOVER))
             {
                 // NOTE: 底部受载继续限流保持
                 lift.hold_overload = 1u;
@@ -602,6 +778,24 @@ void Lift_Init(void)
     lift.control_is_hole = 0u;
     lift.pitch_zero_hold = 0u;
     lift.fault_code = 0u;
+    lift.active_fault_code = 0u;
+    lift.fault_state = LIFT_WAIT;
+    lift.fault_position = 0;
+    lift.fault_target = 0;
+    lift.fault_tick = 0u;
+    lift.fault_output_raw = 0.0f;
+    lift.fault_current_raw = 0;
+    lift.fault_feedback_age_ms = 0u;
+    lift.load_hold_target = 0;
+    lift.cmd_seq_seen = 0u;
+    lift.last_cmd_seq = 0u;
+    lift.recover_force_up = 0u;
+    lift.restart_required = 0u;
+    lift.start_count = 0;
+    lift.start_direction = LIFT_UP_DIRECTION;
+    lift.start_progress_counts = 0.0f;
+    lift.start_confirm_ms = 0u;
+    lift.stall_progress_counts = 0.0f;
     lift.fault_count = 0u;
     lift.recover_request = 0u;
     lift.hold_overload = 0u;
@@ -676,7 +870,11 @@ void Lift_Work(void)
     uint32_t dt = lift_delta_ms(now, lift.last_tick);
     uint8_t is_hole;
     uint8_t raw_is_hole;
-    uint8_t cmd_changed;
+    uint8_t cmd_seq;
+    uint8_t cmd_valid;
+    uint8_t new_operation = 0u;
+    uint8_t board_enabled;
+    uint32_t primask;
 
     lift.last_tick = now;
     lift_control_dt_ms = dt;
@@ -697,33 +895,42 @@ void Lift_Work(void)
     lift.speed_pid.kp = lift_tune.speed_kp;
     lift.speed_pid.out_max = lift_tune.speed_out_max_raw;
 
-    if ((lift.motor->state->status != DEV_ONLINE) ||
-        (Board_HeartBeat.status != DEV_ONLINE) ||
-        (Board_Rx_Info.state_pkt.car_state == 0u))
+    primask = __get_PRIMASK();
+    __disable_irq();
+    raw_is_hole = (Board_Rx_Info.shoot_pkt.is_hole != 0u) ? 1u : 0u;
+    cmd_seq = Board_Rx_Info.shoot_pkt.lift_cmd_seq;
+    cmd_valid = Board_Rx_Info.shoot_pkt.lift_cmd_valid;
+    board_enabled = ((Board_HeartBeat.status == DEV_ONLINE) &&
+        (Board_HeartBeat.offline_cnt_1 < Board_HeartBeat.offline_cnt_max) &&
+        (Board_Rx_Info.state_pkt.car_state != 0u)) ? 1u : 0u;
+    __set_PRIMASK(primask);
+
+    if ((board_enabled == 0u) || (cmd_valid == 0u))
     {
         lift.motor->tx_info->torque = 0.0f;
+        if ((lift.home_valid != 0u) || (lift.cmd_seq_seen != 0u) ||
+            (lift.state != LIFT_WAIT)) lift.restart_required = 1u;
         lift.cmd_seen = 0u;
+        lift.cmd_seq_seen = 0u;
         lift.pending_valid = 0u;
         lift.control_is_hole = 0u;
-        if ((Board_HeartBeat.status != DEV_ONLINE) ||
-            (Board_Rx_Info.state_pkt.car_state == 0u))
-        {
-            lift.pitch_zero_hold = 0u;
-        }
+        lift.recover_request = 0u;
+        lift.recover_force_up = 0u;
+        lift.pitch_zero_hold = 0u;
         lift_enter_state(LIFT_WAIT, now);
         return;
     }
 
-    if ((lift.motor->rx_info->feedback_seq == 0u) ||
-        ((now - lift.motor->rx_info->feedback_tick) > LIFT_FEEDBACK_TIMEOUT_MS))
+    if (lift.cmd_seq_seen == 0u)
     {
-        if (lift.state != LIFT_FAULT) lift_fault(LIFT_FAULT_FEEDBACK);
-        lift.motor->tx_info->torque = 0.0f;
-        lift.pitch_zero_hold = 0u;
-        return;
+        lift.cmd_seq_seen = 1u;
+        lift.last_cmd_seq = cmd_seq;
     }
-    raw_is_hole = (Board_Rx_Info.shoot_pkt.is_hole != 0u) ? 1u : 0u;
-    cmd_changed = 0u;
+    else if (lift.last_cmd_seq != cmd_seq)
+    {
+        lift.last_cmd_seq = cmd_seq;
+        new_operation = 1u;
+    }
     if (lift.cmd_seen == 0u)
     {
         lift.cmd_seen = 1u;
@@ -733,7 +940,6 @@ void Lift_Work(void)
     }
     else if (raw_is_hole != lift.last_is_hole)
     {
-        cmd_changed = 1u;
         lift.last_is_hole = raw_is_hole;
         lift.pending_is_hole = raw_is_hole;
         lift.pending_valid = 1u;
@@ -744,14 +950,46 @@ void Lift_Work(void)
         lift.control_is_hole = lift.pending_is_hole;
         lift.pending_valid = 0u;
     }
-    if ((cmd_changed != 0u) && ((lift.state == LIFT_PAUSED) ||
-        (lift.state == LIFT_FAULT) || (lift.state == LIFT_STALL_STOP))) lift.recover_request = 1u;
+    // NOTE: 保护恢复不依赖电平翻转
+    if ((new_operation != 0u) && ((lift.state == LIFT_PAUSED) ||
+        (lift.state == LIFT_FAULT) || (lift.state == LIFT_STALL_STOP) ||
+        (lift.state == LIFT_LOAD_HOLD) || (lift.restart_required != 0u)))
+    {
+        lift.recover_request = 1u;
+        lift.recover_force_up = 1u;
+    }
+    if ((lift.recover_force_up != 0u) || (lift.state == LIFT_START_UP))
+    {
+        lift.control_is_hole = 0u;
+        lift.pending_valid = 0u;
+    }
+
+    if ((lift.motor->state->status != DEV_ONLINE) ||
+        (lift.motor->rx_info->feedback_seq == 0u) ||
+        ((now - lift.motor->rx_info->feedback_tick) > LIFT_FEEDBACK_TIMEOUT_MS))
+    {
+        if ((lift.state != LIFT_FAULT) || (lift.active_fault_code != LIFT_FAULT_FEEDBACK))
+            lift_fault(LIFT_FAULT_FEEDBACK);
+        if (new_operation != 0u)
+        {
+            lift.recover_request = 1u;
+            lift.recover_force_up = 1u;
+        }
+        lift.motor->tx_info->torque = 0.0f;
+        lift.pitch_zero_hold = 0u;
+        return;
+    }
     is_hole = lift.control_is_hole;
     if ((lift.home_valid != 0u) && (lift.state != LIFT_FAULT) &&
-        (lift.state != LIFT_PAUSED) && (lift.state != LIFT_HOMING_UP) &&
+        (lift.state != LIFT_PAUSED) && (lift.state != LIFT_LOAD_HOLD) &&
+        (lift.state != LIFT_WAIT) && (lift.state != LIFT_HOMING_UP) &&
         (lift_check_limits(now, dt) != 0u))
     {
-        if (cmd_changed != 0u) lift.recover_request = 1u;
+        if (new_operation != 0u)
+        {
+            lift.recover_request = 1u;
+            lift.recover_force_up = 1u;
+        }
         return;
     }
     if (is_hole != 0u)
@@ -761,13 +999,24 @@ void Lift_Work(void)
 
     if (lift.state == LIFT_WAIT)
     {
+        if ((lift.restart_required != 0u) && (lift.recover_request == 0u))
+        {
+            lift.motor->tx_info->torque = 0.0f;
+            return;
+        }
         if (lift.home_valid != 0u)
         {
-            lift_enter_state(is_hole ? LIFT_ALIGN_DOWN : LIFT_MOVING_UP, now);
+            if ((is_hole != 0u) && (lift.recover_force_up == 0u))
+                lift_enter_state(LIFT_ALIGN_DOWN, now);
+            else lift_begin_up(now);
+            is_hole = lift.control_is_hole;
         }
-        else if ((is_hole != 0u) ||
+        else if ((lift.recover_request != 0u) || (is_hole != 0u) ||
                  ((now - lift.init_tick) >= LIFT_AUTO_HOME_DELAY_MS))
         {
+            lift.recover_request = 0u;
+            lift.recover_force_up = 0u;
+            lift.restart_required = 0u;
             lift_enter_state(LIFT_HOMING_UP, now);
         }
         else
@@ -787,10 +1036,45 @@ void Lift_Work(void)
         lift_retract_update(now, dt);
         break;
 
+    case LIFT_BOTTOM_RECOVER:
+        if (is_hole == 0u)
+        {
+            lift_begin_up(now);
+        }
+        else if (lift.limit_recovery == 0u)
+        {
+            lift_enter_state(LIFT_READY_DOWN, now);
+            lift_output_position(lift.bottom_target);
+        }
+        else if ((now - lift.state_enter_tick) >= LIFT_MOVE_TIMEOUT_MS)
+        {
+            lift_pause(LIFT_FAULT_MOVE_TIMEOUT, now);
+        }
+        else
+        {
+            uint8_t stall = lift_move_stalled(now, dt, 1u);
+            if (stall != 0u)
+            {
+                lift_pause((stall == 1u) ? LIFT_FAULT_STALL_CURRENT :
+                           LIFT_FAULT_STALL_PROGRESS, now);
+                break;
+            }
+            lift_output_position_limited(lift.bottom_target, LIFT_HOLD_SPEED_MAX_RPM,
+                                         LIFT_HOLD_OUTPUT_MAX_RAW);
+            if ((lift_abs((float)lift.bottom_target - lift_encoder_units()) <=
+                 LIFT_POS_TOL_COUNTS) &&
+                (lift_abs((float)lift.motor->rx_info->encoder_speed) <= LIFT_SPEED_TOL_RPM))
+                lift.stable_confirm_ms += dt;
+            else lift.stable_confirm_ms = 0u;
+            if (lift.stable_confirm_ms >= LIFT_STABLE_CONFIRM_MS)
+                lift_enter_state(LIFT_READY_DOWN, now);
+        }
+        break;
+
     case LIFT_READY_DOWN:
         if (is_hole == 0u)
         {
-            lift_enter_state(LIFT_MOVING_UP, now);
+            lift_begin_up(now);
         }
         else
         {
@@ -801,7 +1085,7 @@ void Lift_Work(void)
     case LIFT_ALIGN_DOWN:
         if (is_hole == 0u)
         {
-            lift_enter_state(LIFT_MOVING_UP, now);
+            lift_begin_up(now);
         }
         else if (lift_alignment_ok() != 0u)
         {
@@ -816,7 +1100,7 @@ void Lift_Work(void)
     case LIFT_MOVING_DOWN:
         if (is_hole == 0u)
         {
-            lift_enter_state(LIFT_MOVING_UP, now);
+            lift_begin_up(now);
         }
         else
         {
@@ -846,20 +1130,42 @@ void Lift_Work(void)
         }
         break;
 
+    case LIFT_START_UP:
+        lift_start_up_update(now, dt);
+        break;
+
+    case LIFT_LOAD_HOLD:
+        if (lift.recover_request != 0u)
+        {
+            lift_begin_up(now);
+            if (lift.state == LIFT_START_UP) lift_start_up_update(now, dt);
+            else lift_move_update(now, dt, lift.top_target, 1u);
+        }
+        else
+        {
+            lift_update_recovery_direction();
+            lift_output_position(lift.load_hold_target);
+        }
+        break;
+
     case LIFT_STALL_STOP:
     case LIFT_PAUSED:
     case LIFT_FAULT:
         lift.motor->tx_info->torque = 0.0f;
-        if (((cmd_changed == 0u) && (lift.recover_request == 0u)) ||
+        if ((lift.recover_request == 0u) ||
             ((now - lift.state_enter_tick) < LIFT_PAUSE_COOLDOWN_MS)) break;
         lift.recover_request = 0u;
-        if (lift.home_valid == 0u) lift_enter_state(LIFT_HOMING_UP, now);
+        if (lift.home_valid == 0u)
+        {
+            lift.recover_force_up = 0u;
+            lift.control_is_hole = 0u;
+            lift_enter_state(LIFT_HOMING_UP, now);
+        }
         else
         {
-            float travel = ((float)lift.top_zero - lift_encoder_units()) * LIFT_UP_DIRECTION;
-            lift.limit_recovery = (travel > LIFT_TRAVEL_COUNTS) ? 1u :
-                                  ((travel < 0.0f) ? 2u : 0u);
-            lift_enter_state(is_hole ? LIFT_ALIGN_DOWN : LIFT_MOVING_UP, now);
+            lift_begin_up(now);
+            if (lift.state == LIFT_START_UP) lift_start_up_update(now, dt);
+            else lift_move_update(now, dt, lift.top_target, 1u);
         }
         break;
 
@@ -869,7 +1175,8 @@ void Lift_Work(void)
     }
 
     if (((lift.state == LIFT_READY_UP) && (is_hole == 0u)) ||
-        (lift.state == LIFT_MOVING_UP) ||
+        (lift.state == LIFT_MOVING_UP) || (lift.state == LIFT_BOTTOM_RECOVER) ||
+        (lift.state == LIFT_LOAD_HOLD) || (lift.state == LIFT_START_UP) ||
         (lift.state == LIFT_FAULT) || (lift.state == LIFT_PAUSED) || (lift.state == LIFT_STALL_STOP))
     {
         lift.pitch_zero_hold = 0u;
@@ -909,19 +1216,22 @@ uint8_t Lift_Get_Report_State(void)
 
     case LIFT_PAUSED:
     case LIFT_FAULT:
+    case LIFT_LOAD_HOLD:
+    case LIFT_START_UP:
         return 3u;
 
     case LIFT_STALL_STOP:
         return 0u;
 
     case LIFT_WAIT:
-        return 2u;
+        return (lift.restart_required != 0u) ? 3u : 2u;
 
     case LIFT_HOMING_UP:
     case LIFT_RETRACT_DOWN:
     case LIFT_ALIGN_DOWN:
     case LIFT_MOVING_DOWN:
     case LIFT_MOVING_UP:
+    case LIFT_BOTTOM_RECOVER:
     default:
         return 1u;
     }

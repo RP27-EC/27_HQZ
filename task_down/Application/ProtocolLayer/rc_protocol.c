@@ -1,6 +1,20 @@
 #include "rc_protocol.h"
 #include "rp_math.h"
 #include "rc_sensor.h"
+#include "main.h"
+#include <string.h>
+
+typedef struct
+{
+    int16_t x[REMOTE_SMOOTH_TIMES]; // X历史计数，int16
+    int16_t y[REMOTE_SMOOTH_TIMES]; // Y历史计数，int16
+    int32_t sum_x; // X窗口总计数，count
+    int32_t sum_y; // Y窗口总计数，count
+    uint16_t index; // 窗口槽，0~窗口长减1
+} rc_mouse_filter_t;
+
+static rc_mouse_filter_t rc_mouse_filter;
+volatile rc_mouse_debug_t rc_mouse_debug;
 void keyboard_cnt_max_set(rc_dev_t *rc_sen);
 void keyboard_status_update(kb_key_t *key);
 
@@ -49,26 +63,41 @@ void keyboard_cnt_max_set(rc_dev_t *rc_sen)
   info->Ctrl.cnt_max = KEY_CTRL_CNT_MAX;
 }
 
-/* 鼠标速度滤波 */
-/* 对鼠标速度做滑动平均，降低抖动 */
+void rc_mouse_filter_reset(rc_dev_t *rc_sen)
+{
+    uint32_t primask = __get_PRIMASK();
+    __disable_irq();
+    memset(&rc_mouse_filter, 0, sizeof(rc_mouse_filter));
+    rc_sen->info->mouse_x = 0.0f;
+    rc_sen->info->mouse_y = 0.0f;
+    rc_mouse_debug.raw_x = 0;
+    rc_mouse_debug.raw_y = 0;
+    rc_mouse_debug.filtered_x = 0.0f;
+    rc_mouse_debug.filtered_y = 0.0f;
+    __set_PRIMASK(primask);
+}
+
 void rc_interrupt_update(rc_dev_t *rc_sen)
 {
-	/* 鼠标速度均值滤波 */
-	static int16_t mouse_x[REMOTE_SMOOTH_TIMES], mouse_y[REMOTE_SMOOTH_TIMES]; /* 历史缓存 */
-	static int16_t index = 0; /* 环形索引 */
-	if(index == REMOTE_SMOOTH_TIMES)
-	{
-		index = 0;
-	}
-	rc_sen->info->mouse_x -= (float)mouse_x[index] / (float)REMOTE_SMOOTH_TIMES; /* 减去旧值 */
-	rc_sen->info->mouse_y -= (float)mouse_y[index] / (float)REMOTE_SMOOTH_TIMES; /* 减去旧值 */
-	mouse_x[index] = rc_sen->info->mouse_vx;
-	mouse_y[index] = rc_sen->info->mouse_vy;
-	rc_sen->info->mouse_x += (float)mouse_x[index] / (float)REMOTE_SMOOTH_TIMES; /* 加入新值 */
-	rc_sen->info->mouse_y += (float)mouse_y[index] / (float)REMOTE_SMOOTH_TIMES; /* 加入新值 */
-
-	index++;
-
+    uint32_t primask = __get_PRIMASK();
+    uint16_t index;
+    __disable_irq();
+    index = rc_mouse_filter.index;
+    rc_mouse_filter.sum_x -= rc_mouse_filter.x[index];
+    rc_mouse_filter.sum_y -= rc_mouse_filter.y[index];
+    rc_mouse_filter.x[index] = rc_sen->info->mouse_vx;
+    rc_mouse_filter.y[index] = rc_sen->info->mouse_vy;
+    rc_mouse_filter.sum_x += rc_mouse_filter.x[index];
+    rc_mouse_filter.sum_y += rc_mouse_filter.y[index];
+    rc_mouse_filter.index = (index + 1u == REMOTE_SMOOTH_TIMES) ? 0u : index + 1u;
+    // NOTE: 累计量不借用发布值
+    rc_sen->info->mouse_x = (float)rc_mouse_filter.sum_x / REMOTE_SMOOTH_TIMES;
+    rc_sen->info->mouse_y = (float)rc_mouse_filter.sum_y / REMOTE_SMOOTH_TIMES;
+    rc_mouse_debug.raw_x = rc_mouse_filter.x[index];
+    rc_mouse_debug.raw_y = rc_mouse_filter.y[index];
+    rc_mouse_debug.filtered_x = rc_sen->info->mouse_x;
+    rc_mouse_debug.filtered_y = rc_sen->info->mouse_y;
+    __set_PRIMASK(primask);
 }
 /* 解析遥控器帧 */
 /* 解析下板遥控器原始帧 */

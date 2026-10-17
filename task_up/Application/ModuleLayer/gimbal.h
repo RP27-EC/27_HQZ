@@ -123,6 +123,7 @@
 #define GIMBAL_RC_AXIS_DEADBAND            20.0f
 /* 遥控器满杆时 Yaw 最大目标角速度*/
 #define GIMBAL_MANUAL_YAW_RATE_DEG_S       150.0f
+#define GIMBAL_KEYBOARD_YAW_RATE_DEG_S     300.0f // 键鼠手动上限，deg/s
 /* 操作手 Yaw 方向符号 */
 #define GIMBAL_MANUAL_YAW_SIGN             (-1.0f)
 /* 遥控器满杆时 Pitch 最大目标角速度*/
@@ -228,6 +229,7 @@ typedef struct
 typedef struct
 {
     float yaw_rate_cmd_deg_s;       // Yaw输入角速度，deg/s
+    float manual_yaw_limit_deg_s; // 当前源手动上限，deg/s
     float pitch_rate_cmd_deg_s;     // Pitch输入角速度，deg/s
     uint8_t manual_source;          // 输入源，0遥控/1键鼠
     uint8_t manual_source_changed;  // 输入源变更，0/1
@@ -268,7 +270,8 @@ typedef struct
     volatile float rate_hold_enter_deg_s;
     volatile float rate_hold_exit_deg_s;
     volatile float pitch_manual_rate_max_deg_s;
-    volatile float yaw_manual_rate_max_deg_s;
+    volatile float yaw_manual_rate_max_deg_s; // 遥控Yaw上限，deg/s
+    volatile float keyboard_yaw_rate_max_deg_s; // 键鼠Yaw上限，deg/s
     volatile float manual_pitch_sign;
     volatile float manual_yaw_sign;
     volatile float mouse_yaw_deg_per_count;

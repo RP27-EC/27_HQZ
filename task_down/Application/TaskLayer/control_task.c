@@ -7,6 +7,7 @@
 #include "infantry.h"
 #include "board_protocol.h"
 #include "rc_sensor.h"
+#include "rc_protocol.h"
 #include "board_comm_config.h"
 #include "chassis_config.h"
 #include "chassis_input.h"
@@ -71,7 +72,8 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
         (button_event != 0u))
     {
         Chassis_Input_CancelSpin();
-        if (board_hole_request == 0u)
+        if ((board_hole_request == 0u) &&
+            (board.rx_meg->state_meg.is_down != 3u))
         {
             board_gimbal_yaw_rear = 0u;
             board_yaw_override = 0u;
@@ -83,6 +85,13 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
             board_hole_request = 0u;
             board_hole_exit_pending = 1u;
             hole_exit_tick = now;
+        }
+        {
+            uint32_t primask = __get_PRIMASK();
+            __disable_irq();
+            board.tx_pkt->gimbal_target_pkt.is_hole = board_hole_request;
+            board.tx_pkt->gimbal_target_pkt.lift_cmd_seq++;
+            __set_PRIMASK(primask);
         }
     }
 
@@ -353,6 +362,8 @@ void StartCtrlTask(void const *argument)
         Chassis_Spin_UpdateMode();
         Chassis_Follow_Update(&chassis_input_cmd);
         Chassis_Spin_Update(&chassis_input_cmd);
+        rc_mouse_debug.final_wz = chassis_input_cmd.wz;
+        rc_mouse_debug.final_tick = HAL_GetTick();
         Chassis_Control_Update(&chassis_input_cmd);
         launch.work(&launch);
 #elif !BOARD_COMM_DEBUG

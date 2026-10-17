@@ -17,6 +17,7 @@
 #define ID_BOARD_RX4 0xD4  /* 血量数据 */
 #define ID_BOARD_RX5 0xD5  /* 遥控/键鼠控制量 */
 #define ID_BOARD_RX6 0xD6  /* 逐发弹速及源年龄 */
+#define BOARD_LIFT_CMD_TAG 0xA5u // 升降序号协议标识
 
 /* 整车状态报文 */
 typedef struct
@@ -61,6 +62,8 @@ typedef struct
     uint8_t feed_permit; // 独立供弹许可，0/1
     uint8_t s2_mid; // 消抖后S2中位，0/1
     uint8_t ctrl_source; // 同帧来源，0遥控1键鼠
+    uint8_t lift_cmd_seq; // B操作序号，0~255循环
+    uint8_t lift_cmd_valid; // 序号协议有效，0/1
 } Board_Shoot_Pkt_t;
 
 typedef struct

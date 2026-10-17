@@ -133,10 +133,7 @@ static void Launch_Data_Update(Launch_t *launch)
         launch->block_reason = 3u;
         return;
     }
-#if BOARD_LIFT_ENABLE
-    feed_safe = ((board.tx_pkt->gimbal_target_pkt.is_hole == 0u) &&
-                 (board.rx_meg->state_meg.is_down == 2u)) ? 1u : 0u;
-#endif
+    feed_safe = (board.tx_pkt->gimbal_target_pkt.is_hole == 0u) ? 1u : 0u;
     launch->feed_permit = feed_safe;
     launch->ctrl_source = (Chassis_Input_IsKeyboardMode() != 0u) ? 1u : 0u;
     if (launch->ctrl_source != 0u)

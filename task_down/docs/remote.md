@@ -40,7 +40,7 @@ F 键仅在遥控在线且 S1 上位时以按下沿翻转键鼠输入源。遥�
 | Shift / Ctrl | 速度倍率 1.5 / 0.5 | Shift 优先于 Ctrl |
 | Z / X / C | 跟随 / 机械 / 小陀螺 | 仅键鼠源；由上板 C2/Yaw 反馈影响特定模式 |
 | R | 机械模式切换前/后基准；跟随模式触发云台掉头状态机 | 依赖有效 C2 反馈和通信交接 |
-| 鼠标 X（机械模式） | 底盘角速度附加项 | gain=10，输出裁剪至 ±15 控制域单位 |
+| 鼠标 X（机械模式） | 底盘角速度附加项 | gain=10，输出裁剪至 ±15 rad/s |
 
 普通遥控摇杆模式由 `S1` 档位和 `CHASSIS_OWNS_RC_YAW` 决定 vx/vy/wz。跟随与小陀螺是否接管旋转在各自模块中仲裁；请看 `chassis_cmd_t.source`，不要仅凭拨杆位置判断最终命令来源。
 
@@ -61,6 +61,22 @@ F 键仅在遥控在线且 S1 上位时以按下沿翻转键鼠输入源。遥�
 遥控接收失效会使底盘指令失效。初次通电测试前架空底盘，先单独确认摇杆方向与键位；不要把 Shift 倍速、旧键盘状态或心跳在线视为底盘允许运动的充分条件。
 
 ### D5 与本地底盘输入的分流
+
+- 鼠标X/Y保留10槽均值滤波，内部用独立整数累计量；`rc_reset_data()` 同步清空历史、累计量和输出。CommandTask每1 ms处理一次，窗口不是10个新DBUS帧。
+- `rc_mouse_debug` 提供本地观测：`raw_x/y` 为原始计数，`filtered_x/y` 为窗口均值，`mech_wz` 为鼠标机械转向项，`input_wz` 为键鼠仲裁前总转向，`final_wz` 为跟随/旋转仲裁后送给底盘控制器的请求，单位均为rad/s。
+- `d5_yaw_rate` 为键鼠D5装箱后的目标角速度，单位deg/s；按增益7.5、键鼠专用上限300°/s生成，上板输入及最终手动限幅同步为300°/s。遥控仍为150°/s，云台受扰回正上限仍为1000°/s。`d5_keyboard` 为0时该观测清零。
+- `input_tick/final_tick/d5_tick` 为各阶段记录时刻，单位ms；不同任务异步刷新，不作为原子快照。`keyboard_active`、`chassis_mode` 标识有效输入和当前模式。`final_wz` 不是实测速度，电机停机原因需另查底盘状态。
+
+### 鼠标X调参位置
+
+| 手感 | 下板参数 | 上板参数 |
+| --- | --- | --- |
+| 机械小幅移动灵敏度 | `chassis_config.h`：`CHASSIS_KEY_MECH_MOUSE_WZ_GAIN=10`，rad/s/count | 无 |
+| 机械快速横移上限 | 同文件：`CHASSIS_KEY_MECH_MOUSE_WZ_MAX=15`，rad/s | 无 |
+| 陀螺仪小幅移动灵敏度 | `board_protocol.h`：`BOARD_D5_MOUSE_YAW_GAIN=7.5`，deg/s/count | 无 |
+| 陀螺仪快速横移上限 | 同文件：`BOARD_D5_KEYBOARD_YAW_MAX_DEG_S=300` | `gimbal.h`：`GIMBAL_KEYBOARD_YAW_RATE_DEG_S=300`；Watch为`gimbal_tune.keyboard_yaw_rate_max_deg_s` |
+
+小幅移动先调增益；快速移动达到上限后，再同步调整上下板键鼠上限。不要用Yaw保持增益或未启用的鼠标角度增量参数调手动速度。Pitch、遥控上限及鼠标滤波窗口不变。
 
 遥控/键鼠数据在下板既参与 chassis input，也通过 D5 提供上板云台输入。D5 的键鼠来源位用于区分鼠标增量和角速度格式；下板底盘键位（WASD/QE、Z/X/C、R）不应误认为都由 D5 透传。追云台输入问题时走 [D5 通信页](board-link.md)；追底盘运动问题时继续看 [底盘控制页](chassis.md)。
 

@@ -75,6 +75,8 @@ static void Board_Rx_Pkt_01(uint8_t *rxbuf)
     Board_Rx_Info.shoot_pkt.feed_permit = (rxbuf[5] >> 5) & 0x01; // 供弹许可，0/1
     Board_Rx_Info.shoot_pkt.s2_mid = (rxbuf[5] >> 6) & 0x01; // S2中位，0/1
     Board_Rx_Info.shoot_pkt.ctrl_source = (rxbuf[5] >> 7) & 0x01; // 输入源，0/1
+    Board_Rx_Info.shoot_pkt.lift_cmd_seq = rxbuf[6];
+    Board_Rx_Info.shoot_pkt.lift_cmd_valid = (rxbuf[7] == BOARD_LIFT_CMD_TAG) ? 1u : 0u;
     Board_Rx_Info.state_pkt.r_turn_active = (rxbuf[5] >> 4) & 0x01; /* R掉头，0/1 */
 }
 

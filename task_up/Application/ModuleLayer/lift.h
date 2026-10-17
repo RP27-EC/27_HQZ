@@ -21,11 +21,14 @@ typedef enum
     LIFT_FAULT, // 硬故障停机，值8
     LIFT_STALL_STOP, // 旧堵停状态，值9
     LIFT_PAUSED, // 可恢复停机，值10
+    LIFT_BOTTOM_RECOVER, // 底部向内纠偏，值11
+    LIFT_LOAD_HOLD, // 负载异常保持，值12
+    LIFT_START_UP, // 受限上升起步，值13
 } lift_state_e;
 
 typedef struct
 {
-    lift_state_e state; // 升降阶段，0~10
+    lift_state_e state; // 升降阶段，0~13
     rm_motor_t *motor; // 升降驱动对象，非空
 
     int32_t top_zero; // 物理顶部，count
@@ -38,6 +41,24 @@ typedef struct
     uint8_t control_is_hole; // 有效下降请求，0/1
     uint8_t pitch_zero_hold; // 俯仰锁零请求，0/1
     uint8_t fault_code; // 最近保护记录，0~7
+    uint8_t active_fault_code; // 当前保护原因，0~7
+    lift_state_e fault_state; // 保护前阶段，0~13
+    int32_t fault_position; // 保护发生位置，count
+    int32_t fault_target; // 保护时原目标，count
+    uint32_t fault_tick; // 最近保护时刻，ms
+    float fault_output_raw; // 保护前输出，raw
+    int16_t fault_current_raw; // 保护前反馈电流，raw
+    uint32_t fault_feedback_age_ms; // 保护前反馈年龄，ms
+    int32_t load_hold_target; // 负载保持原终点，count
+    uint8_t cmd_seq_seen; // 命令序号基准有效，0/1
+    uint8_t last_cmd_seq; // 上次B序号，0~255
+    uint8_t recover_force_up; // 恢复明确上行，0/1
+    uint8_t restart_required; // 重连待人工恢复，0/1
+    int32_t start_count; // 起步初始编码器，count
+    float start_direction; // 起步计数方向，仅±1
+    float start_progress_counts; // 起步有向位移，count
+    uint32_t start_confirm_ms; // 起步连续运动，ms
+    float stall_progress_counts; // 堵转窗有向位移，count
     uint8_t home_valid; // 行程标定有效，0/1
 
     uint32_t state_enter_tick; // 阶段起点，ms
