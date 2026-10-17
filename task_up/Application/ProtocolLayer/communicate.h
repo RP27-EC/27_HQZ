@@ -10,8 +10,12 @@
 /* 上板发给下板的报文 ID */
 #define ID_BOARD_TX1 0xC1  /* 云台姿态反馈 */
 #define ID_BOARD_TX2 0xC2  /* 云台角度反馈 */
+/* 双板复位协议标记 */
+#define BOARD_RESET_PREPARE 0xA5u // 复位准备阶段标记
+#define BOARD_RESET_COMMIT  0x5Au // 复位提交阶段标记
+
 /* 下板发给上板的报文 ID */
-#define ID_BOARD_RX1 0xD1  /* 整车状态与发射状态 */
+#define ID_BOARD_RX1 0xD1 // 整车及发射，标准ID
 #define ID_BOARD_RX2 0xD2  /* 云台目标角度 */
 #define ID_BOARD_RX3 0xD3  /* 裁判系统射击信息 */
 #define ID_BOARD_RX4 0xD4  /* 血量数据 */
@@ -42,14 +46,18 @@ typedef struct
 /* 遥控与键鼠控制报文 */
 typedef struct
 {
-    uint8_t valid;           /* 控制数据有效 */
-    uint8_t ctrl_source;     /* 0 = 遥控，1 = 键鼠 */
-    uint8_t button_bits;     /* 鼠标左右键位 */
-    float yaw_rate_deg_s;    /* Yaw 角速度，deg/s */
-    float pitch_rate_deg_s;  /* Pitch 角速度，deg/s */
-    uint8_t cmd_type;        /* 0 = 角速度，1 = 鼠标增量 */
-    int16_t mouse_dx;        /* 鼠标 X 增量 */
-    int16_t mouse_dy;        /* 鼠标 Y 增量 */
+    uint8_t valid; // 控制数据有效，0/1
+    uint8_t ctrl_source; // 输入支持，0遥控1键鼠
+    uint8_t button_bits; // 左右键位，bit0~1
+    float yaw_rate_deg_s; // Yaw角速度，deg/s
+    float pitch_rate_deg_s; // Pitch角速度，deg/s
+    uint8_t cmd_type; // 角速度或增量，0/1
+    int16_t mouse_dx; // 鼠标X增量，count
+    int16_t mouse_dy; // 鼠标Y增量，count
+    uint8_t press_seq; // 鼠标按下序号，0~255
+    uint8_t shoot_source; // 发射源，0遥控1键鼠
+    uint8_t reset_stage; // 请求阶段，0/A5/5A
+    uint32_t rx_tick; // D5接收时刻，ms
 } Board_Remote_Cmd_Pkt_t;
 
 /* 发射控制报文 */
@@ -142,6 +150,11 @@ typedef struct
     uint16_t offline_cnt_max;  /* 离线判定阈值 */
 } Board_HeartBeat_t;
 
+extern volatile uint8_t board_reset_stopped; // 复位停机锁存，0/1
+extern volatile uint8_t board_reset_ack_sent; // 最近入队确认，0/A5/5A
+extern volatile uint8_t board_reset_ack; // 确认阶段，0/A5/5A
+extern volatile uint32_t board_reset_fail_count; // 复位失败累计，次
+extern volatile uint32_t board_d1_rx_tick; // D1接收时刻，ms
 extern Board_Rx_Info_t Board_Rx_Info;
 extern volatile uint8_t Board_Rx_Shoot_Flags;
 extern Board_Tx_Info_t Board_Tx_Info;

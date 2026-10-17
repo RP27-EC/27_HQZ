@@ -52,9 +52,16 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hcan, uint32_t RxFifo0ITs)
   }
   else if(hcan == &hfdcan2)
   {
-		HAL_FDCAN_GetRxMessage(hcan, FDCAN_RX_FIFO0, &hcan2RxFrame.header, hcan2RxFrame.data);
+		if (HAL_FDCAN_GetRxMessage(hcan, FDCAN_RX_FIFO0, &hcan2RxFrame.header, hcan2RxFrame.data) != HAL_OK) return;
 		
-		CAN2_rxDataHandler(hcan2RxFrame.header.Identifier, hcan2RxFrame.data);
+		if ((hcan2RxFrame.header.Identifier != 0xC1u) ||
+            ((hcan2RxFrame.header.IdType == FDCAN_STANDARD_ID) &&
+             (hcan2RxFrame.header.RxFrameType == FDCAN_DATA_FRAME) &&
+             (hcan2RxFrame.header.FDFormat == FDCAN_CLASSIC_CAN) &&
+             (hcan2RxFrame.header.DataLength == FDCAN_DLC_BYTES_8)))
+        {
+            CAN2_rxDataHandler(hcan2RxFrame.header.Identifier, hcan2RxFrame.data);
+        }
   }
   else 
   {

@@ -19,6 +19,82 @@
 #include "supercap.h"
 #include <math.h>
 
+volatile uint8_t board_reset_tx_stage; // 已停机发布阶段，0/A5/5A
+volatile uint8_t board_reset_stage; // 请求阶段，0/A5/5A
+volatile uint8_t board_reset_ack; // 确认阶段，0/A5/5A
+volatile uint32_t board_reset_ack_tick; // 最近C1时刻，ms
+volatile uint32_t board_reset_fail_count; // 复位失败累计，次
+
+static uint8_t Board_Reset_Update(void)
+{
+    static uint8_t released;
+    static uint8_t holding;
+    static uint8_t failed;
+    static uint8_t committed;
+    static uint32_t hold_tick;
+    static uint32_t phase_tick;
+    static uint32_t commit_tick;
+    const rc_data_t *rc = rc_dev.info;
+    uint32_t now = HAL_GetTick();
+    uint8_t online = ((rc_dev.work_state == DEV_ONLINE) && (rc != NULL));
+    uint8_t combo = online && ((rc->key_v & (KEY_PRESSED_OFFSET_CTRL | KEY_PRESSED_OFFSET_F)) ==
+        (KEY_PRESSED_OFFSET_CTRL | KEY_PRESSED_OFFSET_F));
+
+    if ((online != 0u) && (rc->key_v == 0u) &&
+        (rc->mouse_btn_l.value == 0u) && (rc->mouse_btn_r.value == 0u)) released = 1u;
+    if ((board_reset_stage == 0u) && (released != 0u))
+    {
+        if (combo == 0u) holding = 0u;
+        else if (holding == 0u)
+        {
+            holding = 1u;
+            hold_tick = now;
+        }
+        else if ((now - hold_tick) >= BOARD_RESET_HOLD_MS)
+        {
+            board_reset_stage = BOARD_RESET_PREPARE;
+            board_reset_ack = 0u;
+            phase_tick = now;
+            failed = 0u;
+            committed = 0u;
+            released = 0u;
+            holding = 0u;
+        }
+    }
+    if (board_reset_stage != 0u)
+    {
+        if ((board_reset_stage == BOARD_RESET_PREPARE) &&
+            (board_reset_ack == BOARD_RESET_PREPARE) &&
+            ((now - board_reset_ack_tick) < BOARD_RESET_TIMEOUT_MS))
+        {
+            board_reset_stage = BOARD_RESET_COMMIT;
+            board_reset_ack = 0u;
+            phase_tick = now;
+        }
+        if ((board_reset_stage == BOARD_RESET_COMMIT) &&
+            (board_reset_ack == BOARD_RESET_COMMIT) && (committed == 0u) &&
+            ((now - board_reset_ack_tick) < BOARD_RESET_TIMEOUT_MS))
+        {
+            committed = 1u;
+            commit_tick = now;
+        }
+        if ((committed != 0u) && ((now - commit_tick) >= BOARD_RESET_REBOOT_DELAY_MS))
+        {
+            __DSB();
+            NVIC_SystemReset();
+        }
+        if ((now - phase_tick) >= BOARD_RESET_TIMEOUT_MS)
+        {
+            board_reset_fail_count++;
+            board_reset_stage = 0u;
+            board_reset_ack = 0u;
+            failed = 1u;
+            released = 0u;
+        }
+    }
+    return ((released == 0u) || (board_reset_stage != 0u) || (failed != 0u));
+}
+
 typedef struct
 {
     volatile uint8_t rc_state; // 遥控在线状态，0/1
@@ -67,8 +143,8 @@ static uint8_t Board_Debug_Hole_Command(rc_data_t *rc_info)
     button_event = ((b_now != 0u) && (last_b_value == 0u)) ? 1u : 0u;
     last_b_value = b_now;
 
-    if ((rc_info->s1.value == RC_SW_UP) &&
-        ((Chassis_Input_IsKeyboardMode() != 0u) || (rc_info->s2.value == RC_SW_MID)) &&
+    if (((Chassis_Input_IsKeyboardMode() != 0u) ||
+         ((rc_info->s1.value == RC_SW_UP) && (rc_info->s2.value == RC_SW_MID))) &&
         (button_event != 0u))
     {
         Chassis_Input_CancelSpin();
@@ -297,7 +373,8 @@ static void Board_Debug_Gimbal_Command(void)
     }
 
     /* 机械模式：S1 下位（遥控）或 键鼠 X 档（云台锁机械零位，看着跟底盘走） */
-    if ((rc_info->s1.value == RC_SW_DOWN) || (keyboard_mech != 0u) || (uturn_mech != 0u))
+    if ((keyboard_mech != 0u) || (uturn_mech != 0u) ||
+        ((keyboard_active == 0u) && (rc_info->s1.value == RC_SW_DOWN)))
     {
         board.tx_pkt->car_pkt.gimbal_mode = 0u;
         /* 进入机械模式时从当前角度起调，避免跳变 */
@@ -348,13 +425,28 @@ void StartCtrlTask(void const *argument)
 
     for (;;)
     {
+        uint8_t reset_stop = Board_Reset_Update();
 #if CHASSIS_BRINGUP_ENABLE
         Chassis_Input_Update();
 #endif
 
 #if BOARD_COMM_DEBUG
-        Board_Debug_Gimbal_Command();
+        if (reset_stop == 0u) Board_Debug_Gimbal_Command();
 #endif
+
+        if (reset_stop != 0u)
+        {
+            board.tx_pkt->car_pkt.car_state = 0u;
+            board.tx_pkt->car_pkt.gimbal_mode = 0u;
+            chassis_input_cmd.valid = 0u;
+            chassis_input_cmd.vx = 0.0f;
+            chassis_input_cmd.vy = 0.0f;
+            chassis_input_cmd.wz = 0.0f;
+            board_hole_request = 0u;
+            board_hole_exit_pending = 0u;
+            board.tx_pkt->gimbal_target_pkt.is_hole = 0u;
+            Chassis_Input_Init();
+        }
 
     /* 第一阶段底盘调试链路 */
 #if CHASSIS_BRINGUP_ENABLE
@@ -362,6 +454,15 @@ void StartCtrlTask(void const *argument)
         Chassis_Spin_UpdateMode();
         Chassis_Follow_Update(&chassis_input_cmd);
         Chassis_Spin_Update(&chassis_input_cmd);
+        if (reset_stop != 0u)
+        {
+            chassis_input_cmd.valid = 0u;
+            chassis_input_cmd.vx = 0.0f;
+            chassis_input_cmd.vy = 0.0f;
+            chassis_input_cmd.wz = 0.0f;
+            Chassis_Spin_Init();
+            Chassis_Follow_Init();
+        }
         rc_mouse_debug.final_wz = chassis_input_cmd.wz;
         rc_mouse_debug.final_tick = HAL_GetTick();
         Chassis_Control_Update(&chassis_input_cmd);
@@ -390,6 +491,7 @@ void StartCtrlTask(void const *argument)
 #if SUPERCAP_BRINGUP_ENABLE
         SuperCap_Tx();
 #endif
+        board_reset_tx_stage = board_reset_stage;
         osDelay(1);
     }
 }

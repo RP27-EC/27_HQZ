@@ -12,7 +12,7 @@
 | `ch1` | 右摇杆上下；云台/遥控相关通路 |
 | `ch2` | 左摇杆左右；底盘横移 |
 | `ch3` | 左摇杆上下；底盘前后 |
-| `s1`, `s2` | 模式选择和输入源限制；键鼠不绕过遥控在线条件 |
+| `s1`, `s2` | 拨杆变化选择模式、S2控制遥控发射；键鼠需遥控在线 |
 | `mouse_x/y`, 鼠标键 | 云台手动输入及机械底盘转向等相应模式功能 |
 | `key_v` | WASD/QE、Shift/Ctrl、F/Z/X/C/R 等按键位图 |
 
@@ -24,25 +24,25 @@ DBUS 的 18 字节帧先由协议层还原四个摇杆通道和两个拨杆，�
 
 1. UART5 DMA 缓冲是否持续被 IDLE 回调更新，解析器是否识别完整 18 字节帧。
 2. `rc_dev.work_state` 是否在线，通道是否接近中位且在预期方向变化。
-3. S1/S2 的枚举值是否与当前输入源条件匹配；F 必须在允许档位产生有效按下沿。
-4. `keyboard_source_active` 是否切换；再检查 `chassis_input_cmd` 的来源、限幅和 valid。
+3. S1/S2 的枚举值及新动作是否正确；键鼠不要求指定档位。
+4. 检查 `keyboard_chassis_mode` 与分轴优先级，再检查 `chassis_input_cmd` 的来源和 valid。
 
 遥控离线处理会复位键鼠选择和 R 掉头状态；键鼠不是独立无线链路，即便按键位图仍残留，也不应被解释成新的有效运动命令。
 
 ## 输入源与操作模式
 
-F 键仅在遥控在线且 S1 上位时以按下沿翻转键鼠输入源。遥控掉线会清零命令、复位键鼠选择和 R 掉头状态；不能把键鼠按键缓冲当作独立于 DBUS 的安全控制器。
+遥控在线即接收键鼠，无需F或指定拨杆档位。启动默认机械模式；Z/X/C选档，S1/S2新动作按原遥控映射接管，同周期按键优先。S1中位仅屏蔽摇杆底盘输入；键鼠仍有效。遥控掉线清零命令并复位模式与R状态。
 
 | 键/拨杆 | 当前代码行为 | 生效限制 |
 | --- | --- | --- |
 | W/S、A/D | 前后/左右平移 | `CHASSIS_MAX_VX/VY` 控制域限幅 |
 | Q/E | 旋转方向输入 | 按 `CHASSIS_MAX_WZ` 与速度倍率 |
 | Shift / Ctrl | 速度倍率 1.5 / 0.5 | Shift 优先于 Ctrl |
-| Z / X / C | 跟随 / 机械 / 小陀螺 | 仅键鼠源；由上板 C2/Yaw 反馈影响特定模式 |
+| Z / X / C | 跟随 / 机械 / 小陀螺 | 遥控在线；小陀螺保留升降互锁 |
 | R | 机械模式切换前/后基准；跟随模式触发云台掉头状态机 | 依赖有效 C2 反馈和通信交接 |
-| 鼠标 X（机械模式） | 底盘角速度附加项 | gain=10，输出裁剪至 ±15 rad/s |
+| 鼠标 X（机械模式） | 底盘角速度附加项 | gain=8.5，输出裁剪至 ±12.75 rad/s |
 
-普通遥控摇杆模式由 `S1` 档位和 `CHASSIS_OWNS_RC_YAW` 决定 vx/vy/wz。跟随与小陀螺是否接管旋转在各自模块中仲裁；请看 `chassis_cmd_t.source`，不要仅凭拨杆位置判断最终命令来源。
+W/S、A/D、机械档转向分别覆盖对应摇杆轴，其他轴保留摇杆。相反键同时按下时该轴为零，不回退到摇杆。鼠标Y/X分别优先于云台Pitch/Yaw摇杆；掉头与升降互锁优先。机械档平移合并后按实际机械角85°/95°滞回统一反向，R目标翻转不提前翻平移。跟随与小陀螺是否接管旋转在各自模块中仲裁；请看 `chassis_cmd_t.source`，不要仅凭拨杆位置判断最终命令来源。
 
 ## 关键判据和观察量
 
@@ -52,11 +52,11 @@ F 键仅在遥控在线且 S1 上位时以按下沿翻转键鼠输入源。遥�
 | `rc_dev.info->ch0..ch3` | 摇杆中心、方向和限幅前输入 |
 | `rc_dev.info->s1/s2` | 档位原始值和边沿状态 |
 | `rc_dev.info->key_v` | 当前按键位图；核对 F/Z/X/C/R 的上升沿和按住状态 |
-| `keyboard_source_active` / keyboard chassis mode | 输入源切换及 Z/X/C 模式选择 |
+| `keyboard_chassis_mode` / `translation_rear` | 统一模式及实际平移方向 |
 | `chassis_input_cmd` | 经映射、限幅后的统一底盘指令及有效标志 |
 | `uturn_state/result` | R 掉头阶段、反馈时间戳、稳定时长和超时结果 |
 
-先检查 UART5 DMA/IDLE 收到连续帧，再检查 DBUS 通道中心与拨杆编码，最后检查键鼠映射与 chassis input 输出。若遥控在线但所有按键无效，优先核实 F 是否在允许档位产生边沿；若命令突然归零，检查在线状态、C2 超时、跟随故障锁存和源仲裁。
+先检查 UART5 DMA/IDLE 收到连续帧，再检查 DBUS 通道中心与拨杆编码，最后检查键鼠映射与 chassis input 输出。若遥控在线但所有按键无效，检查原始键位和启动释放确认；若命令突然归零，检查在线状态、C2 超时、跟随故障锁存和源仲裁。
 
 遥控接收失效会使底盘指令失效。初次通电测试前架空底盘，先单独确认摇杆方向与键位；不要把 Shift 倍速、旧键盘状态或心跳在线视为底盘允许运动的充分条件。
 
@@ -64,17 +64,17 @@ F 键仅在遥控在线且 S1 上位时以按下沿翻转键鼠输入源。遥�
 
 - 鼠标X/Y保留10槽均值滤波，内部用独立整数累计量；`rc_reset_data()` 同步清空历史、累计量和输出。CommandTask每1 ms处理一次，窗口不是10个新DBUS帧。
 - `rc_mouse_debug` 提供本地观测：`raw_x/y` 为原始计数，`filtered_x/y` 为窗口均值，`mech_wz` 为鼠标机械转向项，`input_wz` 为键鼠仲裁前总转向，`final_wz` 为跟随/旋转仲裁后送给底盘控制器的请求，单位均为rad/s。
-- `d5_yaw_rate` 为键鼠D5装箱后的目标角速度，单位deg/s；按增益7.5、键鼠专用上限300°/s生成，上板输入及最终手动限幅同步为300°/s。遥控仍为150°/s，云台受扰回正上限仍为1000°/s。`d5_keyboard` 为0时该观测清零。
+- `d5_yaw_rate` 为键鼠D5装箱后的目标角速度，单位deg/s；按增益6.375、键鼠专用上限255°/s生成，上板输入及最终手动限幅同步为255°/s。遥控仍为150°/s，云台受扰回正上限仍为1000°/s。`d5_keyboard` 为0时该观测清零。
 - `input_tick/final_tick/d5_tick` 为各阶段记录时刻，单位ms；不同任务异步刷新，不作为原子快照。`keyboard_active`、`chassis_mode` 标识有效输入和当前模式。`final_wz` 不是实测速度，电机停机原因需另查底盘状态。
 
 ### 鼠标X调参位置
 
 | 手感 | 下板参数 | 上板参数 |
 | --- | --- | --- |
-| 机械小幅移动灵敏度 | `chassis_config.h`：`CHASSIS_KEY_MECH_MOUSE_WZ_GAIN=10`，rad/s/count | 无 |
-| 机械快速横移上限 | 同文件：`CHASSIS_KEY_MECH_MOUSE_WZ_MAX=15`，rad/s | 无 |
-| 陀螺仪小幅移动灵敏度 | `board_protocol.h`：`BOARD_D5_MOUSE_YAW_GAIN=7.5`，deg/s/count | 无 |
-| 陀螺仪快速横移上限 | 同文件：`BOARD_D5_KEYBOARD_YAW_MAX_DEG_S=300` | `gimbal.h`：`GIMBAL_KEYBOARD_YAW_RATE_DEG_S=300`；Watch为`gimbal_tune.keyboard_yaw_rate_max_deg_s` |
+| 机械小幅移动灵敏度 | `chassis_config.h`：`CHASSIS_KEY_MECH_MOUSE_WZ_GAIN=8.5`，rad/s/count | 无 |
+| 机械快速横移上限 | 同文件：`CHASSIS_KEY_MECH_MOUSE_WZ_MAX=12.75`，rad/s | 无 |
+| 陀螺仪小幅移动灵敏度 | `board_protocol.h`：`BOARD_D5_MOUSE_YAW_GAIN=6.375`，deg/s/count | 无 |
+| 陀螺仪快速横移上限 | 同文件：`BOARD_D5_KEYBOARD_YAW_MAX_DEG_S=255` | `gimbal.h`：`GIMBAL_KEYBOARD_YAW_RATE_DEG_S=255`；Watch为`gimbal_tune.keyboard_yaw_rate_max_deg_s` |
 
 小幅移动先调增益；快速移动达到上限后，再同步调整上下板键鼠上限。不要用Yaw保持增益或未启用的鼠标角度增量参数调手动速度。Pitch、遥控上限及鼠标滤波窗口不变。
 
@@ -88,7 +88,7 @@ F 键仅在遥控在线且 S1 上位时以按下沿翻转键鼠输入源。遥�
 | [rc_protocol.c](../Application/ProtocolLayer/rc_protocol.c) `rc_interrupt_update()` | 接收数据到遥控结构 | 通道、拨杆、鼠标和按键位图 |
 | 同文件 `keyboard_update()` / `keyboard_status_update()` | 按键按下/释放/长按状态 | `value/status/cnt`，区分上升沿与持续电平 |
 | [rc_sensor.c](../Application/DeviceLayer/Sensor/rc_sensor.c) | 设备检查、心跳与数据复位 | `rc_dev.work_state`及失联后的输入状态 |
-| [chassis_input.c](../Application/ModuleLayer/chassis_input.c) `Chassis_Input_KeyboardModeUpdate()` / `Chassis_Input_Keyboard()` | F来源切换、键鼠映射 | 统一指令与模式 |
+| [chassis_input.c](../Application/ModuleLayer/chassis_input.c) `Chassis_Input_KeyboardModeUpdate()` / `Chassis_Input_Keyboard()` | 拨杆/按键选档、分轴仲裁 | 统一指令与模式 |
 | 同文件 `Chassis_Input_UturnUpdate()` | R协同掉头状态机 | 前后基准、阶段、交接与完成/超时结果 |
 | [launch.c](../Application/ModuleLayer/launch.c) `Launch_Data_Update()` | 将鼠标/拨杆转成发射请求 | 单发/连发、触发电平 |
 
@@ -96,7 +96,7 @@ F 键仅在遥控在线且 S1 上位时以按下沿翻转键鼠输入源。遥�
 
 `keyboard_status_update()` 在第一次按下更新为 `release_to_press`，持续按住时增加计数，到 `cnt_max` 后置 `long_press`，松开清计数。鼠标左键 `cnt_max=300`、右键 `cnt_max=500`，定义在 [rc_sensor.h](../Application/DeviceLayer/Sensor/rc_sensor.h)；它们是更新次数门限，名义1 ms循环下分别约300 ms和500 ms，不能当作独立计时器保证。左键门限早于上板500 ms单发超时，上板单发状态收到有效连发请求后直接切换连发。
 
-F、R、B等动作读取的边沿及来源条件分别在消费函数中判断；鼠标左键在键鼠发射分支中长按选择连发。按键状态识别成功与上板接受供弹是不同步骤。
+Ctrl+F、R、B等动作读取的边沿及来源条件分别在消费函数中判断；鼠标左键在键鼠发射分支中长按选择连发。按键状态识别成功与上板接受供弹是不同步骤。
 
 ### R掉头为什么有四个阶段
 
@@ -123,3 +123,12 @@ PREPARE/POSITION累计2500 ms未完成时记录超时，并以当前机械角建
 - 遥控/板间恢复后，先释放触发，再拨动S2；S2中位可开轮，升降未到顶部不阻止开轮。
 - 供弹仍要求升降顶部就绪。互锁解除时持续上拨或持续按左键不补射，须释放后重新触发。
 - 键鼠G保持开关摩擦轮；输入源切换及断联清除旧请求。下板观察 `launch.block_reason`，上板观察 `launcher.feed_block_reason` 与 `launcher.fault`。
+
+## 双板软复位与发射验收
+
+- Ctrl+F连续1秒：下板先停输出，再以D5 b7请求准备/提交；上板停止输出后由C1 b7确认，在任务上下文重启。准备标记0xA5，提交标记0x5A；每阶段500 ms超时锁存停机，释放组合键后可重新触发。
+- 启动先释放键盘和左右鼠标键；长按跨重启不重复复位、不恢复旧发射。默认机械归中，升降走原初始化；正常升降状态机未修改。
+- D5 b6为鼠标按下序号；D5 b0 bit1仍表示键鼠输入支持，新增bit3单独表示发射来源。摇杆与鼠标的云台角速度已在下板分轴仲裁。
+- 左键短按开轮、达速后完成一发；长按连发，松开制动且取消长按待发，摩擦轮保持转动。G关轮取消待发。鼠标会话结束后，S2须释放再重新触发，不能续接旧连发。
+- 人工依次检查：冷轮单击、长按达速与松键、长按待发取消、连续三次单发堵转与成功清零、鼠标重新按下/S2回中恢复、连发退让失败恢复、双输入分轴优先、拨杆/按键选档、180°方向、双板复位与长按防重触发。
+- 回归升降及小陀螺互锁、断联停机、热量/弹速保护、陀螺仪回正。机械参数加快后的稳定性需人工观察；本轮仅静态检查，未编译、测试或烧录。

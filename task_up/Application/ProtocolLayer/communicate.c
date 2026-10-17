@@ -12,6 +12,11 @@
 
 extern CAN_HandleTypeDef hcan2;
 
+volatile uint8_t board_reset_stopped; // 复位停机锁存，0/1
+volatile uint8_t board_reset_ack_sent; // 最近入队确认，0/A5/5A
+volatile uint8_t board_reset_ack; // 确认阶段，0/A5/5A
+volatile uint32_t board_reset_fail_count; // 复位失败累计，次
+volatile uint32_t board_d1_rx_tick; // D1接收时刻，ms
 Board_Rx_Info_t Board_Rx_Info; /* 下板控制输入 */
 volatile uint8_t Board_Rx_Shoot_Flags; /* 单字节发射状态快照 */
 Board_Tx_Info_t Board_Tx_Info; /* 上板反馈输出 */
@@ -78,6 +83,13 @@ static void Board_Rx_Pkt_01(uint8_t *rxbuf)
     Board_Rx_Info.shoot_pkt.lift_cmd_seq = rxbuf[6];
     Board_Rx_Info.shoot_pkt.lift_cmd_valid = (rxbuf[7] == BOARD_LIFT_CMD_TAG) ? 1u : 0u;
     Board_Rx_Info.state_pkt.r_turn_active = (rxbuf[5] >> 4) & 0x01; /* R掉头，0/1 */
+    if (board_reset_stopped != 0u)
+    {
+        Board_Rx_Info.state_pkt.car_state = 0u;
+        Board_Rx_Info.shoot_pkt.launch_state = 0u;
+        Board_Rx_Info.shoot_pkt.shoot_level = 0u;
+        Board_Rx_Info.shoot_pkt.feed_permit = 0u;
+    }
 }
 
 /* 解析 D2：云台目标角度 */
@@ -104,6 +116,10 @@ static void Board_Rx_Pkt_05(uint8_t *rxbuf)
     int16_t yaw_raw = (int16_t)(((uint16_t)rxbuf[2] << 8) | rxbuf[3]);   /* Yaw 控制原始值 */
     int16_t pitch_raw = (int16_t)(((uint16_t)rxbuf[4] << 8) | rxbuf[5]); /* Pitch 控制原始值 */
 
+    Board_Rx_Info.remote_cmd_pkt.shoot_source = (rxbuf[0] >> 3) & 1u;
+    Board_Rx_Info.remote_cmd_pkt.press_seq = rxbuf[6];
+    Board_Rx_Info.remote_cmd_pkt.reset_stage = rxbuf[7];
+    Board_Rx_Info.remote_cmd_pkt.rx_tick = HAL_GetTick();
     Board_Rx_Info.remote_cmd_pkt.valid = rxbuf[0] & 0x01u;            /* 数据有效 */
     Board_Rx_Info.remote_cmd_pkt.ctrl_source = (rxbuf[0] >> 1) & 0x01u;/* 输入源 */
     Board_Rx_Info.remote_cmd_pkt.button_bits = rxbuf[1];              /* 鼠标键 */
@@ -168,6 +184,7 @@ static HAL_StatusTypeDef Board_Tx_Meg_01(uint8_t *txbuf)
     txbuf[4] = (uint8_t)(zero >> 8);
     txbuf[5] = (uint8_t)zero;
     txbuf[6] = 0;
+    txbuf[7] = board_reset_ack;
 
     return CAN_SendData(&hcan2, ID_BOARD_TX1, txbuf);
 }
@@ -196,6 +213,7 @@ static HAL_StatusTypeDef Board_Tx_Meg_02(uint8_t *txbuf)
 void Board_Rx_01(uint8_t *rxbuf)
 {
     Board_Rx_Pkt_01(rxbuf);
+    board_d1_rx_tick = HAL_GetTick();
     Board_HeartBeat.offline_cnt_1 = 0;
 }
 
@@ -309,6 +327,7 @@ void Send_To_Down_Board(void)
         result = Board_Tx_Meg_01(board_tx_buf1);
         if (result == HAL_OK)
         {
+            board_reset_ack_sent = board_reset_ack;
             board_feedback_debug.c1_tx_tick = HAL_GetTick();
             board_feedback_debug.c1_ok_count++;
         }

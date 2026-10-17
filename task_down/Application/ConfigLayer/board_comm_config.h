@@ -22,7 +22,8 @@
 #define BOARD_SPEED_MAX_AGE_MS       65534u // 在线年龄饱和值，ms
 
 /* S2 档位软件消抖，单位：1 ms 控制周期。 */
-#define BOARD_LAUNCH_S2_DEBOUNCE_TICKS  15u
+#define BOARD_LAUNCH_S2_DEBOUNCE_TICKS  15u // 拨杆稳定时长，ms
+#define BOARD_LAUNCH_MOUSE_SESSION_MS 2100u // 点击会话保持，ms
 
 /* Temporarily bypassed vehicle modules during bring-up. */
 #define BOARD_LIFT_ENABLE               1u
@@ -40,6 +41,10 @@
 #define BOARD_MEC_PITCH_STEP_RAD        0.002f
 #define BOARD_MEC_PITCH_MIN_RAD         (-7.5f * 0.01745329251994329577f)
 #define BOARD_MEC_PITCH_MAX_RAD         (30.0f * 0.01745329251994329577f)
+
+#define BOARD_RESET_TIMEOUT_MS 500u // 阶段确认上限，ms
+#define BOARD_RESET_HOLD_MS 1000u // 组合键触发时长，ms
+#define BOARD_RESET_REBOOT_DELAY_MS 20u // 提交后复位延时，ms
 
 #endif
 

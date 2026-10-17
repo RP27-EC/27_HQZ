@@ -17,8 +17,10 @@
 
 chassis_cmd_t chassis_input_cmd; /* 输入解析后的底盘指令 */
 
-static uint8_t keyboard_source_active; /* 键鼠输入源已开启 */
-static uint8_t last_f_pressed; /* 上拍 F 键状态 */
+static uint8_t input_online; // 上拍输入在线，0/1
+static uint8_t last_s1; // 上拍S1档位，1~3
+static uint8_t last_s2; // 上拍S2档位，1~3
+static uint8_t translation_rear; // 实际平移反向，0/1
 static chassis_key_mode_e keyboard_chassis_mode; /* 键鼠底盘模式 */
 static uint8_t last_z_pressed; /* Z 键上次状态 */
 static uint8_t last_x_pressed; /* X 键上次状态 */
@@ -64,19 +66,13 @@ static float Chassis_RcAxisValue(int16_t axis)
     return constrain(value, -1.0f, 1.0f);
 }
 
-/* 当前是否由键盘模式接管 */
+/* 在线即允许键鼠输入 */
 uint8_t Chassis_Input_IsKeyboardMode(void)
 {
-#if !CHASSIS_KEYBOARD_INPUT_ENABLE
-    return 0u;
+#if CHASSIS_KEYBOARD_INPUT_ENABLE
+    return ((rc_dev.work_state == DEV_ONLINE) && (rc_dev.info != NULL)) ? 1u : 0u;
 #else
-    if ((keyboard_source_active == 0u) || (rc_dev.work_state != DEV_ONLINE) ||
-        (rc_dev.info == NULL))
-    {
-        return 0u;
-    }
-
-    return (rc_dev.info->s1.value == RC_SW_UP) ? 1u : 0u;
+    return 0u;
 #endif
 }
 
@@ -87,6 +83,20 @@ static void Chassis_Input_KeyboardModeUpdate(const rc_data_t *rc)
     uint8_t x_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_X) != 0u) ? 1u : 0u;
     uint8_t c_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_C) != 0u) ? 1u : 0u;
 
+    if ((input_online != 0u) &&
+        ((rc->s1.value != last_s1) || (rc->s2.value != last_s2)))
+    {
+        if (rc->s1.value == RC_SW_DOWN) keyboard_chassis_mode = CHASSIS_KEY_MODE_MECH;
+        else if (rc->s1.value == RC_SW_UP)
+        {
+            if ((rc->s2.value == RC_SW_DOWN) && (board_hole_request == 0u) &&
+                (board_hole_exit_pending == 0u) && (board.rx_meg->state_meg.is_down == 2u))
+                keyboard_chassis_mode = CHASSIS_KEY_MODE_SPIN;
+            else keyboard_chassis_mode = CHASSIS_KEY_MODE_FOLLOW;
+        }
+    }
+    last_s1 = rc->s1.value;
+    last_s2 = rc->s2.value;
     if (Chassis_Input_IsKeyboardMode() != 0u)
     {
         if ((z_pressed != 0u) && (last_z_pressed == 0u))
@@ -430,26 +440,17 @@ static void Chassis_Input_Keyboard(chassis_cmd_t *cmd, const rc_data_t *rc)
         scale = CHASSIS_KEY_SPEED_SLOW;
     }
 
-    /* 机械档的平移是纯底盘系，没人再帮它转向，所以基准在后方时这里整体反向，
-     * 保证 W 始终朝云台（视线）方向开。
-     * 跟随/小陀螺档的平移本来就按云台实际相对角旋转（chassis_follow/spin），
-     * 这里不能重复反向，否则两次旋转互相抵消。 */
-    if ((keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH) &&
-        (Chassis_Input_IsKeyboardYawRear() != 0u))
-    {
-        forward = -forward;
-        left = -left;
-    }
+    if ((rc->key_v & (KEY_PRESSED_OFFSET_W | KEY_PRESSED_OFFSET_S)) != 0u)
+        cmd->vx = CHASSIS_KEY_VX_SIGN * forward * scale * CHASSIS_MAX_VX;
+    if ((rc->key_v & (KEY_PRESSED_OFFSET_A | KEY_PRESSED_OFFSET_D)) != 0u)
+        cmd->vy = CHASSIS_KEY_VY_SIGN * left * scale * CHASSIS_MAX_VY;
+    if ((rc->key_v & (KEY_PRESSED_OFFSET_Q | KEY_PRESSED_OFFSET_E)) != 0u)
+        cmd->wz = CHASSIS_KEY_WZ_SIGN * spin * scale * CHASSIS_MAX_WZ;
 
-    cmd->vx = CHASSIS_KEY_VX_SIGN * forward * scale * CHASSIS_MAX_VX;
-    cmd->vy = CHASSIS_KEY_VY_SIGN * left * scale * CHASSIS_MAX_VY;
-    cmd->wz = CHASSIS_KEY_WZ_SIGN * spin * scale * CHASSIS_MAX_WZ;
-
-    /* 机械档：鼠标 X 直接转底盘，等价遥控 S1 下位时 ch0 的转向作用。
-     * 云台在机械档锁机械零位，底盘一转它就跟着转，视觉上像云台跟随底盘。 */
-    if (keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH)
+    if ((keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH) && (rc->mouse_x != 0.0f))
     {
-        /* 只对鼠标项限幅，Q/E 的 Shift 加速口径与改动前保持一致，不能被这里压回去 */
+        // NOTE: 鼠标优先于摇杆转向
+        if ((rc->key_v & (KEY_PRESSED_OFFSET_Q | KEY_PRESSED_OFFSET_E)) == 0u) cmd->wz = 0.0f;
         wz_key = constrain(rc->mouse_x * CHASSIS_KEY_MECH_MOUSE_WZ_GAIN,
                            -CHASSIS_KEY_MECH_MOUSE_WZ_MAX,
                            CHASSIS_KEY_MECH_MOUSE_WZ_MAX);
@@ -473,9 +474,12 @@ void Chassis_Input_Init(void)
     chassis_input_cmd.wz = 0.0f;
     chassis_input_cmd.valid = 0u;
     chassis_input_cmd.source = CHASSIS_SRC_NONE;
-    keyboard_source_active = 0u;
-    last_f_pressed = 0u;
-    keyboard_chassis_mode = CHASSIS_KEY_MODE_FOLLOW;
+    input_online = 0u;
+    translation_rear = 0u;
+    yaw_manual_override = 0u;
+    last_s1 = 0u;
+    last_s2 = 0u;
+    keyboard_chassis_mode = CHASSIS_KEY_MODE_MECH;
     last_z_pressed = 0u;
     last_x_pressed = 0u;
     last_c_pressed = 0u;
@@ -500,81 +504,52 @@ void Chassis_Input_SetSource(chassis_source_e source)
     chassis_input_cmd.source = source;
 }
 
-/* 周期解析键鼠或遥控，输出统一底盘指令 */
+/* 分轴仲裁后统一方向变换 */
 void Chassis_Input_Update(void)
 {
-    chassis_cmd_t cmd;                 /* 本周期输出 */
-    const rc_data_t *rc = rc_dev.info; /* 遥控数据源 */
-    uint8_t f_pressed = 0u;            /* F 键当前状态 */
+    chassis_cmd_t cmd = {0};
+    const rc_data_t *rc = rc_dev.info;
+    uint32_t now = HAL_GetTick();
 
-    rc_mouse_debug.input_tick = HAL_GetTick();
+    rc_mouse_debug.input_tick = now;
     rc_mouse_debug.mech_wz = 0.0f;
     rc_mouse_debug.input_wz = 0.0f;
     rc_mouse_debug.keyboard_active = 0u;
-    rc_mouse_debug.chassis_mode = (uint8_t)CHASSIS_KEY_MODE_FOLLOW;
-
-    cmd.vx = 0.0f;
-    cmd.vy = 0.0f;
-    cmd.wz = 0.0f;
-    cmd.valid = 0u;
-    cmd.source = CHASSIS_SRC_NONE;
-
-    /* 遥控离线时清零输入，避免保留旧速度 */
     if ((rc_dev.work_state != DEV_ONLINE) || (rc == NULL))
     {
-        keyboard_source_active = 0u;
-        last_f_pressed = 0u;
-        keyboard_chassis_mode = CHASSIS_KEY_MODE_FOLLOW;
-        last_z_pressed = 0u;
-        last_x_pressed = 0u;
-        last_c_pressed = 0u;
-        Chassis_Input_ResetYawReference();
-        last_r_pressed = (rc != NULL && (rc->key_v & KEY_PRESSED_OFFSET_R) != 0u) ? 1u : 0u;
-        chassis_input_cmd = cmd;
+        Chassis_Input_Init();
         return;
     }
-
-    f_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_F) != 0u) ? 1u : 0u;
-    /* F 切换输入源 */
-    if ((f_pressed != 0u) && (last_f_pressed == 0u) && (rc->s1.value == RC_SW_UP))
-    {
-        keyboard_source_active ^= 1u;
-    }
-    last_f_pressed = f_pressed;
-
     Chassis_Input_KeyboardModeUpdate(rc);
-    /* R 掉头（机械档翻基准 / 跟随档起掉头动作）必须在驱动之前更新，
-     * 同拍的 WASD 反向才跟得上 */
+    input_online = 1u;
     Chassis_Input_UturnUpdate(rc);
-
-    /* 键鼠模式优先于遥控摇杆 */
-#if CHASSIS_KEYBOARD_INPUT_ENABLE
-    if (Chassis_Input_IsKeyboardMode() != 0u)
-    {
-        Chassis_Input_Keyboard(&cmd, rc);
-        chassis_input_cmd = cmd;
-        return;
-    }
-#endif
-
 #if CHASSIS_RC_INPUT_ENABLE
-    /* S1 上/下都允许底盘直控，机械模式也保留平移和转向 */
-    if ((rc->s1.value == RC_SW_UP) ||
-        (rc->s1.value == RC_SW_DOWN))
+    if ((rc->s1.value == RC_SW_UP) || (rc->s1.value == RC_SW_DOWN))
     {
         cmd.vx = -Chassis_RcAxisValue(rc->ch3) * CHASSIS_MAX_VX;
         cmd.vy = Chassis_RcAxisValue(rc->ch2) * CHASSIS_MAX_VY;
 #if CHASSIS_OWNS_RC_YAW
-        cmd.wz = Chassis_RcAxisValue(rc->ch0) * CHASSIS_MAX_WZ;
-#else
-        cmd.wz = 0.0f;
+        if (keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH)
+            cmd.wz = Chassis_RcAxisValue(rc->ch0) * CHASSIS_MAX_WZ;
 #endif
         cmd.valid = 1u;
         cmd.source = CHASSIS_SRC_RC;
     }
-#else
-    (void)rc;
 #endif
-
+#if CHASSIS_KEYBOARD_INPUT_ENABLE
+    Chassis_Input_Keyboard(&cmd, rc);
+#endif
+    if (keyboard_chassis_mode == CHASSIS_KEY_MODE_MECH)
+    {
+        if ((board.status->gimbal_data_valid != 0u) &&
+            ((now - board.status->gimbal_rx_time_ms) <= CHASSIS_FOLLOW_TIMEOUT_MS))
+            translation_rear = Chassis_Input_SelectNearestYaw(
+                board.rx_meg->gimbal_meg.yaw_mec, translation_rear);
+        if (translation_rear != 0u)
+        {
+            cmd.vx = -cmd.vx;
+            cmd.vy = -cmd.vy;
+        }
+    }
     chassis_input_cmd = cmd;
 }

@@ -11,7 +11,7 @@
 #define BOARD_RC_AXIS_DEADBAND          20.0f  /* 摇杆死区 */
 #define BOARD_RC_AXIS_MAX               660.0f /* 摇杆幅值 */
 #define BOARD_D5_YAW_RATE_MAX_DEG_S     150.0f /* Yaw 最大角速度 */
-#define BOARD_D5_KEYBOARD_YAW_MAX_DEG_S 300.0f // 键鼠Yaw上限，deg/s
+#define BOARD_D5_KEYBOARD_YAW_MAX_DEG_S 255.0f // 键鼠Yaw上限，deg/s
 #define BOARD_LIFT_CMD_TAG              0xA5u // 升降序号协议标识
 #define BOARD_D5_PITCH_RATE_MAX_DEG_S   150.0f /* Pitch 最大角速度 */
 #define BOARD_D5_RATE_LSB_DEG_S         0.1f   /* 角速度量化步长 */
@@ -22,11 +22,21 @@
 #define BOARD_D5_CMD_MOUSE_DELTA        1u  /* 鼠标增量控制量 */
 
 /* 鼠标计数值直通角速度；Pitch 符号保留当前修正方向。 */
-#define BOARD_D5_MOUSE_YAW_GAIN          7.5f // 鼠标增益，deg/s/count
-#define BOARD_D5_MOUSE_PITCH_GAIN       -3.0f
+#define BOARD_D5_MOUSE_YAW_GAIN          6.375f // 鼠标增益，deg/s/count
+#define BOARD_D5_MOUSE_PITCH_GAIN       -3.0f // Pitch增益，deg/s/count
+
+/* 双板复位协议标记 */
+#define BOARD_RESET_PREPARE 0xA5u // 复位准备阶段标记
+#define BOARD_RESET_COMMIT  0x5Au // 复位提交阶段标记
+
+extern volatile uint8_t board_reset_tx_stage; // 已停机发布阶段，0/A5/5A
+extern volatile uint8_t board_reset_stage; // 请求阶段，0/A5/5A
+extern volatile uint8_t board_reset_ack; // 确认阶段，0/A5/5A
+extern volatile uint32_t board_reset_ack_tick; // 最近C1时刻，ms
+extern volatile uint32_t board_reset_fail_count; // 复位失败累计，次
 
 /* 下板发送报文 */
-#define  ID_PKT_01     0xD1  /* 整车状态与发射 */
+#define  ID_PKT_01     0xD1 // 整车及发射，标准ID
 #define  ID_PKT_02     0xD2  /* 云台目标角度 */
 #define  ID_PKT_03     0xD3  /* 射击热量信息 */
 #define  ID_PKT_04     0xD4  /* 血量数据 */

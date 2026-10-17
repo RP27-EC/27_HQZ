@@ -43,7 +43,8 @@ typedef struct Launch_Struct_t{
     void (*heart_beat)(struct Launch_Struct_t* launch); // 心跳回调，非空
 }Launch_t;
 
-extern  Launch_t  launch;
+extern uint8_t launch_mouse_press_seq; // 鼠标按下序号，0~255
+extern Launch_t launch;
 #endif
 
 

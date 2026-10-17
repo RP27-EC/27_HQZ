@@ -1,6 +1,7 @@
 /* board_protocol.c - 板间通信协议 */
 
 #include "board_protocol.h"
+#include "launch.h"
 #include "judge.h"
 #include "board_comm_config.h"
 #include "rc_sensor.h"
@@ -355,9 +356,13 @@ void Board_Tx_Pkt_05(Board_t* board)
                                      -BOARD_D5_KEYBOARD_YAW_MAX_DEG_S,
                                      BOARD_D5_KEYBOARD_YAW_MAX_DEG_S);
             }
+            if ((rc_dev.info->mouse_x == 0.0f) && (Chassis_Input_IsUturnActive() == 0u))
+                yaw_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch0, BOARD_D5_YAW_RATE_MAX_DEG_S);
             pitch_rate = constrain(rc_dev.info->mouse_y * BOARD_D5_MOUSE_PITCH_GAIN,
                                    -BOARD_D5_PITCH_RATE_MAX_DEG_S,
                                    BOARD_D5_PITCH_RATE_MAX_DEG_S);
+            if (rc_dev.info->mouse_y == 0.0f)
+                pitch_rate = Board_Remote_Axis_To_Rate(rc_dev.info->ch1, BOARD_D5_PITCH_RATE_MAX_DEG_S);
         }
         else
 #endif
@@ -410,14 +415,15 @@ void Board_Tx_Pkt_05(Board_t* board)
     /* D5 状态位，低位依次为有效、来源、类型 */
     pkt_05[0] = (valid & 0x01u) |
                 ((ctrl_source & 0x01u) << 1) |
-                ((cmd_type & 0x01u) << 2);
+                ((cmd_type & 0x01u) << 2) |
+                ((board->tx_pkt->shoot_pkt.ctrl_source & 0x01u) << 3);
     pkt_05[1] = button_bits;
     pkt_05[2] = (uint8_t)((uint16_t)yaw_raw >> 8);
     pkt_05[3] = (uint8_t)yaw_raw;
     pkt_05[4] = (uint8_t)((uint16_t)pitch_raw >> 8);
     pkt_05[5] = (uint8_t)pitch_raw;
-    pkt_05[6] = 0u;
-    pkt_05[7] = 0u;
+    pkt_05[6] = launch_mouse_press_seq;
+    pkt_05[7] = board_reset_tx_stage;
 
     if ((CAN_SendData(&hfdcan2, ID_PKT_05, pkt_05) == HAL_OK) &&
         (board->status->gimbal_d1_tx_ok != 0u) &&
@@ -441,6 +447,8 @@ void Board_Rx_Meg_01(Board_t* board,uint8_t* rxbuf)
 	board->rx_meg->state_meg.dial_motor_state= (rxbuf[0] >> 5) & 0x01;
 	board->rx_meg->state_meg.vision_state= (rxbuf[0] >> 6) & 0x01;
 	board->rx_meg->state_meg.is_down= rxbuf[1];
+    board_reset_ack = rxbuf[7];
+    board_reset_ack_tick = HAL_GetTick();
 	
 	uint16_t t1 = ((uint16_t)rxbuf[2] << 8) | rxbuf[3]; /* Yaw 目标原始值 */
   uint16_t t2 = ((uint16_t)rxbuf[4] << 8) | rxbuf[5]; /* Pitch 目标原始值 */

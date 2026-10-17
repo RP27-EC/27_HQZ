@@ -42,6 +42,9 @@
 #define LAUNCHER_SPEED_BULLET_TYPE        1u // 17mm弹丸类型，值1
 #define LAUNCHER_SPEED_SHOOTER_NUMBER     1u // 第一17mm机构，值1
 
+#define LAUNCHER_INPUT_TIMEOUT_MS         50u // 发射控制帧上限，ms
+#define LAUNCHER_SINGLE_JAM_LIMIT          3u // 连续单发堵转上限，次
+
 /* 单发位置控制 */
 #define LAUNCHER_DIAL_ANGLE_KP            0.08f // 位置增益，(deg/s)/count
 #define LAUNCHER_DIAL_ANGLE_KI            0.0f // 积分增益，速度/累积误差

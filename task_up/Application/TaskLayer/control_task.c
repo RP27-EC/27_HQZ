@@ -10,6 +10,82 @@
 #include "board_remote_config.h"
 #include "launcher.h"
 
+extern CAN_HandleTypeDef hcan1;
+extern CAN_HandleTypeDef hcan2;
+static uint8_t reset_preparing; // 停机准备进行中，0/1
+static uint8_t reset_wait_idle; // 等待请求释放，0/1
+static uint32_t reset_phase_tick; // 阶段起点，ms
+static uint32_t reset_commit_tick; // 确认入队时刻，ms
+static uint8_t reset_commit_sent; // 提交确认已入队，0/1
+
+static void Board_Reset_Update(void)
+{
+    uint32_t now = HAL_GetTick();
+    uint8_t request = Board_Rx_Info.remote_cmd_pkt.reset_stage;
+    uint8_t fresh = ((Board_HeartBeat.status == DEV_ONLINE) &&
+        (Board_Rx_Info.remote_cmd_pkt.valid != 0u) &&
+        ((now - Board_Rx_Info.remote_cmd_pkt.rx_tick) < BOARD_RESET_TIMEOUT_MS));
+
+    if ((fresh != 0u) && (request == 0u)) reset_wait_idle = 0u;
+    if ((fresh != 0u) && (request == BOARD_RESET_PREPARE) &&
+        (board_reset_ack == 0u) && (reset_preparing == 0u) && (reset_wait_idle == 0u))
+    {
+        board_reset_stopped = 1u;
+        reset_preparing = 1u;
+        board_reset_ack_sent = 0u;
+        reset_phase_tick = now;
+        reset_commit_sent = 0u;
+    }
+    if ((reset_preparing != 0u) && ((now - reset_phase_tick) >= 1u) &&
+        (HAL_CAN_GetTxMailboxesFreeLevel(&hcan1) == 3u) &&
+        (HAL_CAN_GetTxMailboxesFreeLevel(&hcan2) == 3u))
+    {
+        reset_preparing = 0u;
+        board_reset_ack = BOARD_RESET_PREPARE;
+    }
+    if ((fresh != 0u) && (request == BOARD_RESET_COMMIT) &&
+        (board_reset_ack == BOARD_RESET_PREPARE))
+    {
+        board_reset_ack_sent = 0u;
+        board_reset_ack = BOARD_RESET_COMMIT;
+        reset_phase_tick = now;
+    }
+    if (((board_reset_ack != 0u) || (reset_preparing != 0u)) &&
+        ((now - reset_phase_tick) >= BOARD_RESET_TIMEOUT_MS))
+    {
+        board_reset_fail_count++;
+        board_reset_ack = 0u;
+        reset_preparing = 0u;
+        reset_commit_sent = 0u;
+        reset_wait_idle = 1u;
+    }
+    if (board_reset_stopped != 0u)
+    {
+        Board_Rx_Info.state_pkt.car_state = 0u;
+        Board_Rx_Info.shoot_pkt.launch_state = 0u;
+        Board_Rx_Info.shoot_pkt.shoot_level = 0u;
+        Board_Rx_Info.shoot_pkt.feed_permit = 0u;
+    }
+}
+
+static void Board_Reset_Finish(void)
+{
+    uint32_t now = HAL_GetTick();
+    if ((board_reset_ack == BOARD_RESET_COMMIT) &&
+        (board_reset_ack_sent == BOARD_RESET_COMMIT) &&
+        (reset_commit_sent == 0u))
+    {
+        reset_commit_sent = 1u;
+        reset_commit_tick = now;
+    }
+    if ((reset_commit_sent != 0u) && ((now - reset_commit_tick) >= BOARD_RESET_REBOOT_DELAY_MS) &&
+        (HAL_CAN_GetTxMailboxesFreeLevel(&hcan2) == 3u))
+    {
+        __DSB();
+        NVIC_SystemReset();
+    }
+}
+
 volatile imu_debug_t imu_dbg; /* IMU 在线调试快照 */
 
 /* 将 IMU 内部数据同步到调试结构体 */
@@ -82,10 +158,12 @@ void StartControlTask(void const *argument)
 #if GIMBAL_LOCAL_RC_ENABLE
         rc_interrupt_update(&rc_dev);
 #endif
+        Board_Reset_Update();
         Module_Work();
         gimbal_can_send();
         Launcher_Work();
         Send_To_Down_Board();
+        Board_Reset_Finish();
 
         if (osDelayUntil(&next_tick, 1u) != osOK)
         {

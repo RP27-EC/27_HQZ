@@ -5,6 +5,7 @@
 #include "rc_sensor.h"
 #include "chassis_input.h"
 #include "board_comm_config.h"
+#include "main.h"
 
 static void Launch_Init(Launch_t *launch);
 static void Launch_Work(Launch_t *launch);
@@ -24,6 +25,9 @@ static uint8_t launch_keyboard_fric_on; // 键鼠摩擦轮使能，0/1
 static uint8_t launch_keyboard_last_g; // 上拍G键电平，0/1
 static uint8_t launch_keyboard_mouse_ready; // 新按下已解锁，0/1
 static uint8_t launch_keyboard_last_mouse; // 上拍左键电平，0/1
+uint8_t launch_mouse_press_seq; // 鼠标按下序号，0~255
+static uint8_t launch_pending_press_seq; // 待发布序号，0~255
+static uint32_t launch_keyboard_tick; // 键鼠会话时刻，ms
 
 /* 发射机构全局对象 */
 
@@ -102,128 +106,106 @@ static void Launch_Init(Launch_t *launch)
     launch->block_reason = 1u;
 }
 
-/* 根据键鼠或遥控拨杆更新发射状态与模式 */
+/* 鼠标会话优先，遥控需重新解锁 */
 static void Launch_Data_Update(Launch_t *launch)
 {
     uint8_t s1;
     uint8_t s2;
-    uint8_t g_now;
     uint8_t mouse_down;
-    uint8_t feed_safe = 1u;
-    uint8_t switch_changed;
+    uint8_t g_now;
+    uint8_t g_edge;
+    uint8_t mouse_edge;
+    uint8_t changed;
+    uint8_t safe;
+    uint32_t now = HAL_GetTick();
 
     launch->state = L_LOCK;
     launch->mode = SINGLE_SHOT;
     launch->shoot_level = 0u;
     launch->feed_permit = 0u;
     launch->s2_mid = 0u;
-    launch->ctrl_source = 0u;
-    launch->block_reason = 1u;
-    if ((rc_dev.work_state != DEV_ONLINE) ||
-        (board.status->status != DEV_ONLINE))
+    launch->ctrl_source = 1u;
+    launch->block_reason = 3u;
+    if ((rc_dev.work_state != DEV_ONLINE) || (rc_dev.info == NULL) ||
+        (board.status->status != DEV_ONLINE) || (board.tx_pkt->car_pkt.car_state == 0u))
     {
         Launch_Reset_Shoot_Arm();
         Launch_Reset_S2_Filter();
         launch_keyboard_active = 0u;
         launch_keyboard_fric_on = 0u;
         launch_keyboard_mouse_ready = 0u;
-        launch_keyboard_last_g = 0u;
-        launch_keyboard_last_mouse = 0u;
+        launch_keyboard_last_g = (rc_dev.info != NULL &&
+            (rc_dev.info->key_v & KEY_PRESSED_OFFSET_G) != 0u) ? 1u : 0u;
+        launch_keyboard_last_mouse = (rc_dev.info != NULL) ? rc_dev.info->mouse_btn_l.value : 0u;
         launch_remote_feed_ready = 0u;
-        launch->block_reason = 3u;
         return;
     }
-    feed_safe = (board.tx_pkt->gimbal_target_pkt.is_hole == 0u) ? 1u : 0u;
-    launch->feed_permit = feed_safe;
-    launch->ctrl_source = (Chassis_Input_IsKeyboardMode() != 0u) ? 1u : 0u;
-    if (launch->ctrl_source != 0u)
+    s1 = rc_dev.info->s1.value;
+    s2 = Launch_Filter_S2(rc_dev.info->s2.value);
+    launch->s2_mid = (s2 == RC_SW_MID) ? 1u : 0u;
+    changed = ((launch_shoot_switch_seen != 0u) && (s2 != launch_shoot_previous_switch));
+    launch_shoot_switch_seen = 1u;
+    launch_shoot_previous_switch = s2;
+    safe = (board.tx_pkt->gimbal_target_pkt.is_hole == 0u);
+    launch->feed_permit = safe;
+    mouse_down = rc_dev.info->mouse_btn_l.value & 1u;
+    g_now = ((rc_dev.info->key_v & KEY_PRESSED_OFFSET_G) != 0u);
+    g_edge = ((g_now != 0u) && (launch_keyboard_last_g == 0u));
+    mouse_edge = ((mouse_down != 0u) && (launch_keyboard_last_mouse == 0u) &&
+                  (launch_keyboard_mouse_ready != 0u) && (safe != 0u));
+    if (safe == 0u) launch_keyboard_mouse_ready = 0u;
+    else if (mouse_down == 0u) launch_keyboard_mouse_ready = 1u;
+    if (g_edge != 0u)
     {
-        Launch_Reset_Shoot_Arm();
-        Launch_Reset_S2_Filter();
-        launch_remote_feed_ready = 0u;
-        g_now = ((rc_dev.info->key_v & KEY_PRESSED_OFFSET_G) != 0u) ? 1u : 0u;
-        mouse_down = (uint8_t)(rc_dev.info->mouse_btn_l.value & 0x01u);
-        if (launch_keyboard_active == 0u)
-        {
-            launch_keyboard_active = 1u;
-            launch_keyboard_fric_on = 0u;
-            launch_keyboard_last_g = g_now;
-            launch_keyboard_mouse_ready = 0u;
-            launch_keyboard_last_mouse = mouse_down;
-        }
-        if (feed_safe == 0u) launch_keyboard_mouse_ready = 0u;
-        else if (mouse_down == 0u) launch_keyboard_mouse_ready = 1u;
-        if ((g_now != 0u) && (launch_keyboard_last_g == 0u))
-        {
-            launch_keyboard_fric_on ^= 1u;
-            launch_keyboard_mouse_ready = 0u;
-        }
-        else if ((mouse_down != 0u) && (launch_keyboard_last_mouse == 0u) &&
-                 (launch_keyboard_mouse_ready != 0u))
-        {
-            launch_keyboard_fric_on = 1u;
-        }
-        launch_keyboard_last_g = g_now;
-        launch_keyboard_last_mouse = mouse_down;
-        launch->state = (launch_keyboard_fric_on != 0u) ? L_UNLOCK : L_LOCK;
-        if ((feed_safe != 0u) && (mouse_down != 0u) &&
-            (launch_keyboard_mouse_ready != 0u) && (launch_keyboard_fric_on != 0u))
-        {
-            launch->mode = (rc_dev.info->mouse_btn_l.status == long_press) ?
-                           REPEAT_SHOT : SINGLE_SHOT;
-            launch->shoot_level = 1u;
-        }
-        launch->block_reason = (feed_safe == 0u) ? 2u :
-            ((launch->state == L_LOCK) ? 1u :
-             ((launch_keyboard_mouse_ready == 0u) ? 5u : 0u));
-        return;
+        launch_keyboard_fric_on ^= 1u;
+        launch_keyboard_mouse_ready = 0u;
+        mouse_edge = 0u;
+        launch_keyboard_active = 1u;
+        launch_keyboard_tick = now;
     }
+    if (mouse_edge != 0u)
+    {
+        launch_pending_press_seq++;
+        launch_keyboard_fric_on = 1u;
+        launch_keyboard_active = 1u;
+    }
+    if ((launch_keyboard_active != 0u) && (mouse_down != 0u)) launch_keyboard_tick = now;
+    if ((launch_keyboard_active != 0u) && (mouse_down == 0u) &&
+        ((now - launch_keyboard_tick) >= BOARD_LAUNCH_MOUSE_SESSION_MS)) launch_keyboard_active = 0u;
+    launch_keyboard_last_g = g_now;
+    launch_keyboard_last_mouse = mouse_down;
 
     if (launch_keyboard_active != 0u)
     {
-        Launch_Reset_Shoot_Arm();
-        Launch_Reset_S2_Filter();
-        launch_remote_feed_ready = 0u;
-    }
-    launch_keyboard_active = 0u;
-    launch_keyboard_fric_on = 0u;
-    launch_keyboard_mouse_ready = 0u;
-    launch_keyboard_last_g = 0u;
-    s1 = (uint8_t)rc_dev.info->s1.value;
-    s2 = Launch_Filter_S2((uint8_t)rc_dev.info->s2.value);
-    launch->s2_mid = (s2 == RC_SW_MID) ? 1u : 0u;
-    switch_changed = ((launch_shoot_switch_seen != 0u) &&
-                      (s2 != launch_shoot_previous_switch)) ? 1u : 0u;
-    launch_shoot_switch_seen = 1u;
-    launch_shoot_previous_switch = s2;
-
-    if (((s1 != RC_SW_UP) && (s1 != RC_SW_MID)) ||
-        ((s1 == RC_SW_UP) && (s2 == RC_SW_DOWN)))
-    {
         launch_shoot_armed = 0u;
         launch_remote_feed_ready = 0u;
-        launch->feed_permit = 0u;
-        launch->block_reason = 4u;
-        return;
-    }
-    if (switch_changed != 0u) launch_shoot_armed = 1u;
-    if (feed_safe == 0u) launch_remote_feed_ready = 0u;
-    else if (s2 != RC_SW_UP) launch_remote_feed_ready = 1u;
-
-    if ((launch_shoot_armed != 0u) &&
-        ((s2 == RC_SW_UP) || (s2 == RC_SW_MID)))
-    {
-        launch->state = L_UNLOCK;
-        if ((feed_safe != 0u) && (launch_remote_feed_ready != 0u) &&
-            (s2 == RC_SW_UP))
+        launch->state = launch_keyboard_fric_on ? L_UNLOCK : L_LOCK;
+        if ((safe != 0u) && (mouse_down != 0u) &&
+            (launch_keyboard_mouse_ready != 0u) && (launch_keyboard_fric_on != 0u))
         {
-            launch->mode = (s1 == RC_SW_UP) ? REPEAT_SHOT : SINGLE_SHOT;
             launch->shoot_level = 1u;
+            launch->mode = (rc_dev.info->mouse_btn_l.status == long_press) ? REPEAT_SHOT : SINGLE_SHOT;
         }
     }
-    launch->block_reason = (feed_safe == 0u) ? 2u :
-        ((launch->state == L_LOCK) ? 1u :
-         ((launch_remote_feed_ready == 0u) ? 5u : 0u));
+    else
+    {
+        if (s2 != RC_SW_UP) launch_remote_feed_ready = 1u;
+        if (changed != 0u) launch_shoot_armed = 1u;
+        launch->state = launch_keyboard_fric_on ? L_UNLOCK : L_LOCK;
+        if (((s1 == RC_SW_UP) || (s1 == RC_SW_MID)) &&
+            !((s1 == RC_SW_UP) && (s2 == RC_SW_DOWN)) &&
+            (launch_shoot_armed != 0u) && ((s2 == RC_SW_UP) || (s2 == RC_SW_MID)))
+        {
+            launch->state = L_UNLOCK;
+            if ((safe != 0u) && (s2 == RC_SW_UP) && (launch_remote_feed_ready != 0u))
+            {
+                launch->ctrl_source = 0u;
+                launch->shoot_level = 1u;
+                launch->mode = (s1 == RC_SW_UP) ? REPEAT_SHOT : SINGLE_SHOT;
+            }
+        }
+    }
+    launch->block_reason = !safe ? 2u : ((launch->state == L_LOCK) ? 1u : 0u);
 }
 
 /* 从板间状态同步发射子设备在线信息 */
@@ -237,12 +219,16 @@ static void Launch_Offline_Update(Launch_t *launch)
 /* 将许可、模式和触发电平写入板间报文 */
 static void Launch_Cmd_Transmit(Launch_t *launch)
 {
+    uint32_t irq = __get_PRIMASK();
+    __disable_irq();
     board.tx_pkt->shoot_pkt.launch_state = launch->state;  /* 发射许可 */
     board.tx_pkt->shoot_pkt.shoot_mode = launch->mode;    /* 单发/连发 */
     board.tx_pkt->shoot_pkt.shoot_level = launch->shoot_level; /* 触发 */
     board.tx_pkt->shoot_pkt.feed_permit = launch->feed_permit;
     board.tx_pkt->shoot_pkt.s2_mid = launch->s2_mid;
     board.tx_pkt->shoot_pkt.ctrl_source = launch->ctrl_source;
+    launch_mouse_press_seq = launch_pending_press_seq;
+    __set_PRIMASK(irq);
 }
 
 /* 发射机构周期任务 */

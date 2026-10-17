@@ -40,8 +40,8 @@
 #define CHASSIS_SPIN_TORQUE_LIMIT_NM     4.0f
 
 // NOTE: 机械鼠标直接驱动底盘
-#define CHASSIS_KEY_MECH_MOUSE_WZ_GAIN    10.0f // 鼠标增益，rad/s/count
-#define CHASSIS_KEY_MECH_MOUSE_WZ_MAX     15.0f // 鼠标转向上限，rad/s
+#define CHASSIS_KEY_MECH_MOUSE_WZ_GAIN    8.5f // 鼠标增益，rad/s/count
+#define CHASSIS_KEY_MECH_MOUSE_WZ_MAX     12.75f // 鼠标转向上限，rad/s
 #define CHASSIS_KEY_MECH_MOUSE_WZ_SIGN    1.0f // 鼠标方向，仅±1
 
 /* 到位门限与跟随死区匹配，避免交接后补转。 */

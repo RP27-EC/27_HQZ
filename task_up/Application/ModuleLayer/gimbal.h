@@ -41,8 +41,8 @@
 #define GIMBAL_MEC_OUTER_D_FILTER_ALPHA  0.85f // 旧微分滤波系数，0~1
 #define GIMBAL_MEC_ERR_DEADBAND_DEG      0.2f // 旧角度死区，deg
 #define GIMBAL_MEC_YAW_MAX_RATE_DEG_S    GIMBAL_R_TURN_YAW_MAX_RATE_DEG_S // 回正上限同R，deg/s
-#define GIMBAL_MEC_YAW_DECEL_RAD_S2      25.0f // 制动减速度，rad/s²
-#define GIMBAL_MEC_YAW_TORQUE_STEP_NM    0.08f // 加速力矩斜坡，N·m/ms
+#define GIMBAL_MEC_YAW_DECEL_RAD_S2      30.0f // 制动减速度，rad/s²
+#define GIMBAL_MEC_YAW_TORQUE_STEP_NM    0.10f // 加速力矩斜坡，N·m/ms
 
 #define GIMBAL_MEC_YAW_FF_OFF_DPS        25.0f // 底盘前馈关闭阈值，deg/s
 #define GIMBAL_MEC_YAW_FF_FULL_DPS       35.0f // 底盘前馈全量阈值，deg/s
@@ -50,7 +50,7 @@
 #define GIMBAL_MEC_YAW_FF_FALL_STEP      0.10f // 前馈增益减量，0~1/拍
 #define GIMBAL_MEC_YAW_FF_FILTER_ALPHA   0.05f // 底盘速度滤波系数，0~1
 #define GIMBAL_MEC_YAW_FF_MAX_GAIN       0.90f // 底盘前馈增益，0~1
-#define GIMBAL_MEC_YAW_NEAR_RATE_KP      30.0f // 近区速度增益，s^-1
+#define GIMBAL_MEC_YAW_NEAR_RATE_KP      36.0f // 近区速度增益，s^-1
 /* 静摩擦补偿只在误差死区外生效。 */
 #define GIMBAL_MEC_YAW_FRICTION_FF_NM    0.3f
 /* 速度反馈低通滤波系数，0~1。 */
@@ -74,10 +74,10 @@
 /* 机械 Yaw 位置环与速度环参数。 */
 
 /* 位置环增益与积分限幅。 */
-#define GIMBAL_MEC_HOLD_KP_NM_PER_DEG    1.5f
-#define GIMBAL_MEC_HOLD_KI_NM_PER_DEG    0.0f
-#define GIMBAL_MEC_HOLD_KD_NM_PER_DEG    0.0f
-#define GIMBAL_MEC_HOLD_KI_LIMIT         150.0f
+#define GIMBAL_MEC_HOLD_KP_NM_PER_DEG    1.8f // 位置增益，输出/count
+#define GIMBAL_MEC_HOLD_KI_NM_PER_DEG    0.0f // 积分增益，输出/(count·s)
+#define GIMBAL_MEC_HOLD_KD_NM_PER_DEG    0.0f // 微分增益，输出·s/count
+#define GIMBAL_MEC_HOLD_KI_LIMIT         150.0f // 积分输出上限，控制量
 
 /* 速度环增益、限幅和死区。 */
 #define GIMBAL_MEC_HOLD_RATE_KP_NM_PER_DPS  0.1f
@@ -123,7 +123,7 @@
 #define GIMBAL_RC_AXIS_DEADBAND            20.0f
 /* 遥控器满杆时 Yaw 最大目标角速度*/
 #define GIMBAL_MANUAL_YAW_RATE_DEG_S       150.0f
-#define GIMBAL_KEYBOARD_YAW_RATE_DEG_S     300.0f // 键鼠手动上限，deg/s
+#define GIMBAL_KEYBOARD_YAW_RATE_DEG_S     255.0f // 键鼠手动上限，deg/s
 /* 操作手 Yaw 方向符号 */
 #define GIMBAL_MANUAL_YAW_SIGN             (-1.0f)
 /* 遥控器满杆时 Pitch 最大目标角速度*/
