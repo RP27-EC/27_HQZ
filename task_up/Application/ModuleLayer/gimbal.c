@@ -31,6 +31,13 @@ static float gimbal_abs(float value)
     return (value >= 0.0f) ? value : -value;
 }
 
+static float gimbal_soft_deadzone(float value, float deadzone)
+{
+    if (value > deadzone) return value - deadzone;
+    if (value < -deadzone) return value + deadzone;
+    return 0.0f;
+}
+
 static float gimbal_clamp(float value, float min_value, float max_value)
 {
     if (value > max_value) return max_value;
@@ -654,6 +661,7 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
         (pitch_zero_hold != gimbal->feedforward.pitch_zero_hold_last);
     float yaw_integral_before;
     float yaw_limit;
+    float yaw_error_deg;
 
     if (pitch_zero_transition != 0u)
     {
@@ -774,8 +782,21 @@ static void gimbal_update_rate_targets(gimbal_t *gimbal)
     gimbal->feedforward.pitch_zero_hold_last = pitch_zero_hold;
 
     /* 保持环：角度误差 -> 角速度修正量 */
-    gimbal->pid_info.yaw_hold.err = gimbal_wrap_deg(
+    yaw_error_deg = gimbal_wrap_deg(
         gimbal->feedforward.yaw_hold_angle_deg - gimbal->base_info.yaw_imu_angle);
+    gimbal->pid_info.yaw_hold.deadband = GIMBAL_HOLD_ERR_DEADBAND_DEG;
+    if (gimbal->gimbal_mode == G_RATE)
+    {
+        // NOTE: 软死区消除边界跳变
+        gimbal->pid_info.yaw_hold.deadband = 0.0f;
+        yaw_error_deg = gimbal_soft_deadzone(yaw_error_deg, GIMBAL_HOLD_ERR_DEADBAND_DEG);
+        if (yaw_error_deg == 0.0f)
+        {
+            gimbal->pid_info.yaw_hold.integral = 0.0f;
+            gimbal->pid_info.yaw_hold.iout = 0.0f;
+        }
+    }
+    gimbal->pid_info.yaw_hold.err = yaw_error_deg;
     yaw_integral_before = gimbal->pid_info.yaw_hold.integral;
     single_pid_ctrl(&gimbal->pid_info.yaw_hold);
     yaw_limit = (yaw_mag <= gimbal_tune.rate_hold_enter_deg_s) ?

@@ -183,6 +183,8 @@ void Board_Tx_Pkt_01(Board_t* board)
 	pkt_01[5] |= (board->tx_pkt->gimbal_target_pkt.is_hole & 0x01) << 3; /* 过洞标志 */
 	pkt_01[5] |= (board->tx_pkt->car_pkt.r_turn_active & 0x01) << 4; /* R掉头，0/1 */
 	pkt_01[5] |= (board->tx_pkt->shoot_pkt.feed_permit & 0x01) << 5; /* 供弹许可，0/1 */
+	pkt_01[5] |= (board->tx_pkt->shoot_pkt.s2_mid & 0x01) << 6; // S2中位，0/1
+	pkt_01[5] |= (board->tx_pkt->shoot_pkt.ctrl_source & 0x01) << 7; // 输入源，0/1
 	
 
 	board->status->gimbal_d1_tx_ok =

@@ -10,6 +10,7 @@
 lift_t lift;
 lift_tune_t lift_tune;
 volatile lift_debug_t lift_debug;
+static uint32_t lift_control_dt_ms; // 本次控制间隔，0~100ms
 
 #define LIFT_FAULT_HOME_TIMEOUT   1u
 #define LIFT_FAULT_MOVE_TIMEOUT   2u
@@ -108,6 +109,8 @@ static void lift_enter_state(lift_state_e state, uint32_t now)
 static void lift_output_speed(float target_rpm, float output_limit)
 {
     float output;
+    float integral_before;
+    float raw_output;
     uint8_t terminal = ((lift.state == LIFT_READY_UP) || (lift.state == LIFT_READY_DOWN) ||
         (lift.state == LIFT_ALIGN_DOWN) || (lift.state == LIFT_RETRACT_DOWN) ||
         ((lift.state == LIFT_MOVING_UP) &&
@@ -145,7 +148,20 @@ static void lift_output_speed(float target_rpm, float output_limit)
         (float)lift.motor->rx_info->encoder_speed *
         lift_tune.speed_direction_sign);
     lift.speed_pid.err = lift.speed_pid.target - lift.speed_pid.measure;
+    integral_before = lift_clamp(lift.speed_pid.integral,
+                                -lift.speed_pid.integral_max, lift.speed_pid.integral_max);
+    lift.speed_pid.integral = integral_before;
     single_pid_ctrl(&lift.speed_pid);
+    raw_output = lift.speed_pid.pout + lift.speed_pid.iout + lift.speed_pid.dout;
+    if ((terminal != 0u) && (lift_abs(raw_output) >= lift.speed_pid.out_max) &&
+        (raw_output * lift.speed_pid.err > 0.0f))
+    {
+        // NOTE: 当拍饱和不累加积分
+        lift.speed_pid.integral = integral_before;
+        lift.speed_pid.iout = lift.speed_pid.ki * integral_before;
+        lift.speed_pid.out = lift_clamp(lift.speed_pid.pout + lift.speed_pid.iout +
+            lift.speed_pid.dout, -lift.speed_pid.out_max, lift.speed_pid.out_max);
+    }
 
     output = lift.speed_pid.out * LIFT_OUTPUT_DIRECTION;
     if ((lift.home_valid != 0u) && (lift.state != LIFT_HOMING_UP))
@@ -180,6 +196,16 @@ static void lift_output_position_limited(int32_t target_count,
     speed_target = lift_clamp(lift.position_pid.out,
                               -lift_abs(speed_limit),
                               lift_abs(speed_limit));
+    if ((lift.state == LIFT_READY_UP) || (lift.state == LIFT_READY_DOWN) ||
+        (lift.state == LIFT_ALIGN_DOWN))
+    {
+        float step = LIFT_HOLD_RATE_STEP_RPM_PER_MS * (float)lift_control_dt_ms;
+        // NOTE: 保持纠偏避免速度阶跃
+        lift.speed_target_rpm += lift_clamp(speed_target - lift.speed_target_rpm, -step, step);
+        lift.speed_target_rpm = lift_clamp(lift.speed_target_rpm,
+                                         -lift_abs(speed_limit), lift_abs(speed_limit));
+        speed_target = lift.speed_target_rpm;
+    }
     lift_output_speed(speed_target, lift_abs(output_limit));
 }
 
@@ -589,6 +615,7 @@ void Lift_Init(void)
     lift.stall_progress_tick = lift.state_enter_tick;
     lift.stall_progress_count = 0;
     lift.last_tick = lift.state_enter_tick;
+    lift_control_dt_ms = 0u;
 
     lift_debug.mode = 0u;
     lift_debug.stats_valid = 0u;
@@ -652,6 +679,7 @@ void Lift_Work(void)
     uint8_t cmd_changed;
 
     lift.last_tick = now;
+    lift_control_dt_ms = dt;
 
     if ((lift.motor == NULL) || (lift.motor->state == NULL))
     {

@@ -126,9 +126,9 @@
 | `GIMBAL_PITCH_MIN_DEG / GIMBAL_PITCH_MAX_DEG` | -7.5 / 30 | Pitch 目标角范围，deg |
 | `GIMBAL_TORQUE_LIMIT` | 6 | 两轴默认最终力矩幅值上限，N·m |
 | `GIMBAL_GRAVITY_K_NM / GIMBAL_GRAVITY_B_NM` | 1.1 / 0 | 重力补偿幅值/偏置，N·m |
-| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S / GIMBAL_MEC_YAW_DECEL_RAD_S2` | 600 / 25 | 普通机械 Yaw 速度上限 deg/s / 制动减速度 rad/s² |
+| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S / GIMBAL_MEC_YAW_DECEL_RAD_S2` | 1000 / 25 | 普通机械 Yaw 速度上限 deg/s / 制动减速度 rad/s² |
 | `GIMBAL_MEC_YAW_TORQUE_STEP_NM` | 0.08 | 机械 Yaw 每轮力矩斜坡步进，N·m |
-| `GIMBAL_MEC_HOLD_DEADZONE_DEG / GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS` | 0.3 / 3 | 机械 Yaw 位置软死区 deg / 速度反馈死区 deg/s |
+| `GIMBAL_MEC_HOLD_DEADZONE_DEG / GIMBAL_MEC_HOLD_RATE_DEADBAND_DPS` | 0.3 / 3 | 机械 Yaw 位置软死区 deg / 保留的旧速度死区参数 deg/s |
 | `GIMBAL_MEC_YAW_FF_OFF_DPS / GIMBAL_MEC_YAW_FF_FULL_DPS` | 25 / 35 | 底盘速率前馈渐入窗口，deg/s |
 | `GIMBAL_MEC_YAW_FF_MAX_GAIN / GIMBAL_MEC_YAW_FF_FILTER_ALPHA` | 0.90 / 0.05 | 前馈最大倍率 / 一阶滤波更新系数 |
 | `GIMBAL_R_TURN_YAW_RAMP_DEG_PER_MS / GIMBAL_R_TURN_YAW_MAX_RATE_DEG_S` | 1.5 / 1000 | R 掉头目标斜坡 deg/ms / 速度上限 deg/s；实际速度还受反馈和限矩约束 |
@@ -150,7 +150,7 @@
 | `LIFT_AUTO_HOME_DELAY_MS / LIFT_HOME_CONFIRM_MS` | 2000 / 500 | 自动找顶延时 / 顶部条件连续确认，ms |
 | `LIFT_HOME_SPEED_RPM / LIFT_HOME_CURRENT_RAW` | 2865 / 520 | 找顶速度 rpm / 电流反馈原始阈值 |
 | `LIFT_RETRACT_COUNTS` | 40960 | 上端目标距顶部零点的 5 圈偏移，count；找顶完成实际执行回退后保持 |
-| `LIFT_POS_KP / LIFT_MOVE_SPEED_RPM` | 0.0064 / 9549 | 保持位置增益 rpm/count / 轨迹速度上限 rpm |
+| `LIFT_POS_KP / LIFT_MOVE_SPEED_RPM` | 0.0096 / 9549 | 顶部/对齐保持位置增益 rpm/count / 轨迹速度上限 rpm |
 | `LIFT_SPEED_KP / LIFT_SPEED_KI / LIFT_SPEED_OUT_MAX_RAW` | 20 / 10 / 4444 | 速度环增益及协议原始输出限幅；远程运动积分上限0；末端/保持局部KI=0.2，积分贡献≤1111 raw |
 | `LIFT_POS_TOL_COUNTS / LIFT_SPEED_TOL_RPM / LIFT_STABLE_CONFIRM_MS` | 200 / 1 / 100 | 到位位置误差 count / 速度误差 rpm / 确认时间 ms |
 | `LIFT_HOME_TIMEOUT_MS / LIFT_MOVE_TIMEOUT_MS` | 90000 / 90000 | 找顶/单次运动超时，ms |
@@ -165,7 +165,7 @@
 | `LAUNCHER_DIAL_SINGLE_TIMEOUT_MS / LAUNCHER_DIAL_START_TIMEOUT_MS` | 500 / 50 | 单发动作超时 / 启动发送等待上限，ms |
 | `LAUNCHER_DIAL_HOLD_ACTIVE_TX_MS / LAUNCHER_DIAL_HOLD_TX_INTERVAL_MS / LAUNCHER_DIAL_HOLD_IDLE_CONFIRM_MS` | 1 / 10 / 100 | 纠偏发送/稳定保持发送/稳态确认，ms |
 | `LAUNCHER_DIAL_HOLD_ANGLE_KP / LAUNCHER_DIAL_HOLD_SPEED_KP / LAUNCHER_DIAL_HOLD_DEADBAND` | 0.04 / 0.15 / 100 | 保持位置/速度增益 / 位置死区 count |
-| `LAUNCHER_DIAL_JAM_ENABLE / LAUNCHER_HEAT_TRAINING_ENABLE` | 0 / 0 | 自动堵转退让/固定热量训练关闭 |
+| `LAUNCHER_DIAL_JAM_ENABLE / LAUNCHER_HEAT_TRAINING_ENABLE` | 1 / 0 | 连发堵转退让启用/固定热量训练关闭 |
 | `LAUNCHER_HEAT_PER_SHOT / LAUNCHER_HEAT_MARGIN / LAUNCHER_HEAT_RESUME` | 10 / 20 / 30 | 每发增热/安全余量/恢复余量，裁判热量单位 |
 | `LAUNCHER_HEAT_MAX_RATE / LAUNCHER_HEAT_D3_TIMEOUT_MS` | 15 / 100 | 配置最高射频 发/s / 上板 D3 链路超时 ms |
 
@@ -348,7 +348,7 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 
 | ID | 方向 | Byte 定义（下标从 0 开始） | 说明 |
 | --- | --- | --- | --- |
-| `0xD1` | 下→上 | b0：car_state[1:0]、gimbal_mode[2]、vision_mode[5:3]、game_start[6]、my_color[7]；b1–2 `v_x`；b3–4 `v_y`；b5 bit0 摩擦轮使能、bit1 模式、bit2 触发、bit3 过洞、bit4 R掉头进行中、bit5 供弹许可 | 速度字段线性映射 [-8000,8000]；供弹许可需配套更新上下板 |
+| `0xD1` | 下→上 | b0：car_state[1:0]、gimbal_mode[2]、vision_mode[5:3]、game_start[6]、my_color[7]；b1–2 `v_x`；b3–4 `v_y`；b5 bit0 摩擦轮使能、bit1 模式、bit2 触发、bit3 过洞、bit4 R掉头进行中、bit5 供弹许可、bit6 S2中位、bit7 同帧输入源 | 速度字段线性映射 [-8000,8000]；供弹许可及拨盘复位字段需配套更新上下板 |
 | `0xD2` | 下→上 | b0–1 Pitch IMU；b2–3 Yaw IMU；b4–5 Pitch 机械角；b6–7 Yaw 机械角 | IMU 映射 [-360,360] deg；机械映射 [-4,4] rad |
 | `0xD3` | 下→上 | b0–1 热量上限；b2–3 枪管热量；b4–5 冷却率；b6 源序号；b7 bit0 参数有效、bit1 热量有效 | 热量单位按裁判系统；当前周期 10 ms；无效位不会因收到 CAN 帧而自动变有效 |
 | `0xD4` | 下→上 | b0–7 血量字节 | 默认 `BOARD_COMM_D4_ENABLE=0`；上板目前仅更新该 ID 心跳 |
@@ -397,14 +397,15 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 ## 回中、保护与一键射击更新
 
 - IMU模式锁定云台世界朝向，底盘按机械角就近选前/后中心，85°/95°滞回；R动作优先，机械模式使用同一前后选择。跟随失效后连续有效反馈100 ms恢复，原因和计数保留。
-- Yaw保持Kp=20，受扰回正上限360°/s并按25 rad/s²制动；手动输入限速150°/s不变。普通机械回正600°/s、近区增益20、速度反馈滤波3 ms；R保留原速度及近区增益15。
+- Yaw保持Kp=30，受扰回正与保持环输出上限均为1000°/s并按25 rad/s²制动；手动输入限速150°/s不变。普通机械回正上限与R共用1000°/s、近区增益30、速度反馈滤波3 ms；R保留原速度及近区增益15。
 - 遥控断联立即锁定；重连后S2稳定中位重新待发，再上拨才触发。升降互锁期间继续消抖，上拨不排队，解除互锁时仍须中位。真实故障不由重连自动清除。
 - 键鼠回归恢复：上板云台、IMU校准和微秒时基恢复为ef87e88；保留下板发射重连修复。累计角度偏差、机械停机震荡及回正速度优化暂时撤回，后续分别处理；恢复效果待人工验证。
 - 2026-10-17本轮重新实施Yaw停机与回正优化、摩擦轮独立许可和底部保持/向内恢复；以上参数表为当前配置，前条保留为回退历史。仅静态审查，实机效果待人工验证。
 - Pitch速度反馈低通时间常数3 ms；初始I/D仍关闭，受控保持积分由 `GIMBAL_PITCH_HOLD_I_ENABLE=0` 保留人工启用入口。
 - 左键新按下自动开轮并最多等待2 s达速；短按松开仍执行该次单发，长按可转连发，G关闭取消待发；上电、重连须先释放左键。
-- 拨盘/摩擦轮堵转停机保护默认开启，自动反转默认关闭；拨盘电流600 raw、两轮各3000 raw均是待人工核对的候选门限。停机至少1 s且已释放后，新按下可恢复。
+- 连发拨盘堵转启用最多3轮反退/前转，失败仅拨盘卸力，S2回中或键鼠松开左键无冷却复位，重新触发才供弹；摩擦轮继续运行。单发、保持过载及摩擦轮自身故障仍按原全局保护处理。拨盘600 raw、两轮各3000 raw门限仍待人工核对。
 - KT每50 ms独立读取状态，恢复运行后等待新运动反馈再接管当前位置；只含运动数据的回复更新累计编码器，新鲜度上限150 ms。
 - 升降保持9549 rpm/4444 raw运动上限，改为250 ms加速与末端20圈制动；实际回退5圈后顶部保持。上下端保持限幅2222 raw，局部速度积分贡献≤1111 raw。
+- 本轮位置纠偏增益按源码基准提高50%：普通机械Yaw近区及G_RATE保持均为30；升降顶部/对齐0.0096、底部0.03 rpm/count。G_RATE使用0.2°软死区；升降保持速度目标斜坡10 rpm/ms，并增加末端/保持当拍抗积分饱和。速度内环和输出限幅不变，稳定性待人工实机确认。
 - 键鼠B不再依赖S2中位；升降取消小陀螺请求，期间C不排队，升起后需重新按C；软限位、可恢复暂停、故障原因详见[升降说明](task_up/docs/lift.md)。
 - 未新增CAN ID或板间字段；上下板源码需配套使用。本次未编译、未烧录、未执行硬件验证。

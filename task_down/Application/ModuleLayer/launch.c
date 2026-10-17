@@ -97,6 +97,8 @@ static void Launch_Init(Launch_t *launch)
     launch_keyboard_last_mouse = 0u;
     launch_remote_feed_ready = 0u;
     launch->feed_permit = 0u;
+    launch->s2_mid = 0u;
+    launch->ctrl_source = 0u;
     launch->block_reason = 1u;
 }
 
@@ -114,6 +116,8 @@ static void Launch_Data_Update(Launch_t *launch)
     launch->mode = SINGLE_SHOT;
     launch->shoot_level = 0u;
     launch->feed_permit = 0u;
+    launch->s2_mid = 0u;
+    launch->ctrl_source = 0u;
     launch->block_reason = 1u;
     if ((rc_dev.work_state != DEV_ONLINE) ||
         (board.status->status != DEV_ONLINE))
@@ -134,7 +138,8 @@ static void Launch_Data_Update(Launch_t *launch)
                  (board.rx_meg->state_meg.is_down == 2u)) ? 1u : 0u;
 #endif
     launch->feed_permit = feed_safe;
-    if (Chassis_Input_IsKeyboardMode() != 0u)
+    launch->ctrl_source = (Chassis_Input_IsKeyboardMode() != 0u) ? 1u : 0u;
+    if (launch->ctrl_source != 0u)
     {
         Launch_Reset_Shoot_Arm();
         Launch_Reset_S2_Filter();
@@ -189,6 +194,7 @@ static void Launch_Data_Update(Launch_t *launch)
     launch_keyboard_last_g = 0u;
     s1 = (uint8_t)rc_dev.info->s1.value;
     s2 = Launch_Filter_S2((uint8_t)rc_dev.info->s2.value);
+    launch->s2_mid = (s2 == RC_SW_MID) ? 1u : 0u;
     switch_changed = ((launch_shoot_switch_seen != 0u) &&
                       (s2 != launch_shoot_previous_switch)) ? 1u : 0u;
     launch_shoot_switch_seen = 1u;
@@ -238,6 +244,8 @@ static void Launch_Cmd_Transmit(Launch_t *launch)
     board.tx_pkt->shoot_pkt.shoot_mode = launch->mode;    /* 单发/连发 */
     board.tx_pkt->shoot_pkt.shoot_level = launch->shoot_level; /* 触发 */
     board.tx_pkt->shoot_pkt.feed_permit = launch->feed_permit;
+    board.tx_pkt->shoot_pkt.s2_mid = launch->s2_mid;
+    board.tx_pkt->shoot_pkt.ctrl_source = launch->ctrl_source;
 }
 
 /* 发射机构周期任务 */

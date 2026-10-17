@@ -59,6 +59,8 @@ typedef struct
     uint8_t shoot_level; // 发射触发电平，0/1
     uint8_t is_hole; // 过洞下降请求，0/1
     uint8_t feed_permit; // 独立供弹许可，0/1
+    uint8_t s2_mid; // 消抖后S2中位，0/1
+    uint8_t ctrl_source; // 同帧来源，0遥控1键鼠
 } Board_Shoot_Pkt_t;
 
 typedef struct

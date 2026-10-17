@@ -41,7 +41,7 @@ typedef struct
     uint8_t fault;            // 机构故障锁存，0/1
     float fric_l_output_raw; // 左轮最终电流指令，raw
     float fric_r_output_raw; // 右轮最终电流指令，raw
-    uint8_t feed_block_reason; // 许可拦截，0~4见文档
+    uint8_t feed_block_reason; // 许可拦截，0~5见文档
 } launcher_t;
 
 extern launcher_t launcher;
@@ -100,6 +100,15 @@ typedef enum
     LAUNCHER_DIAL_REJECT_WAIT, // 开轮等待超时，值10
 } launcher_dial_reject_e;
 
+typedef enum
+{
+    LAUNCHER_JAM_IDLE = 0, // 正常运行，值0
+    LAUNCHER_JAM_REVERSE, // 反向退让，值1
+    LAUNCHER_JAM_RELOAD, // 前向恢复，值2
+    LAUNCHER_JAM_VERIFY, // 正转确认，值3
+    LAUNCHER_JAM_LOCKED, // 拨盘卸力锁定，值4
+} launcher_jam_phase_e;
+
 typedef struct
 {
     launcher_state_e state; // 拨盘独立阶段，0~9
@@ -126,6 +135,9 @@ typedef struct
     uint8_t settling; // 正在确认到位，0/1
     uint8_t wait_single; // 等待达速单发，0/1
     uint32_t wait_tick; // 一键请求时刻，ms
+    uint8_t jam_attempts; // 本轮退让次数，0~3
+    uint8_t jam_locked; // 拨盘卸力锁，0/1
+    launcher_jam_phase_e jam_phase; // 排堵阶段，0~4
 } launcher_dial_t;
 
 extern launcher_dial_t launcher_dial;

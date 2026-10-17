@@ -64,9 +64,9 @@ flowchart LR
 | `GIMBAL_RC_AXIS_MAX` / `GIMBAL_RC_AXIS_DEADBAND` | 660 / 20 | 摇杆归一化满量程和死区 |
 | `GIMBAL_MOUSE_YAW/PITCH_DEG_PER_COUNT` | 0.04 / 0.04 deg/count | 鼠标位移到目标角增量 |
 | `GIMBAL_RATE_CMD_RAMP_DEG_S_PER_MS` | 6 deg/s/ms | 速率命令斜坡变化限制 |
-| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S` | 600 deg/s | 普通机械 Yaw 运动目标限速 |
+| `GIMBAL_MEC_YAW_MAX_RATE_DEG_S` | 1000 deg/s | 普通机械 Yaw 上限与R共用配置 |
 | `GIMBAL_MEC_YAW_FRICTION_FF_NM` | 0.3 N·m | 保留调参值；当前统一机械定位函数未消费此项 |
-| `GIMBAL_YAW_HOLD_KP/KI` | 15 / 0.003 | Yaw 位置保持 PI；输出 deg/s |
+| `GIMBAL_YAW_HOLD_KP/KI` | 30 / 0.003 | Yaw 位置保持 PI；输出 deg/s |
 | `GIMBAL_PITCH_HOLD_KP/KI` | 50 / 0 | Pitch 位置保持 PI；输出 deg/s |
 | `GIMBAL_MEC_HOLD_KP_NM_PER_DEG` | 1.5 | 宏名保留旧单位；当前作为计数域位置环增益使用 |
 | `GIMBAL_MEC_HOLD_RATE_KP_NM_PER_DPS` / `GIMBAL_MEC_HOLD_RATE_OUT_MAX_NM` | 0.1 / 6.0 | 机械 Yaw 速度内环增益 / 输出限幅 N·m |
@@ -82,7 +82,7 @@ flowchart LR
 - 配置文件：`Application/ConfigLayer/gimbal_turn_config.h`。
 - `GIMBAL_R_TURN_YAW_MAX_RATE_DEG_S = 1000.0f`：R掉头最大目标角速度，deg/s。
 - `GIMBAL_R_TURN_YAW_RAMP_DEG_PER_MS = 1.5f`：R掉头目标斜坡，deg/ms。
-- 下板D1 b5 bit4传递R掉头状态，仅上板机械Yaw分支消费；普通机械定位采用600 deg/s上限及20 s^-1近区增益；R保留1000 deg/s、1.5 deg/ms及15 s^-1近区增益，归中参数不变。
+- 下板D1 b5 bit4传递R掉头状态，仅上板机械Yaw分支消费；普通机械定位与R共用1000 deg/s上限，普通近区增益30 s^-1；R保留1000 deg/s、1.5 deg/ms及15 s^-1近区增益，归中参数不变。
 - 跟随R沿用原状态机；机械R在误差≤0.5°持续100 ms后退出专用参数。超时2500 ms、反馈失效、退出机械模式或过洞请求均退出专用参数，继续服从原控制逻辑。
 - 两板需同步更新；最大速度仍受制动曲线、近点限速、PID和力矩限幅约束。
 
@@ -144,7 +144,17 @@ IMU 离线时该定位函数清 PID 并返回零；恢复首轮对齐误差历�
 
 ## 回正与Pitch局部滤波
 
-- Yaw保持增益20；HOLD受扰回正上限360°/s，并按25 rad/s²剩余角制动包络限速。人工输入限速150°/s，松手制动3°/s、20 ms、300 ms逻辑不变。积分抗饱和使用最终速度限制。
-- 普通机械Yaw近区增益20、最大600°/s、内环反馈滤波3 ms；加速力矩斜坡0.08 N·m/ms，减力或反向制动0.16 N·m/ms。位置软死区0.3°、内环增益0.1及力矩上限6 N·m保持。
+- 1000°/s为回正允许上限，不是鼠标灵敏度或保证达到的实际速度；目标误差10°时，扣除0.2°软死区后的25 rad/s²制动包络约为168°/s。
+- Yaw保持增益30；HOLD受扰回正与保持环输出上限均为1000°/s，并按25 rad/s²剩余角制动包络限速。人工输入限速150°/s，松手制动3°/s、20 ms、300 ms逻辑不变。积分抗饱和使用最终速度限制。
+- 普通机械Yaw近区增益30、最大1000°/s、内环反馈滤波3 ms；加速力矩斜坡0.08 N·m/ms，减力或反向制动0.16 N·m/ms。位置软死区0.3°、内环增益0.1及力矩上限6 N·m保持。
 - G_MEC/G_RATE的Pitch速度反馈采用3 ms一阶低通，按实际控制间隔更新；归中分支仍使用原始机械速度。
 - 默认Pitch角度保持I=0、速度环I/D=0；额外保持积分默认关闭。启用后须误差0.2°～2°、低速稳定100 ms、无饱和/限位，再经200 ms缓入，修正限制±5°/s。
+
+
+## 增益提高50%的配套抑振
+
+- 基准为本轮前源码：普通机械Yaw近区增益20→30 s^-1，G_RATE Yaw保持Kp 20→30 s^-1；R专用近区增益15不变。
+- 机械Yaw保留0.3°位置软死区、3 ms连续速度反馈滤波、0.08/0.16 N·m/ms加速/制动斜坡。
+- G_RATE Yaw误差改为0.2°连续软死区：死区外扣除0.2°后计算PI；死区内清除角度保持积分，避免出死区时携带旧积分。Pitch仍使用原死区方式。
+- 机械速度内环Kp=0.1、G_RATE速度内环Kp=0.06、G_RATE保持Ki=0.003、6 N·m力矩上限和25 rad/s²制动限速不变；1000°/s仍仅为速度上限。
+- 增益提高不等于实际速度在全部角度提高50%；软死区和制动包络仍约束输出。未编译、未烧录、未做实机验证，静态审查不能证明闭环稳定。

@@ -90,10 +90,13 @@
 #define LAUNCHER_DIAL_REPEAT_OUT_MAX      1500.0f // 连发电流限幅，原始量
 
 /* 可选堵转退让 */
-#define LAUNCHER_DIAL_JAM_ENABLE          0u // 堵转退让使能，0/1
+#define LAUNCHER_DIAL_JAM_ENABLE          1u // 连发退让使能，0/1
+#define LAUNCHER_DIAL_JAM_MAX_ATTEMPTS    3u // 连续退让上限，次
+#define LAUNCHER_DIAL_JAM_VERIFY_MS       300u // 正转连续确认，ms
+#define LAUNCHER_DIAL_JAM_VERIFY_COUNTS   100u // 正向进展下限，count
+#define LAUNCHER_DIAL_JAM_VERIFY_TIMEOUT_MS 1000u // 正转确认总超时，ms
 #define LAUNCHER_DIAL_JAM_CURRENT_RAW     600 // 堵转电流下限，原始量
 #define LAUNCHER_DIAL_JAM_SPEED_DPS       10 // 堵转速度上限，deg/s
-#define LAUNCHER_DIAL_JAM_CONFIRM_TICKS   200u // 堵转确认，1ms周期
 #define LAUNCHER_DIAL_SAFE_STOP_RETRY_MS  50u // 失能停机重发间隔，ms
 #define LAUNCHER_PROTECT_ENABLE          1u // 堵转停机使能，0/1
 #define LAUNCHER_FEEDBACK_TIMEOUT_MS     150u // 运动反馈超时，ms

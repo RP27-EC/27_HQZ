@@ -35,6 +35,8 @@ typedef struct Launch_Struct_t{
     uint8_t shoot_level; // 发射触发电平，0/1
     uint8_t shoot_lock; // 发射锁定，0/1
     uint8_t feed_permit; // 升降供弹许可，0/1
+    uint8_t s2_mid; // 消抖后S2中位，0/1
+    uint8_t ctrl_source; // 同帧来源，0遥控1键鼠
     uint8_t block_reason; // 拦截原因，0~5
     void (*init)(struct Launch_Struct_t* launch); // 初始化回调，非空
     void (*work)(struct Launch_Struct_t* launch); // 周期控制回调，非空

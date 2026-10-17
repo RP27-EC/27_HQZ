@@ -25,7 +25,7 @@
 #define LIFT_RETRACT_SPEED_RPM          2865.0f   // 回退速度，rpm
 #define LIFT_RETRACT_OUTPUT_LIMIT_RAW   2500.0f   // 回退输出上限，原始量
 
-#define LIFT_POS_KP                     0.0064f  // 比例增益，rpm/count
+#define LIFT_POS_KP                     0.0096f  // 比例增益，rpm/count
 #define LIFT_POS_KI                     0.0f     // 积分增益，按周期累加
 #define LIFT_POS_KD                     0.0f     // 微分增益，按周期差分
 #define LIFT_POS_INTEGRAL_MAX           0.0f     // 误差累加限幅，count·周期
@@ -59,8 +59,9 @@
 #define LIFT_ACCEL_TIME_MS              250.0f // 升速时间，ms
 #define LIFT_TERMINAL_KP                0.3f // 末段增益，rpm/count
 #define LIFT_HOLD_OUTPUT_MAX_RAW        2222.0f // 保持输出上限，raw
-#define LIFT_BOTTOM_HOLD_KP             0.02f // 底部保持增益，rpm/count
+#define LIFT_BOTTOM_HOLD_KP             0.03f // 底部保持增益，rpm/count
 #define LIFT_HOLD_SPEED_MAX_RPM         955.0f // 保持纠偏上限，rpm
+#define LIFT_HOLD_RATE_STEP_RPM_PER_MS  10.0f // 保持速度斜坡，rpm/ms
 #define LIFT_HOLD_SPEED_KI              0.2f // 保持积分，raw/(rad/s·拍)
 #define LIFT_HOLD_I_MAX_RAW             1111.0f // 保持积分力矩上限，raw
 #define LIFT_STALL_OUTPUT_MIN_RAW       500.0f // 堵转有效输出，raw
