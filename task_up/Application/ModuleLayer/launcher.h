@@ -7,16 +7,16 @@
 /* 发射机构运行阶段 */
 typedef enum
 {
-    LAUNCHER_SLEEP = 0,  /* 休眠，输出关闭 */
-    LAUNCHER_SPINUP,     /* 摩擦轮升速 */
-    LAUNCHER_INIT,       /* 拨盘初始定位 */
-    LAUNCHER_READY,      /* 待发 */
-    LAUNCHER_SINGLE,     /* 单发供弹 */
-    LAUNCHER_REPEAT,     /* 连发供弹 */
-    LAUNCHER_REVERSE,    /* 堵转退让 */
-    LAUNCHER_RELOAD,     /* 退让后复位 */
-    LAUNCHER_STOPPING,   /* 停机降速 */
-    LAUNCHER_FAULT,      /* 故障锁定 */
+    LAUNCHER_SLEEP = 0,  // 输出关闭，值0
+    LAUNCHER_SPINUP,     // 摩擦轮升速，值1
+    LAUNCHER_INIT,       // 拨盘初始定位，值2
+    LAUNCHER_READY,      // 位置保持待发，值3
+    LAUNCHER_SINGLE,     // 单发供弹，值4
+    LAUNCHER_REPEAT,     // 连发供弹，值5
+    LAUNCHER_REVERSE,    // 单发或连发反退，值6
+    LAUNCHER_RELOAD,     // 保留兼容编号，值7
+    LAUNCHER_STOPPING,   // 制动后保持，值8
+    LAUNCHER_FAULT,      // 故障或卸力锁定，值9
 } launcher_state_e;
 
 typedef struct
@@ -103,8 +103,8 @@ typedef enum
 typedef enum
 {
     LAUNCHER_JAM_IDLE = 0, // 正常运行，值0
-    LAUNCHER_JAM_REVERSE, // 反向退让，值1
-    LAUNCHER_JAM_RELOAD, // 前向恢复，值2
+    LAUNCHER_JAM_REVERSE, // 单发或连发反退，值1
+    LAUNCHER_JAM_RELOAD, // 保留兼容编号，值2
     LAUNCHER_JAM_VERIFY, // 正转确认，值3
     LAUNCHER_JAM_LOCKED, // 拨盘卸力锁定，值4
 } launcher_jam_phase_e;
@@ -123,7 +123,7 @@ typedef struct
     uint8_t trigger_ready; // 已释放触发可重发，0/1
     uint8_t run_tx_status; // 启动HAL结果，0~3
     uint8_t torque_tx_status; // 力矩HAL结果，0~3
-    uint8_t stop_tx_status; // 停机HAL结果，0~3
+    uint8_t stop_tx_status; // 停止或失能HAL，0~3
     uint32_t accepted_count; // 已接纳单发数，次
     uint32_t rejected_count; // 拒绝单发数，次
     uint32_t completed_count; // 到位单发数，次
@@ -135,7 +135,7 @@ typedef struct
     uint8_t settling; // 正在确认到位，0/1
     uint8_t wait_single; // 等待达速单发，0/1
     uint32_t wait_tick; // 一键请求时刻，ms
-    uint8_t jam_attempts; // 本轮退让次数，0~3
+    uint8_t jam_attempts; // 连发堵转次数，0~3
     uint8_t jam_locked; // 拨盘卸力锁，0/1
     launcher_jam_phase_e jam_phase; // 排堵阶段，0~4
 } launcher_dial_t;

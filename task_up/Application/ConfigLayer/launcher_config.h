@@ -79,10 +79,10 @@
 #define LAUNCHER_DIAL_MAX_SPEED_DPS       7000u // 位置环速度限幅，deg/s
 #define LAUNCHER_DIAL_ONE_SHOT_ANGLE      65536.0f // 每发电机位移，count
 #define LAUNCHER_DIAL_REVERSE_ANGLE       65536.0f // 堵转退让位移，count
+#define LAUNCHER_DIAL_SINGLE_REVERSE_ANGLE 16384.0f // 单发退让位移，count
 #define LAUNCHER_DIAL_STOP_ERROR          500.0f // 到位位置容差，count
 #define LAUNCHER_DIAL_SINGLE_TIMEOUT_MS   500u // 单发动作上限，ms
 #define LAUNCHER_DIAL_REVERSE_TIMEOUT_MS  200u // 反向退让上限，ms
-#define LAUNCHER_DIAL_RELOAD_TIMEOUT_MS   200u // 恢复定位上限，ms
 
 /* 连发独立速度环 */
 #define LAUNCHER_DIAL_REPEAT_SPEED_DPS    6000u // 连发机械速度上限，deg/s
@@ -94,11 +94,10 @@
 
 /* 可选堵转退让 */
 #define LAUNCHER_DIAL_JAM_ENABLE          1u // 连发退让使能，0/1
-#define LAUNCHER_DIAL_JAM_MAX_ATTEMPTS    3u // 连续退让上限，次
+#define LAUNCHER_DIAL_JAM_MAX_ATTEMPTS    3u // 连发堵转锁定，次
 #define LAUNCHER_DIAL_JAM_VERIFY_MS       300u // 正转连续确认，ms
 #define LAUNCHER_DIAL_JAM_VERIFY_COUNTS   100u // 正向进展下限，count
-#define LAUNCHER_DIAL_JAM_VERIFY_TIMEOUT_MS 1000u // 正转确认总超时，ms
-#define LAUNCHER_DIAL_JAM_CURRENT_RAW     600 // 堵转电流下限，原始量
+#define LAUNCHER_DIAL_JAM_CURRENT_RAW     1500 // 堵转电流下限，原始量
 #define LAUNCHER_DIAL_JAM_SPEED_DPS       10 // 堵转速度上限，deg/s
 #define LAUNCHER_DIAL_SAFE_STOP_RETRY_MS  50u // 失能停机重发间隔，ms
 #define LAUNCHER_PROTECT_ENABLE          1u // 堵转停机使能，0/1
@@ -109,8 +108,9 @@
 #define LAUNCHER_PROTECT_CONFIRM_MS      200u // 堵转确认时间，ms
 #define LAUNCHER_PROTECT_PROGRESS_MS     300u // 无进展观察窗，ms
 #define LAUNCHER_PROTECT_PROGRESS_COUNTS 100.0f // 最小运动进展，count
-#define LAUNCHER_PROTECT_OUTPUT_RAW      600.0f // 有效驱动输出，raw
+#define LAUNCHER_PROTECT_OUTPUT_RAW      1500.0f // 有效驱动输出，raw
 #define LAUNCHER_PROTECT_COOLDOWN_MS     1000u // 保护停机冷却，ms
+#define LAUNCHER_PROTECT_HOLD_CURRENT_RAW 600 // 保持过载电流，raw
 #define LAUNCHER_PROTECT_HOLD_MS         1000u // 保持过载确认，ms
 #define LAUNCHER_PROTECT_FRIC_START_MS   1000u // 摩擦轮启动宽限，ms
 #define LAUNCHER_PROTECT_FRIC_RPM        100.0f // 摩擦轮低速阈值，rpm
