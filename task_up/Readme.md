@@ -151,8 +151,8 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 
 - 发射请求由下板D1发来，新单发还要求双轮达速及D6弹速路径有效；上一发漏发或未反馈不阻止下一发；连发以6000 rpm启动并参与三条有效反馈弹速修正，受弹速保护，见[单发弹速闭环](docs/launcher.md#单发弹速闭环)。
 - 拨盘独立阶段见 `launcher_dial.state`：摩擦轮关闭、S2 中位时保持；过洞请求期间停机，退出请求后等待 `LAUNCHER_DIAL_HOLE_RELEASE_DELAY_MS=2000 ms` 恢复保持，不依赖升降到位或故障码。整车失能、断联、拨盘离线或发射机构故障时卸力，供弹仍受下板发射许可约束。
-- 单发累加原目标，释放后完成本发；500 ms 未完成则制动后保持当前位置。启动发送失败最多等待 50 ms，拒绝/超时/许可中断后须释放再触发。
-- 待发位置 KP=0.04、死区 100 count，速度 KP=0.15、KI/KD=0；单发和连发力度不变。拨盘与连发使能为 1，堵转退让为 0；主路径不进入旧 `SPINUP/INIT` 枚举值。
+- 单发累加原目标，释放后完成本发；反馈及许可有效时500 ms未完成计机械失败，前两次反退后制动、第三次卸力。启动发送失败最多等待 50 ms，拒绝/超时/许可中断后须释放再触发。
+- 待发位置 KP=0.04、死区 100 count，速度 KP=0.15、KI/KD=0；单发和连发力度不变。拨盘与连发使能为 1，堵转退让为 1；主路径不进入旧 `SPINUP/INIT` 枚举值。
 - 待发保持进入时立即发送力矩；运动或纠偏时按 `LAUNCHER_DIAL_HOLD_ACTIVE_TX_MS=1 ms` 发送，误差进入 100 count 死区且速度不超过 20°/s，连续 `LAUNCHER_DIAL_HOLD_IDLE_CONFIRM_MS=100 ms` 后按 `LAUNCHER_DIAL_HOLD_TX_INTERVAL_MS=10 ms` 发送。PID 计算与单发、连发、制动及摩擦轮/升降组帧周期不变。
 
 热量训练模式关闭；有效 D3 到来前不建立发射预算。当前参数：每发估算热量 10、余量 20、连发恢复余量 30、最大射频 15 发/s、D3 超时 100 ms。失去许可进入减速/制动过程，不保证瞬时停转。完整状态与门槛见[发射模块说明](docs/launcher.md)。
@@ -214,9 +214,13 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 | IMU 状态异常 | `ControlTask` 仅在错误码为 none/cali 时调用 `imu_dev.update()`；观察 `imu_dbg`、错误码、校准状态 |
 | 电机离线 | MonitorTask 更新 DM/RM/KT 在线状态；C1 汇报主要电机位；电机类型的温度/错误字段须按驱动单独检查 |
 | 升降故障 | `LIFT_FAULT`/`LIFT_STALL_STOP` 输出为零；观察 `fault_code`、`home_valid`、编码器、C1 byte1 |
-| 热量/拨盘异常 | D3 flags 与新鲜度决定热量数据是否可用；堵转自动退让开关默认关闭；观察 `launcher_heat.source/ready/blocked` |
+| 热量/拨盘异常 | D3 flags 与新鲜度决定热量数据是否可用；连发退让开关默认开启，单发前两次失败反退、第三次卸力；观察 `launcher_heat.source/ready/blocked` |
 | HAL 初始化失败 | `Error_Handler()` 关中断停机，没有可读启动错误灯码 |
 
 首次上电卸弹并清空拨盘，抬离底盘轮、确认云台和升降无机械障碍；先核对 BMI088 方向、电机反馈/方向、上下板心跳，再以低输出逐轴验证。归中超时可能自动退出到后续模式；必须核对实际机械位置，不得仅凭 `init_flag` 开始高速测试。
 
 模块细节：[云台](docs/gimbal.md) · [升降](docs/lift.md) · [发射](docs/launcher.md) · [电机](docs/motors.md) · [IMU](docs/imu.md) · [板间通信](docs/board-link.md)
+
+### 发射堵转局部更新
+
+连发检测改为900 raw/300 ms，启动宽限150 ms，无进展窗口450 ms且输出≥900 raw；单发失败反退32768 count，限速1800°/s、最多300 ms，第三次失败立即卸力。已启动单发500 ms未完成也计一次机械失败，普通S2回中不清未锁定计数。参数依据、恢复条件及人工验收见[发射模块](docs/launcher.md)。本轮仅静态检查，未编译、测试或烧录。

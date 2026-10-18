@@ -43,7 +43,19 @@
 #define LAUNCHER_SPEED_SHOOTER_NUMBER     1u // 第一17mm机构，值1
 
 #define LAUNCHER_INPUT_TIMEOUT_MS         50u // 发射控制帧上限，ms
-#define LAUNCHER_SINGLE_JAM_LIMIT          3u // 连续单发堵转上限，次
+#define LAUNCHER_SINGLE_JAM_LIMIT          3u // 连续单发失败上限，次
+
+/* 单发失败退让 */
+#define LAUNCHER_SINGLE_REVERSE_COUNTS    32768.0f // 单发反退位移，count
+#define LAUNCHER_SINGLE_REVERSE_SPEED_DPS 1800.0f // 单发反退限速，deg/s
+#define LAUNCHER_SINGLE_REVERSE_MS        300u // 单发反退上限，ms
+
+/* 连发堵转检测 */
+#define LAUNCHER_REPEAT_JAM_CURRENT_RAW   900.0f // 连发堵转电流下限，raw
+#define LAUNCHER_REPEAT_JAM_CONFIRM_MS    300u // 连发堵转确认，ms
+#define LAUNCHER_REPEAT_JAM_START_MS      150u // 连发启动宽限，ms
+#define LAUNCHER_REPEAT_JAM_PROGRESS_MS   450u // 连发无进展窗口，ms
+#define LAUNCHER_REPEAT_JAM_OUTPUT_RAW    900.0f // 连发有效驱动下限，raw
 
 /* 单发位置控制 */
 #define LAUNCHER_DIAL_ANGLE_KP            0.08f // 位置增益，(deg/s)/count

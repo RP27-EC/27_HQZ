@@ -109,6 +109,21 @@ typedef enum
     LAUNCHER_JAM_LOCKED, // 拨盘卸力锁定，值4
 } launcher_jam_phase_e;
 
+typedef enum
+{
+    LAUNCHER_JAM_OWNER_NONE = 0, // 无退让来源，值0
+    LAUNCHER_JAM_OWNER_SINGLE, // 单发退让，值1
+    LAUNCHER_JAM_OWNER_REPEAT, // 连发排堵，值2
+} launcher_jam_owner_e;
+
+typedef enum
+{
+    LAUNCHER_FAILURE_NONE = 0, // 未记录失败，值0
+    LAUNCHER_FAILURE_CURRENT, // 低速高流确认，值1
+    LAUNCHER_FAILURE_PROGRESS, // 无进展确认，值2
+    LAUNCHER_FAILURE_TIMEOUT, // 单发运动超时，值3
+} launcher_failure_reason_e;
+
 typedef struct
 {
     launcher_state_e state; // 拨盘独立阶段，0~9
@@ -138,6 +153,9 @@ typedef struct
     uint8_t jam_attempts; // 本轮退让次数，0~3
     uint8_t jam_locked; // 拨盘卸力锁，0/1
     launcher_jam_phase_e jam_phase; // 排堵阶段，0~4
+    uint8_t single_failures; // 连续单发失败，0~3
+    launcher_jam_owner_e jam_owner; // 退让来源，0~2
+    launcher_failure_reason_e last_failure_reason; // 最近失败原因，0~3
 } launcher_dial_t;
 
 extern launcher_dial_t launcher_dial;
