@@ -17,7 +17,6 @@ chassis_spin_state_t chassis_spin; /* 小陀螺状态 */
 
 static float spin_ramp_wz; /* 旋转斜坡输出，rad/s */
 static uint8_t spin_last_selected; /* 上拍小陀螺选中状态 */
-static uint8_t spin_rearm_required; // 拨杆需退出重入，0/1
 
 /* 将遥控通道映射到 [-1, 1]，含死区 */
 
@@ -127,10 +126,9 @@ void Chassis_Spin_Init(void)
 
     spin_ramp_wz = 0.0f;
     spin_last_selected = 0u;
-    spin_rearm_required = 0u;
 }
 
-/* S1 上拨、S2 下拨选择小陀螺 */
+/* C选旋转，升降取消请求 */
 void Chassis_Spin_UpdateMode(void)
 {
     uint8_t selected = 0u; /* 小陀螺档位选择 */
@@ -141,15 +139,7 @@ void Chassis_Spin_UpdateMode(void)
     {
         selected = (Chassis_Input_GetKeyboardChassisMode() == CHASSIS_KEY_MODE_SPIN) ? 1u : 0u;
     }
-    else
 #endif
-    if ((rc_dev.work_state == DEV_ONLINE) &&
-        (rc_dev.info != NULL) &&
-        (rc_dev.info->s1.value == RC_SW_UP) &&
-        (rc_dev.info->s2.value == RC_SW_DOWN))
-    {
-        selected = 1u; /* S1 上、S2 下 */
-    }
 #endif
 
 #if BOARD_LIFT_ENABLE
@@ -160,7 +150,6 @@ void Chassis_Spin_UpdateMode(void)
          (board.rx_meg->state_meg.is_down != 2u)))
     {
         Chassis_Input_CancelSpin();
-        spin_rearm_required = 1u;
         selected = 0u;
         spin_ramp_wz = 0.0f;
         spin_last_selected = 0u;
@@ -171,15 +160,6 @@ void Chassis_Spin_UpdateMode(void)
     if ((rc_dev.work_state != DEV_ONLINE) || (rc_dev.info == NULL))
     {
         selected = 0u;
-        spin_rearm_required = 1u;
-    }
-    else if (Chassis_Input_IsKeyboardMode() == 0u)
-    {
-        if ((rc_dev.info->s1.value != RC_SW_UP) || (rc_dev.info->s2.value != RC_SW_DOWN))
-        {
-            spin_rearm_required = 0u;
-        }
-        if (spin_rearm_required != 0u) selected = 0u;
     }
 
     chassis_spin.selected = selected; /* 本拍选择 */

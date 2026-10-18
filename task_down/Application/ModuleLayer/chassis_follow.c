@@ -336,7 +336,7 @@ void Chassis_Follow_Init(void)
     Chassis_Follow_ResetRecovery();
 }
 
-/* S1 上拨且 S2 上/中拨选择跟随，云台失联则锁存故障 */
+/* S1选跟随，反馈失效锁故障 */
 void Chassis_Follow_UpdateMode(void)
 {
     uint8_t rc_ready;      /* 遥控器在线且数据有效 */
@@ -359,11 +359,9 @@ void Chassis_Follow_UpdateMode(void)
     else
 #endif
     if ((rc_ready != 0u) &&
-        (rc_dev.info->s1.value == RC_SW_UP) &&
-        ((rc_dev.info->s2.value == RC_SW_UP) ||
-         (rc_dev.info->s2.value == RC_SW_MID)))
+        (rc_dev.info->s1.value == RC_SW_UP))
     {
-        selected = 1u; /* S1 上拨且 S2 上/中拨 */
+        selected = 1u;
     }
 #else
     (void)rc_ready;

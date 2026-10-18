@@ -19,7 +19,6 @@ chassis_cmd_t chassis_input_cmd; /* 输入解析后的底盘指令 */
 
 static uint8_t input_online; // 上拍输入在线，0/1
 static uint8_t last_s1; // 上拍S1档位，1~3
-static uint8_t last_s2; // 上拍S2档位，1~3
 static uint8_t translation_rear; // 实际平移反向，0/1
 static chassis_key_mode_e keyboard_chassis_mode; /* 键鼠底盘模式 */
 static uint8_t last_z_pressed; /* Z 键上次状态 */
@@ -83,20 +82,12 @@ static void Chassis_Input_KeyboardModeUpdate(const rc_data_t *rc)
     uint8_t x_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_X) != 0u) ? 1u : 0u;
     uint8_t c_pressed = ((rc->key_v & KEY_PRESSED_OFFSET_C) != 0u) ? 1u : 0u;
 
-    if ((input_online != 0u) &&
-        ((rc->s1.value != last_s1) || (rc->s2.value != last_s2)))
+    if ((input_online != 0u) && (rc->s1.value != last_s1))
     {
         if (rc->s1.value == RC_SW_DOWN) keyboard_chassis_mode = CHASSIS_KEY_MODE_MECH;
-        else if (rc->s1.value == RC_SW_UP)
-        {
-            if ((rc->s2.value == RC_SW_DOWN) && (board_hole_request == 0u) &&
-                (board_hole_exit_pending == 0u) && (board.rx_meg->state_meg.is_down == 2u))
-                keyboard_chassis_mode = CHASSIS_KEY_MODE_SPIN;
-            else keyboard_chassis_mode = CHASSIS_KEY_MODE_FOLLOW;
-        }
+        else if (rc->s1.value == RC_SW_UP) keyboard_chassis_mode = CHASSIS_KEY_MODE_FOLLOW;
     }
     last_s1 = rc->s1.value;
-    last_s2 = rc->s2.value;
     if (Chassis_Input_IsKeyboardMode() != 0u)
     {
         if ((z_pressed != 0u) && (last_z_pressed == 0u))
@@ -478,7 +469,6 @@ void Chassis_Input_Init(void)
     translation_rear = 0u;
     yaw_manual_override = 0u;
     last_s1 = 0u;
-    last_s2 = 0u;
     keyboard_chassis_mode = CHASSIS_KEY_MODE_MECH;
     last_z_pressed = 0u;
     last_x_pressed = 0u;

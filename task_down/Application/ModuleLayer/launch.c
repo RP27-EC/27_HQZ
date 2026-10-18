@@ -12,7 +12,7 @@ static void Launch_Work(Launch_t *launch);
 static void Launch_Offline_Update(Launch_t *launch);
 
 static uint8_t launch_shoot_switch_seen;     /* S2 已完成首次采样 */
-static uint8_t launch_shoot_previous_switch; /* 上拍 S2 原始值 */
+static uint8_t launch_shoot_previous_switch; // 上拍S2消抖值，1~3
 static uint8_t launch_remote_feed_ready; // 互锁后释放确认，0/1
 static uint8_t launch_shoot_armed;           /* 发射已由拨杆动作解锁 */
 
@@ -116,6 +116,7 @@ static void Launch_Data_Update(Launch_t *launch)
     uint8_t g_edge;
     uint8_t mouse_edge;
     uint8_t changed;
+    uint8_t stop_edge;
     uint8_t safe;
     uint32_t now = HAL_GetTick();
 
@@ -144,12 +145,29 @@ static void Launch_Data_Update(Launch_t *launch)
     s2 = Launch_Filter_S2(rc_dev.info->s2.value);
     launch->s2_mid = (s2 == RC_SW_MID) ? 1u : 0u;
     changed = ((launch_shoot_switch_seen != 0u) && (s2 != launch_shoot_previous_switch));
+    stop_edge = ((s2 == RC_SW_DOWN) &&
+                 ((launch_shoot_switch_seen == 0u) || (changed != 0u)));
     launch_shoot_switch_seen = 1u;
     launch_shoot_previous_switch = s2;
     safe = (board.tx_pkt->gimbal_target_pkt.is_hole == 0u);
     launch->feed_permit = safe;
     mouse_down = rc_dev.info->mouse_btn_l.value & 1u;
     g_now = ((rc_dev.info->key_v & KEY_PRESSED_OFFSET_G) != 0u);
+    // NOTE: 下拨优先消费同拍输入
+    if (stop_edge != 0u)
+    {
+        launch_keyboard_active = 0u;
+        launch_keyboard_fric_on = 0u;
+        launch_keyboard_mouse_ready = 0u;
+        launch_keyboard_last_g = g_now;
+        launch_keyboard_last_mouse = mouse_down;
+        launch_keyboard_tick = now;
+        launch_shoot_armed = 0u;
+        launch_remote_feed_ready = 0u;
+        launch->feed_permit = 0u;
+        launch->block_reason = !safe ? 2u : 1u;
+        return;
+    }
     g_edge = ((g_now != 0u) && (launch_keyboard_last_g == 0u));
     mouse_edge = ((mouse_down != 0u) && (launch_keyboard_last_mouse == 0u) &&
                   (launch_keyboard_mouse_ready != 0u) && (safe != 0u));
@@ -193,7 +211,6 @@ static void Launch_Data_Update(Launch_t *launch)
         if (changed != 0u) launch_shoot_armed = 1u;
         launch->state = launch_keyboard_fric_on ? L_UNLOCK : L_LOCK;
         if (((s1 == RC_SW_UP) || (s1 == RC_SW_MID)) &&
-            !((s1 == RC_SW_UP) && (s2 == RC_SW_DOWN)) &&
             (launch_shoot_armed != 0u) && ((s2 == RC_SW_UP) || (s2 == RC_SW_MID)))
         {
             launch->state = L_UNLOCK;
