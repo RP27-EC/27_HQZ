@@ -46,6 +46,16 @@ typedef struct
 
 extern launcher_t launcher;
 
+typedef struct
+{
+    float feedforward_raw; // 本轮旋向前馈，raw
+    float recovery_raw; // 本轮旋向恢复量，raw
+    uint32_t forward_saturated_ms; // 正向连续饱和时长，ms
+    uint8_t strong_active; // 本轮强恢复有效，0/1
+} launcher_fric_control_t;
+
+extern launcher_fric_control_t launcher_fric_control[2]; // 左右轮观测，索引0/1
+
 typedef enum
 {
     LAUNCHER_SPEED_OK = 0, // 允许新发射，值0
@@ -79,6 +89,7 @@ typedef struct
     uint8_t source_ready; // 弹速源及链路有效，0/1
     uint8_t feed_ready; // 弹速允许新发射，0/1
     uint8_t at_limit; // 修正到转速边界，0/1
+    uint8_t raise_blocked; // 连发上调受阻，0/1
     uint8_t guard_latched; // 高弹速锁止，0/1
     launcher_speed_reason_e block_reason; // 新发射阻止原因，0~7
 } launcher_speed_t;

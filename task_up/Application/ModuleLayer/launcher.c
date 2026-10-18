@@ -14,6 +14,16 @@ launcher_t launcher; /* 发射机构对外状态 */
 launcher_heat_t launcher_heat;
 launcher_dial_t launcher_dial;
 launcher_speed_t launcher_speed;
+launcher_fric_control_t launcher_fric_control[SHOOT_FRIC_NUM];
+
+typedef struct
+{
+    uint32_t saturation_tick; // 正向饱和起点，ms
+    uint8_t saturation_active; // 正向饱和计时，0/1
+} launcher_fric_runtime_t;
+
+static launcher_fric_runtime_t launcher_fric_runtime[SHOOT_FRIC_NUM];
+static uint8_t Launcher_FricOnline(uint8_t index);
 
 typedef struct
 {
@@ -51,9 +61,7 @@ typedef struct
     uint8_t authorized; // 当前按住许可，0/1
     uint8_t was_long; // 本次已达长按，0/1
     uint8_t recover; // 新操作申请恢复，0/1
-    uint8_t single_failures; // 连续单发堵转，0~3
-    uint8_t s2_mid; // 上拍S2中位，0/1
-    uint8_t s2_seen; // 中位基线有效，0/1
+    uint8_t single_failures; // 连续单发堵转，0~2
     uint8_t mid_pending; // 中位恢复待执行，0/1
 } launcher_click_runtime_t;
 static launcher_click_runtime_t launcher_click;
@@ -109,7 +117,8 @@ static launcher_heat_runtime_t launcher_heat_runtime;
 
 static uint16_t launcher_fric_ready_count; /* 摩擦轮达速确认计数 */
 uint8_t launcher_jam_count; /* 堵转次数，调试可观测 */
-static uint16_t launcher_fric_stop_count; /* 摩擦轮停转确认计数 */
+static uint8_t launcher_fric_stop_started; // 停转确认已开始，0/1
+static uint32_t launcher_fric_stop_tick; // 停转确认起点，ms
 static uint8_t launcher_dial_stopped; /* 1 = 拨盘已停机 */
 static uint32_t launcher_dial_stop_tick; /* 上次停机命令时刻 */
 static uint8_t launcher_dial_target_synced; /* 目标是否已对齐反馈 */
@@ -156,6 +165,9 @@ static void Launcher_SpeedLearn(float speed, uint8_t mode)
     float error;
     float step;
     float next;
+    float gain = (mode != 0u) ? LAUNCHER_SPEED_REPEAT_GAIN : LAUNCHER_SPEED_GAIN;
+    float step_max = (mode != 0u) ? LAUNCHER_SPEED_REPEAT_STEP_RPM :
+        LAUNCHER_SPEED_STEP_MAX_RPM;
     float *target = (mode != 0u) ? &launcher_speed.repeat_target_rpm :
         &launcher_speed.single_target_rpm;
 
@@ -168,14 +180,38 @@ static void Launcher_SpeedLearn(float speed, uint8_t mode)
     launcher_speed.average_mps = launcher_speed.sample_sum_mps /
         (float)LAUNCHER_SPEED_SAMPLE_COUNT;
     error = LAUNCHER_SPEED_TARGET_MPS - launcher_speed.average_mps;
+    launcher_speed.raise_blocked = 0u;
     if (fabsf(error) > LAUNCHER_SPEED_DEADBAND_MPS)
     {
-        step = constrain(LAUNCHER_SPEED_GAIN * error,
-            -LAUNCHER_SPEED_STEP_MAX_RPM, LAUNCHER_SPEED_STEP_MAX_RPM);
+        step = constrain(gain * error, -step_max, step_max);
+        if ((mode != 0u) && (step > 0.0f))
+        {
+            uint32_t now = HAL_GetTick();
+            for (uint8_t i = 0u; i < SHOOT_FRIC_NUM; i++)
+            {
+                float direction = (i == SHOOT_FRIC_L) ?
+                    LAUNCHER_FRIC_L_DIRECTION : LAUNCHER_FRIC_R_DIRECTION;
+                float deficit = *target - direction *
+                    (float)rm_motor[i].rx_info->encoder_speed;
+                if ((Launcher_FricOnline(i) == 0u) ||
+                    (deficit > LAUNCHER_SPEED_REPEAT_TRACK_RPM) ||
+                    ((launcher_fric_runtime[i].saturation_active != 0u) &&
+                     ((uint32_t)(now - launcher_fric_runtime[i].saturation_tick) >=
+                      LAUNCHER_SPEED_REPEAT_SAT_MS)))
+                {
+                    launcher_speed.raise_blocked = 1u;
+                }
+            }
+            if (launcher_speed.raise_blocked != 0u) step = 0.0f;
+        }
         next = *target + step;
-        launcher_speed.at_limit = ((next <= LAUNCHER_SPEED_MIN_RPM) ||
-            (next >= LAUNCHER_SPEED_MAX_RPM)) ? 1u : 0u;
-        next = constrain(next, LAUNCHER_SPEED_MIN_RPM, LAUNCHER_SPEED_MAX_RPM);
+        launcher_speed.at_limit = (next <= LAUNCHER_SPEED_MIN_RPM) ? 1u : 0u;
+        if (next < LAUNCHER_SPEED_MIN_RPM) next = LAUNCHER_SPEED_MIN_RPM;
+        if ((mode == 0u) && (next >= LAUNCHER_SPEED_MAX_RPM))
+        {
+            next = LAUNCHER_SPEED_MAX_RPM;
+            launcher_speed.at_limit = 1u;
+        }
         if (next != *target)
         {
             *target = next;
@@ -240,6 +276,7 @@ static void Launcher_SpeedResetGroup(void)
     launcher_speed.single_target_rpm = LAUNCHER_FRIC_TARGET_RPM;
     launcher_speed.repeat_target_rpm = LAUNCHER_FRIC_TARGET_RPM;
     launcher_speed.at_limit = 0u;
+    launcher_speed.raise_blocked = 0u;
     launcher_dial.trigger_ready = 0u;
     Launcher_SpeedClearSamples();
 }
@@ -1100,7 +1137,11 @@ static void Launcher_DialSafeStop(uint32_t now)
 
 static void Launcher_ProtectStop(uint8_t reason, uint32_t now)
 {
-    if (launcher_protection.active == 0u) launcher_protection.count++;
+    if (launcher_protection.active == 0u)
+    {
+        launcher_protection.count++;
+        launcher_click.mid_pending = 0u;
+    }
     launcher_click.pending = 0u;
     launcher_click.authorized = 0u;
     launcher_click.recover = 0u;
@@ -1123,6 +1164,9 @@ static void Launcher_ProtectStop(uint8_t reason, uint32_t now)
 
 static void Launcher_DialJamLock(uint32_t now)
 {
+    // NOTE: 置锁前实际下发零力矩
+    Launcher_DialApplyTorque(0);
+    launcher_dial_target = (int64_t)Launcher_DialAngle();
     launcher_click.lock_tick = now;
     launcher_click.pending = 0u;
     launcher_click.authorized = 0u;
@@ -1178,17 +1222,18 @@ static void Launcher_DialJamRetry(uint32_t now)
 
 static void Launcher_DialJamResetUpdate(uint32_t now, uint8_t vehicle_on)
 {
-    uint8_t mid_edge;
     uint8_t requested;
-    if ((vehicle_on == 0u) || (launcher_remote.valid == 0u) ||
-        ((now - launcher_remote.rx_tick) > LAUNCHER_INPUT_TIMEOUT_MS) ||
-        ((now - launcher_d1_tick) > LAUNCHER_INPUT_TIMEOUT_MS)) return;
-    mid_edge = ((launcher_click.s2_seen != 0u) &&
-        (launcher_shoot.s2_mid != 0u) && (launcher_click.s2_mid == 0u));
-    launcher_click.s2_seen = 1u;
-    launcher_click.s2_mid = launcher_shoot.s2_mid;
-    if ((mid_edge != 0u) && ((launcher_click.single_failures != 0u) ||
-        (launcher_dial.jam_locked != 0u) || (launcher_dial.jam_attempts != 0u)))
+    if ((vehicle_on == 0u) ||
+        ((now - launcher_d1_tick) > LAUNCHER_INPUT_TIMEOUT_MS))
+    {
+        launcher_click.mid_pending = 0u;
+        return;
+    }
+    // NOTE: S2仅由D1确认
+    // NOTE: 普通回中不清失败次数
+    if ((launcher_shoot.s2_mid != 0u) && ((launcher_dial.jam_locked != 0u) ||
+        ((launcher_protection.active != 0u) &&
+         ((launcher_protection.reason == 1u) || (launcher_protection.reason == 2u)))))
         launcher_click.mid_pending = 1u;
     requested = ((launcher_click.recover != 0u) || (launcher_click.mid_pending != 0u));
     if (launcher_protection.active != 0u) return;
@@ -1317,6 +1362,8 @@ static void Launcher_ProtectionUpdate(uint32_t now, uint8_t vehicle_on, uint8_t 
             (Launcher_FricOnline(SHOOT_FRIC_R) != 0u) &&
             (launcher_protection.released != 0u) &&
             (((launcher_click.pending != 0u) && (launcher_click.recover != 0u)) ||
+             ((launcher_click.mid_pending != 0u) &&
+              ((launcher_protection.reason == 1u) || (launcher_protection.reason == 2u))) ||
              ((launcher_shoot.ctrl_source == 0u) && (shoot_level != 0u) &&
               (launcher.last_shoot_level == 0u))) &&
             ((now - launcher_protection.fault_tick) >= LAUNCHER_PROTECT_COOLDOWN_MS) &&
@@ -1325,7 +1372,16 @@ static void Launcher_ProtectionUpdate(uint32_t now, uint8_t vehicle_on, uint8_t 
             (fabsf((float)rm_motor[SHOOT_FRIC_R].rx_info->torque_current_raw) < LAUNCHER_PROTECT_FRIC_CURRENT_RAW) &&
             ((feedback.errorState & 0x09u) == 0u))
         {
-            launcher_click.recover = 0u;
+            if (launcher_dial.jam_locked == 0u)
+            {
+                launcher_click.recover = 0u;
+                launcher_click.mid_pending = 0u;
+                if ((launcher_protection.reason == 1u) || (launcher_protection.reason == 2u))
+                {
+                    launcher_click.single_failures = 0u;
+                    launcher_dial.jam_attempts = 0u;
+                }
+            }
             launcher_protection.active = 0u;
             launcher.fault = 0u;
             launcher.state = LAUNCHER_SLEEP;
@@ -1799,49 +1855,112 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
 /* 双摩擦轮速度环，离线或失能时卸力 */
 static void Launcher_FricControl(uint8_t enable)
 {
+    uint32_t now = HAL_GetTick();
+    uint8_t repeat = ((enable != 0u) && (launcher.enabled != 0u) &&
+        (launcher_dial.state == LAUNCHER_REPEAT) &&
+        (launcher_dial.feed_allowed != 0u) && (launcher_dial.jam_locked == 0u) &&
+        (launcher_shoot.shoot_mode != 0u) && (launcher_shoot.shoot_level != 0u) &&
+        (launcher_speed.feed_ready != 0u) && (launcher_heat.ready != 0u) &&
+        (launcher_heat.blocked == 0u) && (launcher_heat.target_rate > 0.0f) &&
+        (launcher_speed.guard_latched == 0u) && (launcher.fault == 0u) &&
+        (launcher.fric_target_rpm > 0.0f) &&
+        (launcher.state != LAUNCHER_STOPPING)) ? 1u : 0u;
+
     for (uint8_t i = 0u; i < SHOOT_FRIC_NUM; i++)
     {
-        pid_ctrl_t *pid = rm_motor[i].ctrl->speed_ctrl; /* 当前速度环 */
+        pid_ctrl_t *pid = rm_motor[i].ctrl->speed_ctrl;
+        launcher_fric_control_t *observation = &launcher_fric_control[i];
+        launcher_fric_runtime_t *runtime = &launcher_fric_runtime[i];
         float direction = (i == SHOOT_FRIC_L) ?
                           LAUNCHER_FRIC_L_DIRECTION :
                           LAUNCHER_FRIC_R_DIRECTION;
 
+        observation->feedforward_raw = 0.0f;
+        observation->recovery_raw = 0.0f;
         if ((enable != 0u) && (Launcher_FricOnline(i) != 0u))
         {
+            float integral_before;
+            float base_output;
+            float requested_output;
             float recovery_output = 0.0f;
-            pid->target = direction * launcher.fric_target_rpm; /* 目标转速 */
-            pid->measure = (float)rm_motor[i].rx_info->encoder_speed; /* 反馈转速 */
+            float deficit;
+            pid->target = direction * launcher.fric_target_rpm;
+            pid->measure = (float)rm_motor[i].rx_info->encoder_speed;
             pid->err = pid->target - pid->measure;
+            deficit = direction * pid->err;
 
-            if (launcher.state == LAUNCHER_STOPPING)
+            if (launcher.fric_target_rpm == 0.0f)
             {
                 pid->integral = 0.0f;
             }
 
+            integral_before = pid->integral;
+            // NOTE: 积分按本拍总输出裁决
+            pid->out = 0.0f;
             single_pid_ctrl(pid);
-            /* 连发掉速补偿保持总限幅 */
-            if ((launcher_dial.state == LAUNCHER_REPEAT) &&
-                (launcher_shoot.shoot_mode != 0u) &&
-                (launcher_shoot.shoot_level != 0u) &&
-                (launcher_speed.guard_latched == 0u) &&
-                (launcher.state != LAUNCHER_STOPPING))
+            if (repeat != 0u)
             {
+                float fade = constrain(1.0f + deficit /
+                    LAUNCHER_FRIC_REPEAT_FF_FADE_RPM, 0.0f, 1.0f);
+                observation->feedforward_raw = direction *
+                    LAUNCHER_FRIC_REPEAT_FF_RAW * fade * constrain(
+                        launcher_heat.target_rate / LAUNCHER_FRIC_REPEAT_FF_RATE,
+                        0.0f, 1.0f);
                 recovery_output = direction * constrain(
                     LAUNCHER_FRIC_REPEAT_BOOST_KP *
-                    (direction * pid->err - LAUNCHER_FRIC_REPEAT_BOOST_DEAD_RPM),
+                    (deficit - LAUNCHER_FRIC_REPEAT_BOOST_DEAD_RPM),
                     0.0f, LAUNCHER_FRIC_REPEAT_BOOST_MAX);
+                if (deficit >= LAUNCHER_FRIC_REPEAT_STRONG_RPM)
+                    observation->strong_active = 1u;
+                else if (deficit <= LAUNCHER_FRIC_REPEAT_RELEASE_RPM)
+                    observation->strong_active = 0u;
             }
-            rm_motor[i].tx_info->torque = /* 力矩限幅 */
-                constrain(pid->out + recovery_output,
-                          -LAUNCHER_FRIC_OUT_MAX,
-                          LAUNCHER_FRIC_OUT_MAX);
+            else observation->strong_active = 0u;
+
+            base_output = pid->pout + pid->iout + pid->dout;
+            requested_output = (observation->strong_active != 0u) ?
+                direction * LAUNCHER_FRIC_OUT_MAX :
+                base_output + observation->feedforward_raw + recovery_output;
+            // NOTE: 仅阻止加深总输出饱和
+            if (((requested_output >= LAUNCHER_FRIC_OUT_MAX) && (pid->err > 0.0f)) ||
+                ((requested_output <= -LAUNCHER_FRIC_OUT_MAX) && (pid->err < 0.0f)))
+            {
+                pid->integral = integral_before;
+                pid->iout = pid->ki * pid->integral;
+                base_output = pid->pout + pid->iout + pid->dout;
+                if (observation->strong_active == 0u)
+                    requested_output = base_output + observation->feedforward_raw +
+                        recovery_output;
+            }
+            pid->out = constrain(base_output, -pid->out_max, pid->out_max);
+            observation->recovery_raw = (observation->strong_active != 0u) ?
+                requested_output - base_output - observation->feedforward_raw :
+                recovery_output;
+            rm_motor[i].tx_info->torque = constrain(requested_output,
+                -LAUNCHER_FRIC_OUT_MAX, LAUNCHER_FRIC_OUT_MAX);
         }
         else
         {
-            pid->integral = 0.0f;
-            pid->last_err = 0.0f;
-            pid->out = 0.0f;
+            integral_to_zero(pid);
             rm_motor[i].tx_info->torque = 0.0f;
+            observation->strong_active = 0u;
+        }
+
+        if ((enable != 0u) && (launcher.fric_target_rpm > 0.0f) &&
+            (direction * rm_motor[i].tx_info->torque >= LAUNCHER_FRIC_OUT_MAX))
+        {
+            if (runtime->saturation_active == 0u)
+            {
+                runtime->saturation_tick = now;
+                runtime->saturation_active = 1u;
+            }
+            observation->forward_saturated_ms = (uint32_t)(now - runtime->saturation_tick);
+        }
+        else
+        {
+            runtime->saturation_active = 0u;
+            runtime->saturation_tick = now;
+            observation->forward_saturated_ms = 0u;
         }
         if (i == SHOOT_FRIC_L)
         {
@@ -1892,6 +2011,33 @@ static void Launcher_UpdateFrictionReady(uint8_t enabled)
         (launcher_fric_ready_count >= LAUNCHER_FRIC_READY_TIME_MS) ? 1u : 0u;
 }
 
+/* 零速制动后撤掉电流 */
+static void Launcher_FricStop(void)
+{
+    uint8_t stopped = 0u;
+    uint32_t now = HAL_GetTick();
+
+    launcher.enabled = 0u;
+    launcher.fric_target_rpm = 0.0f;
+    Launcher_UpdateFrictionReady(0u);
+    if ((Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
+        (Launcher_FricOnline(SHOOT_FRIC_R) != 0u) &&
+        (launcher.fric_l_speed_rpm <= LAUNCHER_FRIC_STOP_SPEED_RPM) &&
+        (launcher.fric_r_speed_rpm <= LAUNCHER_FRIC_STOP_SPEED_RPM))
+    {
+        if (launcher_fric_stop_started == 0u)
+        {
+            launcher_fric_stop_started = 1u;
+            launcher_fric_stop_tick = now;
+        }
+        stopped = ((now - launcher_fric_stop_tick) >= LAUNCHER_FRIC_STOP_CONFIRM_MS);
+    }
+    else launcher_fric_stop_started = 0u;
+
+    Launcher_FricControl((stopped == 0u) ? 1u : 0u);
+    if (stopped != 0u) launcher.state = LAUNCHER_SLEEP;
+}
+
 /* 初始化发射状态与控制环 */
 void Launcher_Init(void)
 {
@@ -1902,6 +2048,8 @@ void Launcher_Init(void)
     memset(&launcher_dial, 0, sizeof(launcher_dial));
     memset(&launcher_speed, 0, sizeof(launcher_speed));
     memset(&launcher_speed_runtime, 0, sizeof(launcher_speed_runtime));
+    memset(launcher_fric_control, 0, sizeof(launcher_fric_control));
+    memset(launcher_fric_runtime, 0, sizeof(launcher_fric_runtime));
     memset(&launcher_protection, 0, sizeof(launcher_protection));
     memset(&launcher_safety, 0, sizeof(launcher_safety));
     memset(&launcher_jam, 0, sizeof(launcher_jam));
@@ -1939,7 +2087,8 @@ void Launcher_Init(void)
 
     launcher_fric_ready_count = 0u;
     launcher_jam_count = 0u;
-    launcher_fric_stop_count = 0u;
+    launcher_fric_stop_started = 0u;
+    launcher_fric_stop_tick = 0u;
     launcher_dial_stopped = 1u;
     launcher_dial_stop_tick = 0u;
     launcher_dial_target_synced = 0u;
@@ -2030,8 +2179,6 @@ static void Launcher_KeyboardPressUpdate(uint32_t now, uint8_t vehicle_on, uint8
 
     if (fresh == 0u)
     {
-        launcher_click.mid_pending = 0u;
-        launcher_click.s2_seen = 0u;
         launcher_click.seen = 0u;
         launcher_click.armed = 0u;
         launcher_click.pending = 0u;
@@ -2211,63 +2358,29 @@ void Launcher_Work(void)
         (launcher_heat.blocked == 0u) && (launcher_heat.target_rate > 0.0f)) ? 1u : 0u;
 
     /* 摩擦轮停机不覆盖拨盘阶段 */
-    if ((launcher.fault != 0u) || (vehicle_on == 0u))
+    if (launcher.fault != 0u)
     {
         launcher.enabled = 0u;
-        launcher.state = (launcher.fault != 0u) ? LAUNCHER_FAULT : LAUNCHER_SLEEP;
+        launcher.state = LAUNCHER_FAULT;
         launcher.fric_target_rpm = 0.0f;
-        launcher_fric_stop_count = 0u;
+        launcher_fric_stop_started = 0u;
         Launcher_UpdateFrictionReady(0u);
         Launcher_FricControl(0u);
     }
-    else if (fric_on == 0u)
+    else if ((vehicle_on == 0u) || (fric_on == 0u))
     {
-        launcher.enabled = 0u;
-        Launcher_UpdateFrictionReady(0u);
-        if (launcher.state == LAUNCHER_SLEEP)
-        {
-            launcher.fric_target_rpm = 0.0f;
-            launcher_fric_stop_count = 0u;
-            Launcher_FricControl(0u);
-        }
-        else
-        {
-            launcher.state = LAUNCHER_STOPPING;
-            launcher.fric_target_rpm = Launcher_Ramp(
-                launcher.fric_target_rpm, 0.0f,
-                LAUNCHER_FRIC_STOP_RAMP_RPM_PER_MS);
-            Launcher_FricControl(1u);
-            if ((launcher.fric_l_speed_rpm <= LAUNCHER_FRIC_STOP_SPEED_RPM) &&
-                (launcher.fric_r_speed_rpm <= LAUNCHER_FRIC_STOP_SPEED_RPM))
-            {
-                if (launcher_fric_stop_count < LAUNCHER_FRIC_STOP_CONFIRM_MS)
-                {
-                    launcher_fric_stop_count++;
-                }
-            }
-            else
-            {
-                launcher_fric_stop_count = 0u;
-            }
-            if (launcher_fric_stop_count >= LAUNCHER_FRIC_STOP_CONFIRM_MS)
-            {
-                launcher.fric_target_rpm = 0.0f;
-                launcher.state = LAUNCHER_SLEEP;
-                launcher_fric_stop_count = 0u;
-                Launcher_FricControl(0u);
-            }
-        }
+        launcher.state = LAUNCHER_STOPPING;
+        Launcher_FricStop();
     }
     else
     {
         launcher.enabled = 1u;
-        launcher_fric_stop_count = 0u;
+        launcher_fric_stop_started = 0u;
         launcher.state = LAUNCHER_READY;
         launcher.fric_target_rpm = Launcher_Ramp(
             launcher.fric_target_rpm, launcher_speed.target_rpm,
             LAUNCHER_FRIC_RAMP_RPM_PER_MS);
         Launcher_UpdateFrictionReady(1u);
-        Launcher_FricControl(1u);
     }
 
     if ((launcher_dial.state == LAUNCHER_READY) && (launcher.fric_ready == 0u))
@@ -2285,6 +2398,9 @@ void Launcher_Work(void)
         Launcher_DialEnterBrake(now);
     }
     Launcher_DialUpdate(now, single_rising, continuous);
+    // NOTE: 使用供弹本拍最终阶段
+    if ((vehicle_on != 0u) && (fric_on != 0u))
+        Launcher_FricControl((launcher.fault == 0u) ? 1u : 0u);
     launcher_dial.target_angle = launcher_dial_target;
     launcher_dial.target_error = launcher_dial_target - (int64_t)current_angle;
     launcher.dial_target_angle = (int32_t)launcher_dial_target;

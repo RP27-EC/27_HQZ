@@ -6,24 +6,27 @@
 #define LAUNCHER_REPEAT_ENABLE            1u // 连发控制使能，0/1
 #define LAUNCHER_FRIC_TARGET_RPM          6000.0f // 单连发启动基准，rpm
 #define LAUNCHER_FRIC_RAMP_RPM_PER_MS     20.0f // 升速斜坡，rpm/ms
-#define LAUNCHER_FRIC_STOP_RAMP_RPM_PER_MS 20.0f // 停机斜坡，rpm/ms
 #define LAUNCHER_FRIC_STOP_SPEED_RPM      100.0f // 停转速度上限，rpm
-#define LAUNCHER_FRIC_STOP_CONFIRM_MS     1000u // 停转确认时间，ms
+#define LAUNCHER_FRIC_STOP_CONFIRM_MS     20u // 停转确认时间，ms
 #define LAUNCHER_FRIC_READY_TOL_RPM       100.0f // 达速允许误差，rpm
 #define LAUNCHER_FRIC_READY_TIME_MS       100u // 达速确认时间，ms
-#define LAUNCHER_FRIC_KP                  2.0f // 比例增益，原始量/rpm
-#define LAUNCHER_FRIC_KI                  1.0f // 积分增益，原始量/累积误差
+#define LAUNCHER_FRIC_KP                  3.0f // 比例增益，原始量/rpm
+#define LAUNCHER_FRIC_KI                  1.5f // 积分增益，原始量/累积误差
 #define LAUNCHER_FRIC_KD                  0.0f // 微分增益，原始量/误差差值
 #define LAUNCHER_FRIC_INTEGRAL_MAX        500.0f // 积分累积上限，rpm
-#define LAUNCHER_FRIC_KFF                 0.0f // 前馈增益，原始量/rpm
 #define LAUNCHER_FRIC_OUT_MAX             5000.0f // 电流输出限幅，原始量
 #define LAUNCHER_FRIC_L_DIRECTION         1.0f // 左轮旋向，正负1
 #define LAUNCHER_FRIC_R_DIRECTION         -1.0f // 右轮旋向，正负1
 
 /* 连发掉速恢复 */
-#define LAUNCHER_FRIC_REPEAT_BOOST_KP      1.0f // 额外恢复增益，原始量/rpm
-#define LAUNCHER_FRIC_REPEAT_BOOST_DEAD_RPM 100.0f // 恢复补偿死区，rpm
-#define LAUNCHER_FRIC_REPEAT_BOOST_MAX     1500.0f // 单轮额外输出上限，原始量
+#define LAUNCHER_FRIC_REPEAT_FF_RAW        1000.0f // 满射频负载前馈，raw
+#define LAUNCHER_FRIC_REPEAT_FF_RATE       15.0f // 前馈基准射频，发/s
+#define LAUNCHER_FRIC_REPEAT_FF_FADE_RPM   100.0f // 超速撤销前馈，rpm
+#define LAUNCHER_FRIC_REPEAT_BOOST_KP      3.0f // 恢复增益，raw/rpm
+#define LAUNCHER_FRIC_REPEAT_BOOST_DEAD_RPM 50.0f // 恢复补偿死区，rpm
+#define LAUNCHER_FRIC_REPEAT_BOOST_MAX     3000.0f // 单轮恢复上限，raw
+#define LAUNCHER_FRIC_REPEAT_STRONG_RPM    600.0f // 强恢复进入误差，rpm
+#define LAUNCHER_FRIC_REPEAT_RELEASE_RPM   150.0f // 强恢复退出误差，rpm
 
 /* 单发与连发弹速修正 */
 #define LAUNCHER_SPEED_TARGET_MPS        22.0f // 目标弹速，m/s
@@ -31,9 +34,13 @@
 #define LAUNCHER_SPEED_GUARD_MPS         24.0f // 高弹速锁止，m/s
 #define LAUNCHER_SPEED_LIMIT_MPS         25.0f // 规则上限，m/s
 #define LAUNCHER_SPEED_MIN_RPM         5400.0f // 正常修正下限，rpm
-#define LAUNCHER_SPEED_MAX_RPM         6000.0f // 正常修正上限，rpm
+#define LAUNCHER_SPEED_MAX_RPM         6000.0f // 单发修正上限，rpm
 #define LAUNCHER_SPEED_GAIN              20.0f // 修正增益，rpm/(m/s)
 #define LAUNCHER_SPEED_STEP_MAX_RPM      50.0f // 每组三发步长，rpm
+#define LAUNCHER_SPEED_REPEAT_GAIN     100.0f // 连发增益，rpm/(m/s)
+#define LAUNCHER_SPEED_REPEAT_STEP_RPM 200.0f // 连发每组步长，rpm
+#define LAUNCHER_SPEED_REPEAT_TRACK_RPM 150.0f // 升速允许不足，rpm
+#define LAUNCHER_SPEED_REPEAT_SAT_MS     50u // 升速阻断饱和时长，ms
 #define LAUNCHER_SPEED_SAMPLE_COUNT       3u // 同目标有效样本，条
 #define LAUNCHER_SPEED_WAIT_MS         1000u // 反馈学习超时，ms
 #define LAUNCHER_SPEED_LINK_MS          300u // D6链路超时，ms
@@ -43,7 +50,7 @@
 #define LAUNCHER_SPEED_SHOOTER_NUMBER     1u // 第一17mm机构，值1
 
 #define LAUNCHER_INPUT_TIMEOUT_MS         50u // 发射控制帧上限，ms
-#define LAUNCHER_SINGLE_JAM_LIMIT          3u // 连续单发堵转上限，次
+#define LAUNCHER_SINGLE_JAM_LIMIT          2u // 单发堵转锁定，次
 
 /* 单发位置控制 */
 #define LAUNCHER_DIAL_ANGLE_KP            0.08f // 位置增益，(deg/s)/count

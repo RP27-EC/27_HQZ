@@ -72,7 +72,7 @@
 
 **发射**：下板生成许可、单发/连发模式和触发电平，上板执行闭环。遥控单发识别触发上升沿，鼠标单发消费D5点击序号并等待达速；目标在前一次目标上累加 65536 count；到位并低速稳定后回保持。连发按热量许可生成拨盘速度。退出供弹后进入制动/保持，机构失能或离线则卸力。待发保持 PID 仍每轮计算，只在稳定 100 ms 后将拨盘力矩发送从 1 ms 降至 10 ms。
 
-当前 `Launcher_Work()` 以 D1 `launch_state` 和左右摩擦轮在线等条件生成 `fric_on`，再结合拨盘、过洞、D1 `feed_permit` 生成 `feed_allowed`；供弹不依赖升降顶部或故障状态。`fric_ready` 要求达到最终目标±100 rpm并持续100 ms，作为新单发受理及连发启动门槛。新增D6逐发弹速控制：6000 rpm基准、22 m/s目标、三发均值修正、正常范围5400～6000 rpm、24 m/s锁止及25 m/s越限计数。键鼠左键长按选择连发，连发以6000 rpm启动，同目标三条有效反馈均值修正独立目标；缺少弹速仅清空学习，链路、热量、高弹速和供弹许可仍约束发射。详见[单发弹速闭环](task_up/docs/launcher.md#单发弹速闭环)。
+当前 `Launcher_Work()` 以 D1 `launch_state` 和左右摩擦轮在线等条件生成 `fric_on`，再结合拨盘、过洞、D1 `feed_permit` 生成 `feed_allowed`；供弹不依赖升降顶部或故障状态。`fric_ready` 要求达到最终目标±100 rpm并持续100 ms，作为新单发受理及连发启动门槛。D6弹速控制以6000 rpm启动、目标22 m/s、三发均值修正；单发范围5400～6000 rpm、每组±50 rpm，连发下限5400 rpm、无6000 rpm上限、每组±200 rpm。摩擦轮统一PI为3/1.5，连发叠加射频负载前馈、掉速恢复及600/150 rpm回差强恢复，最终输出仍限±5000 raw。24 m/s锁止和25 m/s计数保留。键鼠左键长按选择连发；缺少弹速仅清空学习，链路、热量、高弹速和供弹许可仍约束发射。详见[弹速与轮速控制](task_up/docs/launcher.md#单发弹速闭环)。
 
 源码重点：[lift.c](task_up/Application/ModuleLayer/lift.c)、[launch.c](task_down/Application/ModuleLayer/launch.c)、[launcher.c](task_up/Application/ModuleLayer/launcher.c)。
 
@@ -157,7 +157,7 @@
 | `LIFT_DOWN_OVER_CURRENT_RAW / LIFT_UP_OVER_CURRENT_RAW` | 75 / 520 | 下行/上行过流阈值，协议原始量，不能当 A |
 | `LIFT_DOWN_OVER_CURRENT_CONFIRM_MS / LIFT_UP_OVER_CURRENT_CONFIRM_MS` | 200 / 500 | 对应过流确认时间，ms |
 | `LAUNCHER_FRIC_TARGET_RPM / LAUNCHER_FRIC_READY_TOL_RPM / LAUNCHER_FRIC_READY_TIME_MS` | 6000 / 100 / 100 | 基准目标/达速容差 rpm / 确认 ms；新单发及连发启动门槛 |
-| `LAUNCHER_FRIC_KP / LAUNCHER_FRIC_KI / LAUNCHER_FRIC_OUT_MAX` | 2 / 1 / 5000 | 摩擦轮 PI 增益 / 原始电流输出限幅 |
+| `LAUNCHER_FRIC_KP / LAUNCHER_FRIC_KI / LAUNCHER_FRIC_OUT_MAX` | 3 / 1.5 / 5000 | 摩擦轮 PI 增益 / 原始电流输出限幅 |
 | `LAUNCHER_DIAL_ONE_SHOT_ANGLE` | 65536 | 每发累加的电机编码器位移，count |
 | `LAUNCHER_DIAL_ANGLE_KP / LAUNCHER_DIAL_SPEED_KP / LAUNCHER_DIAL_SPEED_KI` | 0.08 / 0.1 / 0.05 | 单发位置外环/速度内环增益 |
 | `LAUNCHER_DIAL_REPEAT_SPEED_DPS / LAUNCHER_DIAL_REPEAT_KP` | 6000 / 0.35 | 连发机械速度上限 deg/s / 独立速度环增益 |
@@ -365,7 +365,7 @@ UV4 -b task_down\MDK-ARM\DM-MC02.uvprojx -t DM-MC02 -o "$env:TEMP\Train_code_plu
 | --- | --- | --- |
 | 云台归中/输出 | `task_up/Application/ConfigLayer/gimbal_init_config.h`、`task_up/Application/ModuleLayer/gimbal.h` | 归中目标 0 deg；超时 6000 ms；稳定 30 ms；Yaw/Pitch 力矩上限 6 N·m；Pitch 重力补偿开关 |
 | 升降 | `task_up/Application/ConfigLayer/lift_config.h` | 行程 280 电机圈；找顶速度 2865 rpm；找顶/运动超时 90000 ms；位置量以 count 计，不等于机械 mm |
-| 发射/热量 | `task_up/Application/ConfigLayer/launcher_config.h` | 6000 rpm基准、22 m/s目标、24 m/s锁止；单发5400～6000 rpm；热量余量20、恢复30、最大15发/s；D3超时100 ms |
+| 发射/热量 | `task_up/Application/ConfigLayer/launcher_config.h` | 6000 rpm基准、22 m/s目标、24 m/s锁止；单发5400～6000 rpm，连发下限5400 rpm且无6000上限；PI为3/1.5；热量余量20、恢复30、最大15发/s；D3超时100 ms |
 | 底盘 | `task_down/Application/ConfigLayer/chassis_config.h` | `CHASSIS_MAX_VX/VY/WZ=25/25/20`（工程控制域，不直接等同 SI 单位）；普通跟随停止1°/恢复2°，特殊回正到位0.5°后恢复普通死区；停稳受扰和小陀螺退出可叠加辅助前馈，见[控制说明](task_down/docs/chassis.md#跟随闭环与故障锁存)；反馈超时50 ms；轮力矩受模式限幅 |
 | 底盘功率 | `task_down/Application/ConfigLayer/power_limit_config.h` | 开关 1；裁判快照无效时回退预算 45 W；在线余量 5 W；超电反馈当前只记录，不参与该闭环 |
 | 板间帧 | `task_down/Application/ConfigLayer/board_comm_config.h`、`task_up/Application/ConfigLayer/board_remote_config.h` | D1/D2 1 ms、D3 10 ms、D4 关闭、D5 开启；上板每类反馈最短 5 ms |

@@ -179,7 +179,7 @@ LIFT_READY_UP → LIFT_ALIGN_DOWN → LIFT_MOVING_DOWN → LIFT_READY_DOWN
 | `Application/ConfigLayer/gimbal_init_config.h` | 归中目标 0 deg；Yaw/Pitch 归中力矩上限 6 N·m；速度规划开关 0；超时 6000 ms |
 | `Application/ModuleLayer/gimbal.h` | 控制步长 0.001 s；Yaw 静摩擦前馈 0.3 N·m；Pitch/Yaw 最终默认力矩限幅 6 N·m；重力补偿开关 1 |
 | `Application/ConfigLayer/lift_config.h` | 下端距零点280圈；找顶2865 rpm、启动宽限1000 ms；上端偏移5圈并实际回退；起步955 rpm/4444 raw，超时90000 ms |
-| `Application/ConfigLayer/launcher_config.h` | 基准6000 rpm；目标22 m/s；三发修正5400～6000 rpm；24 m/s锁止；射频上限15发/s；D3超时100 ms |
+| `Application/ConfigLayer/launcher_config.h` | 基准6000 rpm；目标22 m/s；单发5400～6000 rpm；连发下限5400 rpm、每组±200 rpm且无6000上限；PI为3/1.5；24 m/s锁止；射频上限15发/s；D3超时100 ms |
 | `Application/ConfigLayer/board_remote_config.h` | 下板遥控输入开；本地遥控关闭；C1/C2 各自最短间隔 5 ms |
 
 ### 控制状态判读
