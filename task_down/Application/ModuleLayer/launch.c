@@ -25,6 +25,7 @@ static uint8_t launch_keyboard_fric_on; // 键鼠摩擦轮使能，0/1
 static uint8_t launch_keyboard_last_g; // 上拍G键电平，0/1
 static uint8_t launch_keyboard_mouse_ready; // 新按下已解锁，0/1
 static uint8_t launch_keyboard_last_mouse; // 上拍左键电平，0/1
+static uint8_t launch_keyboard_was_long; // 本次长按已成立，0/1
 uint8_t launch_mouse_press_seq; // 鼠标按下序号，0~255
 static uint8_t launch_pending_press_seq; // 待发布序号，0~255
 static uint32_t launch_keyboard_tick; // 键鼠会话时刻，ms
@@ -99,6 +100,7 @@ static void Launch_Init(Launch_t *launch)
     launch_keyboard_last_g = 0u;
     launch_keyboard_mouse_ready = 0u;
     launch_keyboard_last_mouse = 0u;
+    launch_keyboard_was_long = 0u;
     launch_remote_feed_ready = 0u;
     launch->feed_permit = 0u;
     launch->s2_mid = 0u;
@@ -133,6 +135,7 @@ static void Launch_Data_Update(Launch_t *launch)
         Launch_Reset_S2_Filter();
         launch_keyboard_active = 0u;
         launch_keyboard_fric_on = 0u;
+        launch_keyboard_was_long = 0u;
         launch_keyboard_mouse_ready = 0u;
         launch_keyboard_last_g = (rc_dev.info != NULL &&
             (rc_dev.info->key_v & KEY_PRESSED_OFFSET_G) != 0u) ? 1u : 0u;
@@ -168,6 +171,16 @@ static void Launch_Data_Update(Launch_t *launch)
         launch_pending_press_seq++;
         launch_keyboard_fric_on = 1u;
         launch_keyboard_active = 1u;
+        launch_keyboard_was_long = 0u;
+    }
+    if ((launch_keyboard_active != 0u) && (mouse_down != 0u) &&
+        (rc_dev.info->mouse_btn_l.status == long_press)) launch_keyboard_was_long = 1u;
+    if ((launch_keyboard_last_mouse != 0u) && (mouse_down == 0u) &&
+        (launch_keyboard_was_long != 0u))
+    {
+        launch_keyboard_fric_on = 0u;
+        launch_keyboard_was_long = 0u;
+        launch_keyboard_tick = now;
     }
     if ((launch_keyboard_active != 0u) && (mouse_down != 0u)) launch_keyboard_tick = now;
     if ((launch_keyboard_active != 0u) && (mouse_down == 0u) &&

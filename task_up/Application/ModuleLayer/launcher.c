@@ -69,12 +69,14 @@ typedef struct
     uint32_t rebase_count; // 最近编码器重建，次
     uint32_t dial_start_tick; // 拨盘运动起点，ms
     uint32_t progress_tick; // 进展窗口起点，ms
+    uint32_t progress_seq; // 进展反馈序号，循环
     int32_t progress_angle; // 窗口位置，count
     uint32_t jam_ms; // 低速高流持续，ms
     uint32_t hold_ms; // 保持高流持续，ms
     uint32_t fric_start_tick; // 摩擦轮升速起点，ms
     uint32_t fric_jam_ms[2]; // 两轮堵转持续，ms
     uint8_t dial_moving; // 上拍运动请求，0/1
+    uint8_t progress_tracking; // 连续低速观察，0/1
     uint8_t fric_on; // 上拍开轮请求，0/1
 } launcher_safety_runtime_t;
 
@@ -82,12 +84,12 @@ static launcher_safety_runtime_t launcher_safety;
 
 typedef struct
 {
-    uint32_t verify_start_tick; // 正转确认总起点，ms
     uint32_t stable_tick; // 连续正转起点，ms
     uint32_t verify_seq; // 上次正转反馈序号，循环
     int32_t stable_count; // 正转窗初始位置，count
     uint8_t verify_tracking; // 正转窗口有效，0/1
     uint8_t event; // 本拍连发堵转，0/1
+    uint8_t single_reverse; // 单发反退标记，0/1
 } launcher_jam_runtime_t;
 
 static launcher_jam_runtime_t launcher_jam;
@@ -109,7 +111,8 @@ static launcher_heat_runtime_t launcher_heat_runtime;
 
 static uint16_t launcher_fric_ready_count; /* 摩擦轮达速确认计数 */
 uint8_t launcher_jam_count; /* 堵转次数，调试可观测 */
-static uint16_t launcher_fric_stop_count; /* 摩擦轮停转确认计数 */
+static uint8_t launcher_fric_stop_started; // 停转确认已开始，0/1
+static uint32_t launcher_fric_stop_tick; // 停转确认起点，ms
 static uint8_t launcher_dial_stopped; /* 1 = 拨盘已停机 */
 static uint32_t launcher_dial_stop_tick; /* 上次停机命令时刻 */
 static uint8_t launcher_dial_target_synced; /* 目标是否已对齐反馈 */
@@ -119,7 +122,6 @@ static uint32_t launcher_dial_hole_release_tick; // 退出请求时刻，ms
 static uint32_t launcher_dial_hold_tx_tick; // 上次保持发送时刻，ms
 static uint32_t launcher_dial_hold_active_tick; // 上次保持纠偏时刻，ms
 static int64_t launcher_dial_target; /* 拨盘绝对目标角度，count */
-static int64_t launcher_dial_feed_target; /* 退让前供弹目标，count */
 
 static pid_ctrl_t launcher_dial_angle_pid; /* 拨盘位置环 */
 static pid_ctrl_t launcher_dial_speed_pid; /* 拨盘单发速度环 */
@@ -778,6 +780,7 @@ static uint8_t Launcher_DialAtTarget(int64_t target)
 /* 以力矩模式下发拨盘电流 */
 static void Launcher_DialApplyTorque(int16_t current)
 {
+    if (launcher_dial.jam_locked != 0u) return;
     launcher_dial.output_current_raw = current;
     launcher_dial.torque_tx_status = (uint8_t)HAL_ERROR;
     if ((dail_motor.W_iqControl != NULL) && (dail_motor.tx_W_cmd != NULL))
@@ -814,7 +817,7 @@ static HAL_StatusTypeDef Launcher_DialStop(void)
 /* 拨盘进入闭环运行 */
 static HAL_StatusTypeDef Launcher_DialRun(void)
 {
-    if (dail_motor.tx_W_cmd == NULL)
+    if ((launcher_dial.jam_locked != 0u) || (dail_motor.tx_W_cmd == NULL))
     {
         return HAL_ERROR;
     }
@@ -923,6 +926,7 @@ static void Launcher_DialJamCancel(void)
 {
     launcher_jam.event = 0u;
     launcher_jam.verify_tracking = 0u;
+    launcher_jam.single_reverse = 0u;
     if (launcher_dial.jam_locked == 0u)
     {
         launcher_dial.jam_phase = LAUNCHER_JAM_IDLE;
@@ -948,7 +952,6 @@ static void Launcher_DialEnterHold(uint32_t now, uint8_t capture)
     if (capture != 0u)
     {
         launcher_dial_target = (int64_t)Launcher_DialAngle();
-        launcher_dial_feed_target = launcher_dial_target;
     }
     launcher_dial.state = LAUNCHER_READY;
     launcher_dial.state_tick = now;
@@ -1045,11 +1048,35 @@ static uint8_t Launcher_DialHoleHoldAllowed(uint32_t now)
     return 1u;
 }
 
+/* 锁定期间只重发失能 */
+static void Launcher_DialJamDisable(uint32_t now)
+{
+    Launcher_DialClearPid();
+    launcher_dial.speed_target_dps = 0.0f;
+    launcher_dial.output_current_raw = 0;
+    launcher_dial_target_synced = 0u;
+    launcher_dial.settling = 0u;
+    launcher_protection.recovery_phase = 0u;
+    launcher.jam_tick = 0u;
+    if ((now - launcher_dial_stop_tick) >= LAUNCHER_DIAL_SAFE_STOP_RETRY_MS)
+    {
+        launcher_dial_stop_tick = now;
+        launcher_dial.stop_tx_status = (uint8_t)((dail_motor.tx_W_cmd != NULL) ?
+            dail_motor.tx_W_cmd(&dail_motor, MOTOR_CLOSE_ID) : HAL_ERROR);
+        launcher_dial_stopped = (launcher_dial.stop_tx_status == HAL_OK) ? 1u : 0u;
+    }
+}
+
 /* 失能后禁止追赶旧目标 */
 static void Launcher_DialSafeStop(uint32_t now)
 {
     HAL_StatusTypeDef status;
 
+    if (launcher_dial.jam_locked != 0u)
+    {
+        Launcher_DialJamDisable(now);
+        return;
+    }
     launcher_dial.speed_target_dps = 0.0f;
     launcher_dial.output_current_raw = 0;
     if ((launcher_dial_stopped == 0u) ||
@@ -1076,7 +1103,11 @@ static void Launcher_DialSafeStop(uint32_t now)
 
 static void Launcher_ProtectStop(uint8_t reason, uint32_t now)
 {
-    if (launcher_protection.active == 0u) launcher_protection.count++;
+    if (launcher_protection.active == 0u)
+    {
+        launcher_protection.count++;
+        launcher_click.mid_pending = 0u;
+    }
     launcher_click.pending = 0u;
     launcher_click.authorized = 0u;
     launcher_click.recover = 0u;
@@ -1104,6 +1135,10 @@ static void Launcher_DialJamLock(uint32_t now)
     launcher_click.authorized = 0u;
     launcher_click.recover = 0u;
     launcher_dial.jam_locked = 1u;
+    launcher_click.mid_pending = 0u;
+    launcher_jam.event = 0u;
+    launcher_jam.verify_tracking = 0u;
+    launcher_jam.single_reverse = 0u;
     launcher_dial.jam_phase = LAUNCHER_JAM_LOCKED;
     launcher_dial.hold_allowed = 0u;
     launcher_dial.feed_allowed = 0u;
@@ -1115,32 +1150,37 @@ static void Launcher_DialJamLock(uint32_t now)
     launcher_speed_runtime.press_single_started = 0u;
     launcher_press_authorized = 0u;
     launcher_keyboard_press_ready = 0u;
-    Launcher_DialApplyTorque(0);
-    Launcher_DialSafeStop(now);
+    launcher_dial_stop_tick = now - LAUNCHER_DIAL_SAFE_STOP_RETRY_MS;
+    Launcher_DialJamDisable(now);
     launcher_dial.state = LAUNCHER_FAULT;
 }
 
-static void Launcher_DialJamRetry(uint32_t now)
+static void Launcher_DialJamReverse(uint32_t now, uint8_t single)
 {
     int64_t angle = (int64_t)Launcher_DialAngle();
-    if (launcher_dial.jam_attempts >= LAUNCHER_DIAL_JAM_MAX_ATTEMPTS)
-    {
-        Launcher_DialJamLock(now);
-        return;
-    }
-    launcher_dial.jam_attempts++;
-    launcher_jam_count++;
-    launcher_dial_feed_target = angle;
     launcher_dial_target = angle - (int64_t)(LAUNCHER_DIAL_DIRECTION *
-                                           LAUNCHER_DIAL_REVERSE_ANGLE);
+        ((single != 0u) ? LAUNCHER_DIAL_SINGLE_REVERSE_ANGLE : LAUNCHER_DIAL_REVERSE_ANGLE));
     launcher_dial.state = LAUNCHER_REVERSE;
     launcher_dial.state_tick = now;
     launcher_dial.jam_phase = LAUNCHER_JAM_REVERSE;
     launcher_jam.event = 0u;
     launcher_jam.verify_tracking = 0u;
+    launcher_jam.single_reverse = single;
     launcher_safety.jam_ms = 0u;
     launcher_safety.dial_moving = 0u;
     Launcher_DialClearPid();
+}
+
+static void Launcher_DialJamRetry(uint32_t now)
+{
+    launcher_dial.jam_attempts++;
+    launcher_jam_count++;
+    if (launcher_dial.jam_attempts >= LAUNCHER_DIAL_JAM_MAX_ATTEMPTS)
+    {
+        Launcher_DialJamLock(now);
+        return;
+    }
+    Launcher_DialJamReverse(now, 0u);
 }
 
 static void Launcher_DialJamResetUpdate(uint32_t now, uint8_t vehicle_on)
@@ -1154,8 +1194,10 @@ static void Launcher_DialJamResetUpdate(uint32_t now, uint8_t vehicle_on)
         (launcher_shoot.s2_mid != 0u) && (launcher_click.s2_mid == 0u));
     launcher_click.s2_seen = 1u;
     launcher_click.s2_mid = launcher_shoot.s2_mid;
-    if ((mid_edge != 0u) && ((launcher_click.single_failures != 0u) ||
-        (launcher_dial.jam_locked != 0u) || (launcher_dial.jam_attempts != 0u)))
+    // NOTE: 普通回中不清失败次数
+    if ((mid_edge != 0u) && ((launcher_dial.jam_locked != 0u) ||
+        ((launcher_protection.active != 0u) &&
+         ((launcher_protection.reason == 1u) || (launcher_protection.reason == 2u)))))
         launcher_click.mid_pending = 1u;
     requested = ((launcher_click.recover != 0u) || (launcher_click.mid_pending != 0u));
     if (launcher_protection.active != 0u) return;
@@ -1164,9 +1206,10 @@ static void Launcher_DialJamResetUpdate(uint32_t now, uint8_t vehicle_on)
          ((now - launcher_click.lock_tick) < LAUNCHER_PROTECT_COOLDOWN_MS))) return;
     if ((Launcher_DialOnline() == 0u) ||
         ((dail_motor.KT_motor_info.rx_info.errorState & 0x09u) != 0u) ||
-        (fabsf((float)dail_motor.KT_motor_info.rx_info.current) >= LAUNCHER_DIAL_JAM_CURRENT_RAW)) return;
+        (fabsf((float)dail_motor.KT_motor_info.rx_info.current) >= LAUNCHER_DIAL_RECOVER_CURRENT_RAW)) return;
     launcher_click.recover = 0u;
     launcher_click.mid_pending = 0u;
+    if (launcher_click.pending != 0u) launcher_click.tick = now;
     launcher_click.single_failures = 0u;
     launcher_dial.jam_attempts = 0u;
     if (launcher_dial.jam_locked != 0u)
@@ -1174,7 +1217,6 @@ static void Launcher_DialJamResetUpdate(uint32_t now, uint8_t vehicle_on)
         launcher_dial.jam_locked = 0u;
         Launcher_DialJamCancel();
         launcher_dial_target = (int64_t)Launcher_DialAngle();
-        launcher_dial_feed_target = launcher_dial_target;
         launcher_dial_target_synced = 0u;
         launcher_dial.state = LAUNCHER_SLEEP;
         launcher_safety.run_tick = now - LAUNCHER_RECOVER_RETRY_MS;
@@ -1188,12 +1230,14 @@ static void Launcher_DialJamVerify(uint32_t now)
     uint32_t irq;
     uint32_t raw_delta;
     int64_t progress;
-    if (launcher_dial.jam_phase != LAUNCHER_JAM_VERIFY) return;
-    if ((now - launcher_jam.verify_start_tick) >= LAUNCHER_DIAL_JAM_VERIFY_TIMEOUT_MS)
+    if ((launcher_dial.jam_phase == LAUNCHER_JAM_IDLE) &&
+        (launcher_dial.jam_attempts != 0u))
     {
-        Launcher_DialJamRetry(now);
-        return;
+        launcher_dial.jam_phase = LAUNCHER_JAM_VERIFY;
+        launcher_jam.verify_tracking = 0u;
+        launcher_jam.verify_seq = dail_motor.KT_motor_info.rx_info.feedback_seq;
     }
+    if (launcher_dial.jam_phase != LAUNCHER_JAM_VERIFY) return;
     irq = __get_PRIMASK();
     __disable_irq();
     feedback = dail_motor.KT_motor_info.rx_info;
@@ -1243,10 +1287,14 @@ static void Launcher_DialJamDetected(uint32_t now, uint8_t shoot_level)
         launcher_click.pending = 0u;
         launcher_click.authorized = 0u;
         launcher_click.recover = 0u;
-        Launcher_DialApplyTorque(0);
+        launcher_press_authorized = 0u;
+        launcher_keyboard_press_ready = 0u;
+        launcher_speed_runtime.reserved = 0u;
+        launcher_speed_runtime.press_single_started = 0u;
+        launcher_dial.trigger_ready = 0u;
         if (launcher_click.single_failures >= LAUNCHER_SINGLE_JAM_LIMIT)
             Launcher_DialJamLock(now);
-        else Launcher_DialEnterBrake(now);
+        else Launcher_DialJamReverse(now, 1u);
         launcher_safety.jam_ms = 0u;
         launcher_safety.dial_moving = 0u;
     }
@@ -1272,6 +1320,7 @@ static void Launcher_ProtectionUpdate(uint32_t now, uint8_t vehicle_on, uint8_t 
     if (launcher_protection.active != 0u)
     {
         uint8_t mouse_down = launcher_remote.button_bits & 0x01u;
+        launcher_safety.progress_tracking = 0u;
         if ((mouse_down == 0u) && (shoot_level == 0u)) launcher_protection.released = 1u;
         if (launcher_shoot.s2_mid != 0u) launcher_protection.released = 1u;
         if ((vehicle_on != 0u) && (fresh != 0u) &&
@@ -1279,15 +1328,22 @@ static void Launcher_ProtectionUpdate(uint32_t now, uint8_t vehicle_on, uint8_t 
             (Launcher_FricOnline(SHOOT_FRIC_R) != 0u) &&
             (launcher_protection.released != 0u) &&
             (((launcher_click.pending != 0u) && (launcher_click.recover != 0u)) ||
+             ((launcher_click.mid_pending != 0u) &&
+              ((launcher_protection.reason == 1u) || (launcher_protection.reason == 2u))) ||
              ((launcher_shoot.ctrl_source == 0u) && (shoot_level != 0u) &&
               (launcher.last_shoot_level == 0u))) &&
             ((now - launcher_protection.fault_tick) >= LAUNCHER_PROTECT_COOLDOWN_MS) &&
-            (fabsf((float)feedback.current) < LAUNCHER_DIAL_JAM_CURRENT_RAW) &&
+            (fabsf((float)feedback.current) < LAUNCHER_DIAL_RECOVER_CURRENT_RAW) &&
             (fabsf((float)rm_motor[SHOOT_FRIC_L].rx_info->torque_current_raw) < LAUNCHER_PROTECT_FRIC_CURRENT_RAW) &&
             (fabsf((float)rm_motor[SHOOT_FRIC_R].rx_info->torque_current_raw) < LAUNCHER_PROTECT_FRIC_CURRENT_RAW) &&
             ((feedback.errorState & 0x09u) == 0u))
         {
-            launcher_click.recover = 0u;
+            if (launcher_dial.jam_locked == 0u)
+            {
+                launcher_click.recover = 0u;
+                launcher_click.mid_pending = 0u;
+            }
+            if (launcher_click.pending != 0u) launcher_click.tick = now;
             launcher_protection.active = 0u;
             launcher.fault = 0u;
             launcher.state = LAUNCHER_SLEEP;
@@ -1304,6 +1360,7 @@ static void Launcher_ProtectionUpdate(uint32_t now, uint8_t vehicle_on, uint8_t 
         launcher_safety.dial_moving = 0u;
         launcher_safety.fric_on = 0u;
         launcher_safety.jam_ms = 0u;
+        launcher_safety.progress_tracking = 0u;
         launcher_safety.hold_ms = 0u;
         launcher_safety.fric_jam_ms[0] = 0u;
         launcher_safety.fric_jam_ms[1] = 0u;
@@ -1318,42 +1375,73 @@ static void Launcher_ProtectionUpdate(uint32_t now, uint8_t vehicle_on, uint8_t 
         launcher_safety.progress_tick = now;
         launcher_safety.progress_angle = feedback.encoder_sum;
         launcher_safety.jam_ms = 0u;
+        launcher_safety.progress_tracking = 0u;
     }
     launcher_safety.dial_moving = moving;
     if ((fresh != 0u) && (moving != 0u) &&
         ((now - launcher_safety.dial_start_tick) >= LAUNCHER_PROTECT_START_MS))
     {
         uint8_t low = (fabsf((float)feedback.speed) <= LAUNCHER_DIAL_JAM_SPEED_DPS);
-        if ((low != 0u) && (fabsf((float)feedback.current) >= LAUNCHER_DIAL_JAM_CURRENT_RAW))
-            launcher_safety.jam_ms += dt;
-        else launcher_safety.jam_ms = 0u;
-        if (launcher_safety.jam_ms >= LAUNCHER_PROTECT_CONFIRM_MS)
+        uint8_t high = (fabsf((float)feedback.current) >= LAUNCHER_DIAL_JAM_CURRENT_RAW);
+        uint8_t repeat = (launcher_dial.state == LAUNCHER_REPEAT);
+        uint8_t driven = ((repeat != 0u) ?
+            ((high != 0u) && (launcher_shoot.shoot_level != 0u) &&
+             (launcher_shoot.shoot_mode != 0u) &&
+             (fabsf((float)launcher_dial.output_current_raw) >= LAUNCHER_DIAL_REPEAT_JAM_OUTPUT_RAW)) :
+            (launcher_dial.state == LAUNCHER_SINGLE));
+        if ((low == 0u) || (driven == 0u) ||
+            (fabsf(launcher_dial.speed_target_dps) <= LAUNCHER_DIAL_JAM_SPEED_DPS))
         {
-            Launcher_DialJamDetected(now, shoot_level);
-            if ((launcher.fault != 0u) || (launcher_dial.jam_locked != 0u) ||
-                (launcher_dial.state == LAUNCHER_STOPPING)) return;
+            launcher_safety.progress_tracking = 0u;
+            launcher_safety.jam_ms = 0u;
         }
-        if (fabsf((float)launcher_dial.output_current_raw) < LAUNCHER_PROTECT_OUTPUT_RAW)
+        else
         {
-            launcher_safety.progress_tick = now;
-            launcher_safety.progress_angle = feedback.encoder_sum;
-        }
-        else if ((now - launcher_safety.progress_tick) >= LAUNCHER_PROTECT_PROGRESS_MS)
-        {
-            float progress = fabsf((float)((int64_t)feedback.encoder_sum - launcher_safety.progress_angle));
-            launcher_safety.progress_tick = now;
-            launcher_safety.progress_angle = feedback.encoder_sum;
-            if ((low != 0u) && (progress < LAUNCHER_PROTECT_PROGRESS_COUNTS))
+            // NOTE: 单发不要求电流饱和
+            if (launcher_safety.progress_tracking == 0u)
             {
-                Launcher_DialJamDetected(now, shoot_level);
-                if ((launcher.fault != 0u) || (launcher_dial.jam_locked != 0u) ||
-                    (launcher_dial.state == LAUNCHER_STOPPING)) return;
+                launcher_safety.progress_tracking = 1u;
+                launcher_safety.progress_tick = now;
+                launcher_safety.progress_angle = feedback.encoder_sum;
+                launcher_safety.progress_seq = feedback.feedback_seq;
+                launcher_safety.jam_ms = 0u;
+            }
+            if (high != 0u) launcher_safety.jam_ms += dt;
+            else launcher_safety.jam_ms = 0u;
+            // NOTE: 新反馈确认实际位移
+            if (feedback.feedback_seq != launcher_safety.progress_seq)
+            {
+                float progress = fabsf((float)((int64_t)feedback.encoder_sum -
+                                              launcher_safety.progress_angle));
+                launcher_safety.progress_seq = feedback.feedback_seq;
+                if (progress >= LAUNCHER_PROTECT_PROGRESS_COUNTS)
+                {
+                    launcher_safety.progress_tick = now;
+                    launcher_safety.progress_angle = feedback.encoder_sum;
+                    launcher_safety.jam_ms = 0u;
+                }
+                else if (((repeat == 0u) &&
+                          (launcher_safety.jam_ms >= LAUNCHER_PROTECT_CONFIRM_MS) &&
+                          ((now - launcher_safety.progress_tick) >= LAUNCHER_PROTECT_CONFIRM_MS)) ||
+                         ((now - launcher_safety.progress_tick) >= LAUNCHER_PROTECT_PROGRESS_MS))
+                {
+                    launcher_safety.progress_tracking = 0u;
+                    launcher_safety.jam_ms = 0u;
+                    Launcher_DialJamDetected(now, shoot_level);
+                    if ((launcher.fault != 0u) || (launcher_dial.jam_locked != 0u) ||
+                        (launcher_dial.state == LAUNCHER_STOPPING) ||
+                        (launcher_dial.state == LAUNCHER_REVERSE)) return;
+                }
             }
         }
     }
-    else launcher_safety.jam_ms = 0u;
+    else
+    {
+        launcher_safety.progress_tracking = 0u;
+        launcher_safety.jam_ms = 0u;
+    }
     if ((fresh != 0u) && (launcher_dial.state == LAUNCHER_READY) &&
-        (fabsf((float)feedback.current) >= LAUNCHER_DIAL_JAM_CURRENT_RAW))
+        (fabsf((float)feedback.current) >= LAUNCHER_PROTECT_HOLD_CURRENT_RAW))
         launcher_safety.hold_ms += dt;
     else launcher_safety.hold_ms = 0u;
     if (launcher_safety.hold_ms >= LAUNCHER_PROTECT_HOLD_MS)
@@ -1439,8 +1527,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
 
     if (launcher_dial.jam_locked != 0u)
     {
-        Launcher_DialApplyTorque(0);
-        Launcher_DialSafeStop(now);
+        Launcher_DialJamDisable(now);
         launcher_dial.state = LAUNCHER_FAULT;
         return;
     }
@@ -1505,8 +1592,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         }
         if ((launcher_dial.state == LAUNCHER_SINGLE) ||
             (launcher_dial.state == LAUNCHER_REPEAT) ||
-            (launcher_dial.state == LAUNCHER_REVERSE) ||
-            (launcher_dial.state == LAUNCHER_RELOAD))
+            (launcher_dial.state == LAUNCHER_REVERSE))
         {
             launcher_dial.reject_reason = LAUNCHER_DIAL_REJECT_INTERLOCK;
             Launcher_DialEnterBrake(now);
@@ -1523,8 +1609,7 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
             launcher_dial.trigger_ready = 0u;
         }
         if ((launcher_dial.state == LAUNCHER_SINGLE) ||
-            (launcher_dial.state == LAUNCHER_REVERSE) ||
-            (launcher_dial.state == LAUNCHER_RELOAD))
+            (launcher_dial.state == LAUNCHER_REVERSE))
         {
             launcher_dial.reject_reason = LAUNCHER_DIAL_REJECT_HEAT;
             Launcher_DialEnterBrake(now);
@@ -1598,7 +1683,6 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         launcher_dial.pending_single = 0u;
         launcher_dial_target += (int64_t)(LAUNCHER_DIAL_DIRECTION *
                                          LAUNCHER_DIAL_ONE_SHOT_ANGLE);
-        launcher_dial_feed_target = launcher_dial_target;
         launcher_dial.state = LAUNCHER_SINGLE;
         launcher_dial.state_tick = now;
         launcher_dial.settling = 0u;
@@ -1610,7 +1694,8 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
     continuous = ((continuous != 0u) &&
                   ((launcher_dial.trigger_ready != 0u) ||
                    (launcher_keyboard_press_ready != 0u))) ? 1u : 0u;
-    if ((launcher_dial.jam_phase != LAUNCHER_JAM_IDLE) && (continuous == 0u))
+    if ((launcher_dial.jam_phase != LAUNCHER_JAM_IDLE) && (continuous == 0u) &&
+        (launcher_jam.single_reverse == 0u))
     {
         Launcher_DialEnterBrake(now);
     }
@@ -1712,30 +1797,19 @@ static void Launcher_DialUpdate(uint32_t now, uint8_t single_rising,
         if ((Launcher_DialAtTarget(launcher_dial_target) != 0u) ||
             ((now - launcher_dial.state_tick) >= LAUNCHER_DIAL_REVERSE_TIMEOUT_MS))
         {
-            launcher_dial_target = launcher_dial_feed_target;
-            launcher_dial.state = LAUNCHER_RELOAD;
-            launcher_dial.state_tick = now;
-            launcher_dial.jam_phase = LAUNCHER_JAM_RELOAD;
-            Launcher_DialClearPid();
-        }
-        break;
-
-    case LAUNCHER_RELOAD:
-        if (Launcher_DialAtTarget(launcher_dial_target) != 0u)
-        {
+            if (launcher_jam.single_reverse != 0u)
+            {
+                Launcher_DialEnterBrake(now);
+                break;
+            }
             launcher_dial.state = LAUNCHER_REPEAT;
             launcher_dial.state_tick = now;
             launcher_dial.jam_phase = LAUNCHER_JAM_VERIFY;
-            launcher_jam.verify_start_tick = now;
             launcher_jam.verify_tracking = 0u;
             launcher_jam.verify_seq = dail_motor.KT_motor_info.rx_info.feedback_seq;
             launcher_safety.dial_moving = 0u;
             Launcher_HeatStartRepeat();
             Launcher_DialClearPid();
-        }
-        else if ((now - launcher_dial.state_tick) >= LAUNCHER_DIAL_RELOAD_TIMEOUT_MS)
-        {
-            Launcher_DialJamRetry(now);
         }
         break;
 
@@ -1787,7 +1861,7 @@ static void Launcher_FricControl(uint8_t enable)
             pid->measure = (float)rm_motor[i].rx_info->encoder_speed; /* 反馈转速 */
             pid->err = pid->target - pid->measure;
 
-            if (launcher.state == LAUNCHER_STOPPING)
+            if (launcher.fric_target_rpm == 0.0f)
             {
                 pid->integral = 0.0f;
             }
@@ -1798,6 +1872,7 @@ static void Launcher_FricControl(uint8_t enable)
                 (launcher_shoot.shoot_mode != 0u) &&
                 (launcher_shoot.shoot_level != 0u) &&
                 (launcher_speed.guard_latched == 0u) &&
+                (launcher.fric_target_rpm > 0.0f) &&
                 (launcher.state != LAUNCHER_STOPPING))
             {
                 recovery_output = direction * constrain(
@@ -1866,6 +1941,33 @@ static void Launcher_UpdateFrictionReady(uint8_t enabled)
         (launcher_fric_ready_count >= LAUNCHER_FRIC_READY_TIME_MS) ? 1u : 0u;
 }
 
+/* 零速制动后撤掉电流 */
+static void Launcher_FricStop(void)
+{
+    uint8_t stopped = 0u;
+    uint32_t now = HAL_GetTick();
+    launcher.enabled = 0u;
+    launcher.fric_target_rpm = 0.0f;
+    Launcher_UpdateFrictionReady(0u);
+    if ((Launcher_FricOnline(SHOOT_FRIC_L) != 0u) &&
+        (Launcher_FricOnline(SHOOT_FRIC_R) != 0u) &&
+        (launcher.fric_l_speed_rpm <= LAUNCHER_FRIC_STOP_SPEED_RPM) &&
+        (launcher.fric_r_speed_rpm <= LAUNCHER_FRIC_STOP_SPEED_RPM))
+    {
+        if (launcher_fric_stop_started == 0u)
+        {
+            launcher_fric_stop_started = 1u;
+            launcher_fric_stop_tick = now;
+        }
+        stopped = ((now - launcher_fric_stop_tick) >= LAUNCHER_FRIC_STOP_CONFIRM_MS);
+    }
+    else launcher_fric_stop_started = 0u;
+
+    Launcher_FricControl((stopped == 0u) ? 1u : 0u);
+    if ((launcher.fault == 0u) && (stopped != 0u))
+        launcher.state = LAUNCHER_SLEEP;
+}
+
 /* 初始化发射状态与控制环 */
 void Launcher_Init(void)
 {
@@ -1913,7 +2015,8 @@ void Launcher_Init(void)
 
     launcher_fric_ready_count = 0u;
     launcher_jam_count = 0u;
-    launcher_fric_stop_count = 0u;
+    launcher_fric_stop_started = 0u;
+    launcher_fric_stop_tick = 0u;
     launcher_dial_stopped = 1u;
     launcher_dial_stop_tick = 0u;
     launcher_dial_target_synced = 0u;
@@ -1923,7 +2026,6 @@ void Launcher_Init(void)
     launcher_dial_hold_tx_tick = 0u;
     launcher_dial_hold_active_tick = 0u;
     launcher_dial_target = 0;
-    launcher_dial_feed_target = 0;
 
     for (uint8_t i = 0u; i < SHOOT_FRIC_NUM; i++)
     {
@@ -2021,12 +2123,14 @@ static void Launcher_KeyboardPressUpdate(uint32_t now, uint8_t vehicle_on, uint8
     }
     if (down == 0u) launcher_click.armed = 1u;
     if ((launcher_remote.press_seq != launcher_click.seq) &&
-        (launcher_shoot.ctrl_source == launcher_remote.shoot_source))
+        (launcher_shoot.ctrl_source == launcher_remote.shoot_source) &&
+        (launcher_shoot.ctrl_source == 1u) && (launcher_shoot.launch_state != 0u))
     {
         launcher_click.seq = launcher_remote.press_seq;
         if ((safe != 0u) && (launcher_shoot.ctrl_source == 1u) &&
             (launcher_shoot.launch_state != 0u) && (launcher_click.armed != 0u) &&
             (launcher_click.pending == 0u) &&
+            (launcher_jam.single_reverse == 0u) &&
             (launcher_dial.state != LAUNCHER_SINGLE) && (launcher_dial.pending_single == 0u))
         {
             launcher_click.pending = 1u;
@@ -2091,7 +2195,10 @@ void Launcher_Work(void)
     hole_hold_allowed = Launcher_DialHoleHoldAllowed(now);
 
     vehicle_on = ((Board_HeartBeat.status == DEV_ONLINE) &&
-                  (Board_Rx_Info.state_pkt.car_state != 0u)) ? 1u : 0u;
+                  (Board_Rx_Info.state_pkt.car_state != 0u) &&
+                  (launcher_remote.valid != 0u) &&
+                  ((now - launcher_d1_tick) <= LAUNCHER_INPUT_TIMEOUT_MS) &&
+                  ((now - launcher_remote.rx_tick) <= LAUNCHER_INPUT_TIMEOUT_MS)) ? 1u : 0u;
     if ((launcher.state == LAUNCHER_FAULT) && (launcher_protection.active == 0u) &&
         (launcher.fault != 0u)) Launcher_ProtectStop(4u, now);
     Launcher_KeyboardPressUpdate(now, vehicle_on, hole_hold_allowed);
@@ -2143,8 +2250,7 @@ void Launcher_Work(void)
     }
     raw_rising = ((shoot_level != 0u) && (launcher.last_shoot_level == 0u));
     single_rising = 0u;
-    if ((launcher_speed.guard_latched != 0u) ||
-        (launcher_speed_runtime.fault != LAUNCHER_SPEED_OK))
+    if (launcher_speed.guard_latched != 0u)
     {
         launcher_click.pending = 0u;
         launcher_click.authorized = 0u;
@@ -2185,57 +2291,15 @@ void Launcher_Work(void)
         (launcher_heat.blocked == 0u) && (launcher_heat.target_rate > 0.0f)) ? 1u : 0u;
 
     /* 摩擦轮停机不覆盖拨盘阶段 */
-    if ((launcher.fault != 0u) || (vehicle_on == 0u))
+    if ((launcher.fault != 0u) || (vehicle_on == 0u) || (fric_on == 0u))
     {
-        launcher.enabled = 0u;
-        launcher.state = (launcher.fault != 0u) ? LAUNCHER_FAULT : LAUNCHER_SLEEP;
-        launcher.fric_target_rpm = 0.0f;
-        launcher_fric_stop_count = 0u;
-        Launcher_UpdateFrictionReady(0u);
-        Launcher_FricControl(0u);
-    }
-    else if (fric_on == 0u)
-    {
-        launcher.enabled = 0u;
-        Launcher_UpdateFrictionReady(0u);
-        if (launcher.state == LAUNCHER_SLEEP)
-        {
-            launcher.fric_target_rpm = 0.0f;
-            launcher_fric_stop_count = 0u;
-            Launcher_FricControl(0u);
-        }
-        else
-        {
-            launcher.state = LAUNCHER_STOPPING;
-            launcher.fric_target_rpm = Launcher_Ramp(
-                launcher.fric_target_rpm, 0.0f,
-                LAUNCHER_FRIC_STOP_RAMP_RPM_PER_MS);
-            Launcher_FricControl(1u);
-            if ((launcher.fric_l_speed_rpm <= LAUNCHER_FRIC_STOP_SPEED_RPM) &&
-                (launcher.fric_r_speed_rpm <= LAUNCHER_FRIC_STOP_SPEED_RPM))
-            {
-                if (launcher_fric_stop_count < LAUNCHER_FRIC_STOP_CONFIRM_MS)
-                {
-                    launcher_fric_stop_count++;
-                }
-            }
-            else
-            {
-                launcher_fric_stop_count = 0u;
-            }
-            if (launcher_fric_stop_count >= LAUNCHER_FRIC_STOP_CONFIRM_MS)
-            {
-                launcher.fric_target_rpm = 0.0f;
-                launcher.state = LAUNCHER_SLEEP;
-                launcher_fric_stop_count = 0u;
-                Launcher_FricControl(0u);
-            }
-        }
+        launcher.state = (launcher.fault != 0u) ? LAUNCHER_FAULT : LAUNCHER_STOPPING;
+        Launcher_FricStop();
     }
     else
     {
         launcher.enabled = 1u;
-        launcher_fric_stop_count = 0u;
+        launcher_fric_stop_started = 0u;
         launcher.state = LAUNCHER_READY;
         launcher.fric_target_rpm = Launcher_Ramp(
             launcher.fric_target_rpm, launcher_speed.target_rpm,
@@ -2252,8 +2316,7 @@ void Launcher_Work(void)
         ((launcher_remote.button_bits & 1u) == 0u) &&
         ((launcher_dial.state == LAUNCHER_SINGLE) ||
          (launcher_dial.state == LAUNCHER_REPEAT) ||
-         (launcher_dial.state == LAUNCHER_REVERSE) ||
-         (launcher_dial.state == LAUNCHER_RELOAD)))
+         (launcher_dial.state == LAUNCHER_REVERSE)))
     {
         launcher_dial.pending_single = 0u;
         launcher_speed_runtime.reserved = 0u;
